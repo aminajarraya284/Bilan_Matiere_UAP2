@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 130" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title>SOPAL logo</title>
+  <desc>SOPAL blue mark and wordmark</desc>
+
+  <g fill="#064675">
+    <g transform="translate(12 9) scale(0.28)">
+      <path d="M72 260C64 241 60 221 62 199C69 116 135 61 217 61C281 61 330 92 361 142L300 162C281 137 250 124 216 124C170 124 134 148 119 190H391C394 213 392 236 387 257L72 260Z" />
+      <path d="M96 303C130 326 170 339 215 339C256 339 292 326 319 302L375 309C337 365 279 394 209 394C154 394 112 377 82 344C70 331 61 317 54 302C68 307 82 307 96 303Z" />
+    </g>
+
+    <text
+      x="140"
+      y="96"
+      font-family="Arial Black, Montserrat, Inter, Arial, sans-serif"
+      font-size="84"
+      font-weight="900"
+      letter-spacing="0"
+    >SOPAL</text>
+  </g>
+</svg>

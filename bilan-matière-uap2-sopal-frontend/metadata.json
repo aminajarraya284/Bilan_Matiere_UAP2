@@ -1,0 +1,6 @@
+{
+  "name": "Bilan Matière Fonderie SOPAL",
+  "description": "Application interne pour la gestion et le suivi du bilan matière de la fonderie SOPAL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,197 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-primary: #1e3a8a; /* Blue-900 */
+  --color-secondary: #475569; /* Slate-600 */
+  --font-sans: 'Segoe UI', Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Segoe UI', Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+}
+
+/* Base resets and defaults with professional feel */
+body {
+  font-family: var(--font-sans);
+  background-color: #f8fafc; /* Slate-50 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Page Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
+}
+
+@keyframes float-xy {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(12px, -16px, 0);
+  }
+}
+
+.animate-float-slow {
+  animation: float-xy 16s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: float-xy 12s ease-in-out infinite;
+}
+
+.animate-float-fast {
+  animation: float-xy 9s ease-in-out infinite;
+}
+
+@keyframes dashboard-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashboard-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes dashboard-soft-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.dashboard-animated-bg {
+  background-size: 180% 180%;
+  animation: dashboard-soft-shift 18s ease-in-out infinite;
+}
+
+.dashboard-enter {
+  opacity: 0;
+  animation: dashboard-fade-up 0.22s ease-out forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+.dashboard-card {
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-3px);
+}
+
+.dashboard-bar {
+  transform-origin: left center;
+  animation: dashboard-bar-grow 0.35s ease-out both;
+  animation-delay: var(--delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-animated-bg,
+  .dashboard-enter,
+  .dashboard-bar {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .dashboard-card:hover {
+    transform: none;
+  }
+}
+
+/* Form focus and interactive styles */
+input,
+select,
+textarea {
+  transition:
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out,
+    background-color 0.15s ease-in-out;
+}
+
+input:not([type='file']):not([type='checkbox']):not([type='radio']):not([type='hidden']),
+select,
+textarea {
+  min-height: 42px;
+  border-color: #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.25rem;
+  padding: 0.625rem 0.75rem;
+}
+
+textarea {
+  min-height: 76px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+input[readonly],
+select[readonly],
+textarea[readonly] {
+  background-color: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.13);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

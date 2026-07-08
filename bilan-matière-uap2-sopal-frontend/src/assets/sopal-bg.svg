@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" role="img" aria-labelledby="title desc">
+  <title>SOPAL background</title>
+  <desc>Branded background illustration with soft blue and steel gradients.</desc>
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b2364" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#0f4e8c" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#0f5a9f" stop-opacity="0.85" />
+    </linearGradient>
+    <linearGradient id="halo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGrad)" />
+  <ellipse cx="840" cy="380" rx="700" ry="340" fill="url(#halo)" />
+  <g opacity="0.15">
+    <circle cx="220" cy="240" r="180" fill="#ffffff" />
+    <circle cx="620" cy="780" r="120" fill="#ffffff" />
+    <circle cx="1350" cy="180" r="170" fill="#ffffff" />
+  </g>
+  <g opacity="0.1">
+    <rect x="260" y="260" width="460" height="460" rx="120" fill="#ffffff" />
+    <rect x="1040" y="360" width="420" height="420" rx="96" fill="#ffffff" />
+  </g>
+  <g fill="none" stroke="#9fc7ff" stroke-width="9" opacity="0.18">
+    <path d="M120 740C280 640 520 740 680 580" />
+    <path d="M900 180C980 260 1100 220 1200 320" />
+    <path d="M430 430C550 270 710 320 840 230" />
+  </g>
+</svg>
