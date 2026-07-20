@@ -1,9 +1,34 @@
 ﻿node_modules/
-build/
 dist/
 coverage/
 .vite/
 .DS_Store
 *.log
-.env*
+.env
+.env.*
 !.env.example
+
+# Backend
+bin/
+obj/
+.vs/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+logs/
+secrets.json
+appsettings.Local.json
+appsettings.*.local.json
+
+# IDE et systeme
+.idea/
+Thumbs.db
+*.user
+*.suo
+*.tmp
+*.swp
+
+# Fichiers locaux des agents
+.agents/
+.git_broken/

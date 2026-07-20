@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Api", "src\BilanMatiereUAP2.Api\BilanMatiereUAP2.Api.csproj", "{93E0F70B-FF41-4B64-A69C-0B1A5A4DFD01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Application", "src\BilanMatiereUAP2.Application\BilanMatiereUAP2.Application.csproj", "{A78C872D-017C-481B-8979-11377FBAB5F2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Domain", "src\BilanMatiereUAP2.Domain\BilanMatiereUAP2.Domain.csproj", "{E148745B-386B-4943-B71C-622B2E5F9A2A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Infrastructure", "src\BilanMatiereUAP2.Infrastructure\BilanMatiereUAP2.Infrastructure.csproj", "{3C9A48BF-4B68-43E8-81CA-44832CFA39A9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Contracts", "src\BilanMatiereUAP2.Contracts\BilanMatiereUAP2.Contracts.csproj", "{E25B72B3-A5DA-424F-930D-76909319689D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Api.IntegrationTests", "tests\BilanMatiereUAP2.Api.IntegrationTests\BilanMatiereUAP2.Api.IntegrationTests.csproj", "{6D344DBD-1E86-4264-A471-94F28279C7D6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{93E0F70B-FF41-4B64-A69C-0B1A5A4DFD01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{93E0F70B-FF41-4B64-A69C-0B1A5A4DFD01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{93E0F70B-FF41-4B64-A69C-0B1A5A4DFD01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{93E0F70B-FF41-4B64-A69C-0B1A5A4DFD01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A78C872D-017C-481B-8979-11377FBAB5F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A78C872D-017C-481B-8979-11377FBAB5F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A78C872D-017C-481B-8979-11377FBAB5F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A78C872D-017C-481B-8979-11377FBAB5F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E148745B-386B-4943-B71C-622B2E5F9A2A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E148745B-386B-4943-B71C-622B2E5F9A2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E148745B-386B-4943-B71C-622B2E5F9A2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E148745B-386B-4943-B71C-622B2E5F9A2A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3C9A48BF-4B68-43E8-81CA-44832CFA39A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C9A48BF-4B68-43E8-81CA-44832CFA39A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C9A48BF-4B68-43E8-81CA-44832CFA39A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C9A48BF-4B68-43E8-81CA-44832CFA39A9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E25B72B3-A5DA-424F-930D-76909319689D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E25B72B3-A5DA-424F-930D-76909319689D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E25B72B3-A5DA-424F-930D-76909319689D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E25B72B3-A5DA-424F-930D-76909319689D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BilanMatiereUAP2.Domain\BilanMatiereUAP2.Domain.csproj" />
+    <ProjectReference Include="..\BilanMatiereUAP2.Contracts\BilanMatiereUAP2.Contracts.csproj" />
+  </ItemGroup>
+</Project>
