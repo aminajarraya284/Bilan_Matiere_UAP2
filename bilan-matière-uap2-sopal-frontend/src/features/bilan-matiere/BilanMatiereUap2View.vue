@@ -24,7 +24,7 @@ const cards = [
 <template>
   <div class="space-y-6">
     <PageHeader
-      title="Bilan UAP2 (par OF)"
+      title="Bilan UAP2 par OF"
       description="Analyse détaillée du bilan matière ventilé par ordre de fabrication."
     />
 
@@ -47,7 +47,8 @@ const cards = [
         <h3 class="text-sm font-bold">Présentation de la vue OF</h3>
       </div>
       <p class="mt-2 text-sm text-slate-500">
-        Cette page sert de point d’entrée pour l’analyse par ordre de fabrication, avec un découpage prêt à enrichir par les données métier réelles.
+        Cette page sert de point d’entrée pour l’analyse par ordre de fabrication, avec un découpage prêt à enrichir par
+        les données métier réelles.
       </p>
     </div>
   </div>

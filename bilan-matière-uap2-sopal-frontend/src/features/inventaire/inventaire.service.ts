@@ -1,17 +1,17 @@
 import api from '@/services/api';
-import {
+import { testDataRepository } from '@/services/testDataRepository.service';
+import { calculateInventorySummary, toTypeMatiereId } from '@/services/bilanCalculation.service';
+import type {
   InventaireConteneur,
   InventaireCategorie,
   InventaireFour,
   InventaireTotalParMatiere
 } from './inventaire.types';
-import { storage } from '@/utils/storage';
-
-const FOUR_NAMES: InventaireFour['four'][] = ['Four CBP 01', 'Four CBP 02', 'Four CDQ', 'Autre'];
-
-const isFourCategory = (value?: string): value is InventaireFour['four'] => {
-  return FOUR_NAMES.includes((value || 'Autre') as InventaireFour['four']);
-};
+import type {
+  InventaireFonderieCategorie,
+  InventaireFonderieConteneur,
+  InventaireFonderieFour
+} from '@/mocks/sopalTestDataset';
 
 const normalizeCategorie = (item: InventaireCategorie): InventaireCategorie => ({
   ...item,
@@ -26,253 +26,257 @@ const normalizeFour = (item: InventaireFour): InventaireFour => ({
   visibleDansRapportInventaire: true
 });
 
-const getLegacyFourRowsFromCategories = (): InventaireFour[] => {
-  return storage
-    .getCategories()
-    .filter((item) => isFourCategory(item.categorie))
-    .map((item) =>
-      normalizeFour({
-        id: item.id,
-        dateInventaire: `${item.annee}-${String(item.mois).padStart(2, '0')}-01`,
-        mois: item.mois,
-        annee: item.annee,
-        four: item.categorie as InventaireFour['four'],
-        codeTypeMatiere: item.codeTypeMatiere,
-        quantite: item.quantiteReelle,
-        unite: item.unite,
-        observation: item.commentaire,
-        statut: item.statut === 'Cloture' ? 'Valide' : item.statut === 'AValider' ? 'Brouillon' : item.statut,
-        inclusDansBilanFonderie: false,
-        visibleDansRapportInventaire: true
-      })
-    );
+const toConteneur = (item: InventaireFonderieConteneur): InventaireConteneur => {
+  const ordre = testDataRepository.getDataset().x3OrdresFabrication.find((of) => of.numeroOF === item.numeroOF);
+  return {
+    id: item.id,
+    dateInventaire: item.dateInventaire,
+    mois: Number(item.dateInventaire.slice(5, 7)),
+    annee: Number(item.dateInventaire.slice(0, 4)),
+    numeroConteneur: item.numeroConteneur,
+    ofDestination: item.numeroOF,
+    codeArticle: ordre?.codeArticleParent ?? '',
+    designationArticle: ordre?.designationArticle,
+    typeMatiereId: toTypeMatiereId(item.codeTypeMatiere),
+    codeTypeMatiere: item.codeTypeMatiere,
+    quantiteReelle: item.poidsReelKg,
+    unite: 'KG',
+    observation: item.observation,
+    statut: item.statut
+  };
 };
 
-const getMockCategoriesNormalized = (): InventaireCategorie[] => {
-  return storage
-    .getCategories()
-    .filter((item) => !isFourCategory(item.categorie))
-    .map(normalizeCategorie);
-};
+const toCategorie = (item: InventaireFonderieCategorie): InventaireCategorie =>
+  normalizeCategorie({
+    id: item.id,
+    mois: Number(item.dateInventaire.slice(5, 7)),
+    annee: Number(item.dateInventaire.slice(0, 4)),
+    categorie: item.categorie,
+    categorieInventaire: 'CategorieBilan',
+    typeMatiereId: toTypeMatiereId(item.codeTypeMatiere),
+    codeTypeMatiere: item.codeTypeMatiere,
+    quantiteReelle: item.poidsReelKg,
+    unite: 'KG',
+    commentaire: item.commentaire,
+    statut: item.statut,
+    inclusDansBilanFonderie: item.inclusBilanFonderie,
+    visibleDansRapportInventaire: true
+  });
 
-const getMockFoursNormalized = (): InventaireFour[] => {
-  const current = storage.getFours().map(normalizeFour);
-  if (current.length > 0) return current;
-  return getLegacyFourRowsFromCategories();
-};
+const toFour = (item: InventaireFonderieFour): InventaireFour =>
+  normalizeFour({
+    id: item.id,
+    dateInventaire: item.dateInventaire,
+    mois: item.mois,
+    annee: item.annee,
+    four: item.codeFour,
+    codeTypeMatiere: item.codeTypeMatiere,
+    quantite: item.quantite,
+    unite: item.unite,
+    observation: item.observation,
+    statut: item.statut === 'Annule' ? 'Brouillon' : item.statut,
+    inclusDansBilanFonderie: false,
+    visibleDansRapportInventaire: true
+  });
+
+const toCentralConteneur = (
+  item: Omit<InventaireConteneur, 'id' | 'statut'>,
+  id: number
+): InventaireFonderieConteneur => ({
+  id,
+  dateInventaire: item.dateInventaire,
+  numeroConteneur: item.numeroConteneur,
+  numeroOF: item.ofDestination ?? '',
+  codeTypeMatiere: item.codeTypeMatiere as InventaireFonderieConteneur['codeTypeMatiere'],
+  poidsReelKg: item.quantiteReelle,
+  observation: item.observation ?? '',
+  statut: 'Valide',
+  creePar: 'Responsable Fonderie',
+  creeLe: new Date().toISOString()
+});
+
+const toCentralCategorie = (
+  item: Omit<InventaireCategorie, 'id' | 'statut'>,
+  id: number
+): InventaireFonderieCategorie => ({
+  id,
+  dateInventaire: `${item.annee}-${String(item.mois).padStart(2, '0')}-01`,
+  categorie: item.categorie,
+  codeTypeMatiere: item.codeTypeMatiere as InventaireFonderieCategorie['codeTypeMatiere'],
+  poidsReelKg: item.quantiteReelle,
+  commentaire: item.commentaire ?? '',
+  inclusBilanFonderie: item.inclusDansBilanFonderie ?? true,
+  statut: 'Valide',
+  creePar: 'Responsable Fonderie',
+  creeLe: new Date().toISOString()
+});
 
 export const inventaireService = {
   async getConteneurs(): Promise<InventaireConteneur[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      return storage.getConteneurs();
-    }
-    const res = await api.get<InventaireConteneur[]>('/inventaires/conteneurs');
-    return res.data;
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return (await api.get<InventaireConteneur[]>('/inventaires/conteneurs')).data;
+    return testDataRepository.getDataset().inventaireConteneurs.map(toConteneur);
   },
 
   async createConteneur(data: Omit<InventaireConteneur, 'id' | 'statut'>): Promise<InventaireConteneur> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = storage.getConteneurs();
-      const newId = current.length ? Math.max(...current.map((c) => c.id)) + 1 : 1;
-      const newItem: InventaireConteneur = { ...data, id: newId, statut: 'Valide' };
-      storage.saveConteneurs([...current, newItem]);
-      return newItem;
-    }
-    const res = await api.post<InventaireConteneur>('/inventaires/conteneurs', data);
-    return res.data;
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return (await api.post<InventaireConteneur>('/inventaires/conteneurs', data)).data;
+    const current = testDataRepository.getDataset().inventaireConteneurs;
+    const item = toCentralConteneur(data, Math.max(0, ...current.map((row) => row.id)) + 1);
+    testDataRepository.saveInventaireConteneurs([...current, item]);
+    return toConteneur(item);
   },
 
   async updateConteneur(id: number, data: Partial<InventaireConteneur>): Promise<InventaireConteneur> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = storage.getConteneurs();
-      const idx = current.findIndex((c) => c.id === id);
-      if (idx !== -1) {
-        current[idx] = { ...current[idx], ...data };
-        storage.saveConteneurs(current);
-        return current[idx];
-      }
-      throw new Error('Conteneur non trouvé');
-    }
-    const res = await api.put<InventaireConteneur>(`/inventaires/conteneurs/${id}`, data);
-    return res.data;
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return (await api.put<InventaireConteneur>(`/inventaires/conteneurs/${id}`, data)).data;
+    const dataset = testDataRepository.getDataset();
+    const current = dataset.inventaireConteneurs;
+    const index = current.findIndex((row) => row.id === id);
+    if (index < 0) throw new Error('Conteneur non trouvé');
+    current[index] = {
+      ...current[index],
+      ...(data.dateInventaire ? { dateInventaire: data.dateInventaire } : {}),
+      ...(data.numeroConteneur ? { numeroConteneur: data.numeroConteneur } : {}),
+      ...(data.ofDestination ? { numeroOF: data.ofDestination } : {}),
+      ...(data.codeTypeMatiere
+        ? { codeTypeMatiere: data.codeTypeMatiere as InventaireFonderieConteneur['codeTypeMatiere'] }
+        : {}),
+      ...(data.quantiteReelle !== undefined ? { poidsReelKg: data.quantiteReelle } : {}),
+      ...(data.observation !== undefined ? { observation: data.observation } : {}),
+      ...(data.statut ? { statut: data.statut } : {})
+    };
+    testDataRepository.saveInventaireConteneurs(current);
+    return toConteneur(current[index]);
   },
 
   async deleteConteneur(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      storage.saveConteneurs(storage.getConteneurs().filter((c) => c.id !== id));
+    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+      await api.delete(`/inventaires/conteneurs/${id}`);
       return;
     }
-    await api.delete(`/inventaires/conteneurs/${id}`);
+    testDataRepository.saveInventaireConteneurs(
+      testDataRepository.getDataset().inventaireConteneurs.filter((row) => row.id !== id)
+    );
   },
 
   async validerConteneur(id: number): Promise<InventaireConteneur> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = storage.getConteneurs();
-      const idx = current.findIndex((c) => c.id === id);
-      if (idx !== -1) {
-        current[idx].statut = 'Valide';
-        storage.saveConteneurs(current);
-        return current[idx];
-      }
-      throw new Error('Conteneur non trouvé');
-    }
-    const res = await api.post<InventaireConteneur>(`/inventaires/conteneurs/${id}/valider`);
-    return res.data;
+    return this.updateConteneur(id, { statut: 'Valide' });
   },
 
   async getCategories(): Promise<InventaireCategorie[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      return getMockCategoriesNormalized();
-    }
-    const res = await api.get<InventaireCategorie[]>('/inventaires/categories');
-    return res.data.map(normalizeCategorie);
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return (await api.get<InventaireCategorie[]>('/inventaires/categories')).data.map(normalizeCategorie);
+    return testDataRepository.getDataset().inventaireCategories.map(toCategorie);
   },
 
   async createCategorie(data: Omit<InventaireCategorie, 'id' | 'statut'>): Promise<InventaireCategorie> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = getMockCategoriesNormalized();
-      const newId = current.length ? Math.max(...current.map((c) => c.id)) + 1 : 101;
-      const newItem: InventaireCategorie = normalizeCategorie({ ...data, id: newId, statut: 'Valide' });
-      storage.saveCategories([...current, newItem]);
-      return newItem;
-    }
-    const res = await api.post<InventaireCategorie>('/inventaires/categories', data);
-    return normalizeCategorie(res.data);
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return normalizeCategorie((await api.post<InventaireCategorie>('/inventaires/categories', data)).data);
+    const current = testDataRepository.getDataset().inventaireCategories;
+    const item = toCentralCategorie(data, Math.max(100, ...current.map((row) => row.id)) + 1);
+    testDataRepository.saveInventaireCategories([...current, item]);
+    return toCategorie(item);
   },
 
   async updateCategorie(id: number, data: Partial<InventaireCategorie>): Promise<InventaireCategorie> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = getMockCategoriesNormalized();
-      const idx = current.findIndex((c) => c.id === id);
-      if (idx !== -1) {
-        current[idx] = normalizeCategorie({ ...current[idx], ...data });
-        storage.saveCategories(current);
-        return current[idx];
-      }
-      throw new Error("Catégorie d'inventaire non trouvée");
-    }
-    const res = await api.put<InventaireCategorie>(`/inventaires/categories/${id}`, data);
-    return normalizeCategorie(res.data);
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return normalizeCategorie((await api.put<InventaireCategorie>(`/inventaires/categories/${id}`, data)).data);
+    const current = testDataRepository.getDataset().inventaireCategories;
+    const index = current.findIndex((row) => row.id === id);
+    if (index < 0) throw new Error('Catégorie d’inventaire non trouvée');
+    current[index] = {
+      ...current[index],
+      ...(data.quantiteReelle !== undefined ? { poidsReelKg: data.quantiteReelle } : {}),
+      ...(data.commentaire !== undefined ? { commentaire: data.commentaire } : {}),
+      ...(data.statut ? { statut: data.statut } : {}),
+      ...(data.inclusDansBilanFonderie !== undefined ? { inclusBilanFonderie: data.inclusDansBilanFonderie } : {})
+    };
+    testDataRepository.saveInventaireCategories(current);
+    return toCategorie(current[index]);
   },
 
   async deleteCategorie(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      storage.saveCategories(getMockCategoriesNormalized().filter((c) => c.id !== id));
+    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+      await api.delete(`/inventaires/categories/${id}`);
       return;
     }
-    await api.delete(`/inventaires/categories/${id}`);
+    testDataRepository.saveInventaireCategories(
+      testDataRepository.getDataset().inventaireCategories.filter((row) => row.id !== id)
+    );
   },
 
   async validerCategorie(id: number): Promise<InventaireCategorie> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = getMockCategoriesNormalized();
-      const idx = current.findIndex((c) => c.id === id);
-      if (idx !== -1) {
-        current[idx].statut = 'Valide';
-        storage.saveCategories(current);
-        return current[idx];
-      }
-      throw new Error("Catégorie d'inventaire non trouvée");
-    }
-    const res = await api.post<InventaireCategorie>(`/inventaires/categories/${id}/valider`);
-    return normalizeCategorie(res.data);
+    return this.updateCategorie(id, { statut: 'Valide' });
   },
 
   async getFours(): Promise<InventaireFour[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      return getMockFoursNormalized();
-    }
-    const res = await api.get<InventaireFour[]>('/inventaires/fours');
-    return res.data.map(normalizeFour);
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return (await api.get<InventaireFour[]>('/inventaires/fours')).data.map(normalizeFour);
+    return testDataRepository.getDataset().inventaireFours.map(toFour);
   },
 
-  async createFour(data: Omit<InventaireFour, 'id' | 'inclusDansBilanFonderie' | 'visibleDansRapportInventaire'>): Promise<InventaireFour> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = getMockFoursNormalized();
-      const newId = current.length ? Math.max(...current.map((item) => item.id)) + 1 : 1;
-      const newItem = normalizeFour({
-        ...data,
-        id: newId,
-        inclusDansBilanFonderie: false,
-        visibleDansRapportInventaire: true
-      });
-      storage.saveFours([...current, newItem]);
-      return newItem;
-    }
-    const res = await api.post<InventaireFour>('/inventaires/fours', data);
-    return normalizeFour(res.data);
+  async createFour(
+    data: Omit<InventaireFour, 'id' | 'inclusDansBilanFonderie' | 'visibleDansRapportInventaire'>
+  ): Promise<InventaireFour> {
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return normalizeFour((await api.post<InventaireFour>('/inventaires/fours', data)).data);
+    const current = testDataRepository.getDataset().inventaireFours;
+    const item: InventaireFonderieFour = {
+      id: Math.max(200, ...current.map((row) => row.id)) + 1,
+      ...data,
+      codeFour: data.four,
+      codeTypeMatiere: data.codeTypeMatiere as InventaireFonderieFour['codeTypeMatiere'],
+      unite: 'KG',
+      observation: data.observation ?? '',
+      inclusBilanFonderie: false,
+      visibleRapportInventaire: true
+    };
+    testDataRepository.saveInventaireFours([...current, item]);
+    return toFour(item);
   },
 
   async updateFour(id: number, data: Partial<InventaireFour>): Promise<InventaireFour> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = getMockFoursNormalized();
-      const idx = current.findIndex((item) => item.id === id);
-      if (idx !== -1) {
-        current[idx] = normalizeFour({ ...current[idx], ...data, inclusDansBilanFonderie: false, visibleDansRapportInventaire: true });
-        storage.saveFours(current);
-        return current[idx];
-      }
-      throw new Error("Inventaire four non trouvé");
-    }
-    const res = await api.put<InventaireFour>(`/inventaires/fours/${id}`, data);
-    return normalizeFour(res.data);
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return normalizeFour((await api.put<InventaireFour>(`/inventaires/fours/${id}`, data)).data);
+    const current = testDataRepository.getDataset().inventaireFours;
+    const index = current.findIndex((row) => row.id === id);
+    if (index < 0) throw new Error('Inventaire four non trouvé');
+    current[index] = {
+      ...current[index],
+      ...(data.dateInventaire ? { dateInventaire: data.dateInventaire } : {}),
+      ...(data.four ? { codeFour: data.four } : {}),
+      ...(data.codeTypeMatiere
+        ? { codeTypeMatiere: data.codeTypeMatiere as InventaireFonderieFour['codeTypeMatiere'] }
+        : {}),
+      ...(data.quantite !== undefined ? { quantite: data.quantite } : {}),
+      ...(data.observation !== undefined ? { observation: data.observation } : {}),
+      ...(data.statut ? { statut: data.statut === 'Annule' ? 'Annule' : data.statut } : {})
+    };
+    testDataRepository.saveInventaireFours(current);
+    return toFour(current[index]);
   },
 
   async deleteFour(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      storage.saveFours(getMockFoursNormalized().filter((item) => item.id !== id));
+    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+      await api.delete(`/inventaires/fours/${id}`);
       return;
     }
-    await api.delete(`/inventaires/fours/${id}`);
+    testDataRepository.saveInventaireFours(
+      testDataRepository.getDataset().inventaireFours.filter((row) => row.id !== id)
+    );
   },
 
   async validerFour(id: number): Promise<InventaireFour> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const current = getMockFoursNormalized();
-      const idx = current.findIndex((item) => item.id === id);
-      if (idx !== -1) {
-        current[idx].statut = 'Valide';
-        storage.saveFours(current);
-        return current[idx];
-      }
-      throw new Error("Inventaire four non trouvé");
-    }
-    const res = await api.post<InventaireFour>(`/inventaires/fours/${id}/valider`);
-    return normalizeFour(res.data);
+    return this.updateFour(id, { statut: 'Valide' });
   },
 
   async getTotauxConsolides(): Promise<InventaireTotalParMatiere[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
-      const conteneurs = storage.getConteneurs();
-      const categories = getMockCategoriesNormalized();
-      const fours = getMockFoursNormalized();
-      const codes = ['M3010L0', 'M3000L0', 'M3020L0'];
-
-      return codes.map((code) => {
-        const totalP1 = conteneurs
-          .filter((c) => c.codeTypeMatiere === code && c.statut === 'Valide')
-          .reduce((sum, c) => sum + c.quantiteReelle, 0);
-
-        const totalP2 = categories
-          .filter((c) => c.codeTypeMatiere === code && c.statut === 'Valide' && c.inclusDansBilanFonderie === true)
-          .reduce((sum, c) => sum + c.quantiteReelle, 0);
-
-        const totalP3 = fours
-          .filter((item) => item.codeTypeMatiere === code && item.statut === 'Valide')
-          .reduce((sum, item) => sum + item.quantite, 0);
-
-        return {
-          codeTypeMatiere: code,
-          totalPartie1: totalP1,
-          totalPartie2: totalP2,
-          totalPartie3: totalP3,
-          totalInventaireRapport: totalP1 + totalP2 + totalP3,
-          totalUtiliseBilan: totalP1 + totalP2,
-          statut: 'Valide'
-        };
-      });
-    }
-    const res = await api.get<InventaireTotalParMatiere[]>('/inventaires/totaux');
-    return res.data;
+    if (import.meta.env.VITE_USE_REAL_API === 'true')
+      return (await api.get<InventaireTotalParMatiere[]>('/inventaires/totaux')).data;
+    return calculateInventorySummary(testDataRepository.getDataset()).map((row) => ({
+      ...row,
+      statut: 'Valide' as const
+    }));
   }
 };

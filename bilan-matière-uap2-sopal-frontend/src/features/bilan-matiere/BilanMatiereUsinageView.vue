@@ -12,7 +12,7 @@ const focusPoints = [
 <template>
   <div class="space-y-6">
     <PageHeader
-      title="Bilan Matière Usinage 2"
+      title="Bilan matière Usinage 2"
       description="Pilotage des flux de matière et suivi des ordres de fabrication usinés."
     />
 
@@ -42,12 +42,12 @@ const focusPoints = [
 
       <div class="rounded-xl border border-slate-200 bg-slate-900 p-5 text-white shadow-sm space-y-3">
         <div class="flex items-center gap-2">
-          <PackageCheck class="h-5 w-5 text-emerald-400" />
+          <PackageCheck class="h-5 w-5 text-blue-300" />
           <h3 class="text-sm font-bold">Points de suivi</h3>
         </div>
         <ul class="space-y-2 text-sm text-slate-300">
           <li v-for="point in focusPoints" :key="point" class="flex gap-2">
-            <span class="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+            <span class="mt-1 h-1.5 w-1.5 rounded-full bg-blue-400"></span>
             <span>{{ point }}</span>
           </li>
         </ul>

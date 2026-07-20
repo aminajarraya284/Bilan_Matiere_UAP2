@@ -34,7 +34,7 @@ const formDechet = ref({
 });
 
 const typesDechetList: DechetType[] = ['Bavure', 'Poudre'];
-const alloysList = ['M3010L0', 'M3000L0', 'M3020L0'];
+const alloysList = ['M3010L0', 'M3000L0', 'M3060L0'];
 
 const loadDechets = async () => {
   isLoading.value = true;
@@ -117,7 +117,10 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <PageHeader title="Déclarations Déchets Fonderie" description="Bavures et poudre fonderie." />
+    <PageHeader
+      title="Déchets Fonderie"
+      description="Déclarer et suivre les bavures, poudres et autres déchets de la fonderie."
+    />
 
     <!-- Notifications -->
     <div

@@ -1,89 +1,136 @@
 <template>
-  <div class="p-4">
-    <h2 class="text-lg font-semibold mb-2">Importeur X3 - Aperçu OF</h2>
-    <div class="flex flex-wrap items-center gap-3">
-      <input type="file" accept=".xlsx,.xls" @change="onFile" />
-      <button class="btn btn-primary" :disabled="isLoadingReference" @click="loadIntegratedReference">
-        {{ isLoadingReference ? 'Chargement...' : 'Charger la référence ListeOFX3' }}
-      </button>
-      <a class="btn" :href="referenceWorkbookUrl" download>Télécharger Excel référence</a>
-    </div>
+  <div class="space-y-6">
+    <PageHeader
+      title="Importation des données X3"
+      description="Importer et contrôler les sorties magasin issues d’un fichier Excel X3."
+    />
 
-    <div v-if="referenceSummary" class="mt-3 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded p-3">
-      Référence intégrée :
-      {{ referenceSummary.sorties }} lignes OF/composant,
-      {{ referenceSummary.ofs }} OF,
-      {{ referenceSummary.articles }} articles,
-      {{ referenceSummary.materials }} matières.
-    </div>
-
-    <div v-if="parses.length" class="mt-4">
-      <div v-for="(p, i) in parses" :key="i" class="mb-4 border-b pb-3">
-        <h3 class="font-medium">Feuille: {{ p.sheetName }} ({{ p.ofs.length }} OFs détectés)</h3>
-        <div class="text-sm text-gray-600">Headers: {{ p.headers.join(', ') }}</div>
-        <div class="mt-2">
-          <button class="btn btn-primary mr-2" @click="importOfs(p.ofs)">
-            Importer ces OFs comme réceptions de test
-          </button>
-          <button class="btn mr-2" @click="downloadOfList(p.ofs)">Télécharger la liste OF (.txt)</button>
+    <AppCard accent>
+      <div class="space-y-4">
+        <SectionHeader
+          title="Source d’import"
+          description="Sélectionnez un fichier Excel X3 ou utilisez la source locale."
+        />
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            class="min-w-0 flex-1"
+            type="file"
+            accept=".xlsx,.xls"
+            aria-label="Fichier Excel X3"
+            @change="onFile"
+          />
+          <AppButton :loading="isLoadingReference" @click="loadIntegratedReference"
+            >Charger les données locales</AppButton
+          >
         </div>
-
-        <div class="mt-3">
-          <h4 class="font-medium">Importer en mappant les colonnes</h4>
-          <div class="flex items-center gap-2 mt-2">
-            <button class="btn mr-2" @click="autoDetect(i)">Auto-detect</button>
-            <label class="text-sm">Colonne OF:</label>
-            <select v-model="mappings[i].ofIndex">
-              <option v-for="(h, idx) in p.headers" :key="idx" :value="idx">{{ idx }} - {{ h || '(vide)' }}</option>
-            </select>
-            <label class="text-sm">Article:</label>
-            <select v-model="mappings[i].articleIndex">
-              <option value="">(aucun)</option>
-              <option v-for="(h, idx) in p.headers" :key="'a' + idx" :value="idx">
-                {{ idx }} - {{ h || '(vide)' }}
-              </option>
-            </select>
-            <label class="text-sm">Poids:</label>
-            <select v-model="mappings[i].poidsIndex">
-              <option value="">(aucun)</option>
-              <option v-for="(h, idx) in p.headers" :key="'w' + idx" :value="idx">
-                {{ idx }} - {{ h || '(vide)' }}
-              </option>
-            </select>
-          </div>
-          <div class="mt-2">
-            <button class="btn btn-primary mr-2" @click="importMapped(i)">Importer avec mapping</button>
-            <button class="btn" @click="previewMapped(i)">Aperçu mapping (10 lignes)</button>
-            <label class="ml-4 text-sm"
-              ><input type="checkbox" v-model="mappings[i].sync" /> Marquer comme synchronisation (Synchronisé
-              ERP)</label
-            >
-            <label class="ml-2 text-sm"
-              ><input type="checkbox" v-model="mappings[i].backup" /> Sauvegarder backup avant écriture</label
-            >
-          </div>
-        </div>
-
-        <div class="mt-2 text-xs">
-          Aperçu des 10 premières lignes:
-          <pre class="bg-gray-100 p-2 mt-1 overflow-auto">{{ p.rows.slice(0, 10) }}</pre>
+        <div v-if="referenceSummary" class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          Données locales : <strong>{{ referenceSummary.sorties }}</strong> sorties magasin,
+          <strong>{{ referenceSummary.ofs }}</strong> OF, <strong>{{ referenceSummary.articles }}</strong> articles et
+          <strong>{{ referenceSummary.materials }}</strong> types matière.
         </div>
       </div>
-    </div>
+    </AppCard>
 
-    <div v-if="created && created.length" class="mt-4">
-      <h3 class="font-medium">Réceptions créées (test)</h3>
-      <ul class="list-disc pl-6 text-sm">
-        <li v-for="r in created" :key="r.id">{{ r.numOf }} — id {{ r.id }}</li>
+    <Transition name="page-motion">
+      <ProgressSteps v-if="isLoadingReference" label="Chargement et contrôle de la référence X3" kind="import" />
+    </Transition>
+
+    <section v-if="parses.length" class="space-y-4">
+      <article v-for="(p, i) in parses" :key="i" class="surface-card space-y-5 p-5">
+        <SectionHeader
+          :title="`Feuille ${p.sheetName}`"
+          :description="`${p.ofs.length} OF détecté(s) dans cette feuille.`"
+        />
+        <p class="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
+          <span class="font-semibold text-slate-700">Colonnes :</span> {{ p.headers.join(', ') }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <AppButton @click="importOfs(p.ofs)">Importer ces OF comme réceptions de test</AppButton>
+          <AppButton variant="secondary" @click="downloadOfList(p.ofs)">Télécharger la liste OF (.txt)</AppButton>
+        </div>
+
+        <div class="space-y-4 border-t border-slate-200 pt-5">
+          <SectionHeader
+            title="Correspondance des colonnes"
+            description="Associez les colonnes du fichier aux données attendues avant l’import."
+            :level="4"
+          >
+            <template #action
+              ><AppButton variant="secondary" size="sm" @click="autoDetect(i)"
+                >Détection automatique</AppButton
+              ></template
+            >
+          </SectionHeader>
+          <div class="grid gap-4 md:grid-cols-3">
+            <label class="space-y-1.5 text-sm font-semibold text-slate-700"
+              >Colonne OF
+              <select v-model="mappings[i].ofIndex" class="w-full">
+                <option v-for="(h, idx) in p.headers" :key="idx" :value="idx">{{ idx }} — {{ h || '(vide)' }}</option>
+              </select>
+            </label>
+            <label class="space-y-1.5 text-sm font-semibold text-slate-700"
+              >Article
+              <select v-model="mappings[i].articleIndex" class="w-full">
+                <option value="">(aucun)</option>
+                <option v-for="(h, idx) in p.headers" :key="'a' + idx" :value="idx">
+                  {{ idx }} — {{ h || '(vide)' }}
+                </option>
+              </select>
+            </label>
+            <label class="space-y-1.5 text-sm font-semibold text-slate-700"
+              >Poids
+              <select v-model="mappings[i].poidsIndex" class="w-full">
+                <option value="">(aucun)</option>
+                <option v-for="(h, idx) in p.headers" :key="'w' + idx" :value="idx">
+                  {{ idx }} — {{ h || '(vide)' }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <div class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700">
+            <label class="flex items-center gap-2"
+              ><input v-model="mappings[i].sync" type="checkbox" /> Synchronisation ERP</label
+            >
+            <label class="flex items-center gap-2"
+              ><input v-model="mappings[i].backup" type="checkbox" /> Sauvegarder avant écriture</label
+            >
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <AppButton @click="importMapped(i)">Importer avec la correspondance</AppButton>
+            <AppButton variant="secondary" @click="previewMapped(i)">Prévisualiser 10 lignes</AppButton>
+          </div>
+        </div>
+
+        <details class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <summary class="cursor-pointer font-semibold">Aperçu des 10 premières lignes</summary>
+          <pre class="technical-value mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-xs">{{
+            p.rows.slice(0, 10)
+          }}</pre>
+        </details>
+      </article>
+    </section>
+
+    <section v-if="created?.length" class="surface-card p-5">
+      <SectionHeader title="Réceptions créées" description="Réceptions générées dans l’environnement de test." />
+      <ul class="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+        <li v-for="r in created" :key="r.id" class="rounded-lg bg-slate-50 px-3 py-2">
+          <span class="technical-value font-semibold">{{ r.numeroOF }}</span> — identifiant {{ r.id }}
+        </li>
       </ul>
-    </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
-import { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
+import { reactive, ref } from 'vue';
+import { testDataRepository } from '@/services/testDataRepository.service';
 import { useAppDialog } from '@/composables/useAppDialog';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import SectionHeader from '@/components/ui/SectionHeader.vue';
+import AppButton from '@/components/ui/AppButton.vue';
+import AppCard from '@/components/ui/AppCard.vue';
+import ProgressSteps from '@/components/ui/ProgressSteps.vue';
+import { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
 import {
   X3Cell,
   X3ParseResult,
@@ -92,7 +139,6 @@ import {
   mapRowsToReceptions,
   detectMappingFromHeaders
 } from './importer.service';
-import { x3ReferenceService } from '@/features/reference/x3Reference.service';
 
 type SheetMapping = {
   ofIndex: number | '';
@@ -107,9 +153,7 @@ const dialog = useAppDialog();
 const parses = ref<X3ParseResult[]>([]);
 const created = ref<ReceptionUsinage2Mouvement[]>([]);
 const isLoadingReference = ref(false);
-const referenceWorkbookUrl = x3ReferenceService.getWorkbookUrl();
 const referenceSummary = ref<{ sorties: number; ofs: number; articles: number; materials: number } | null>(null);
-// mappings per sheet index
 const mappings = reactive<SheetMapping[]>([]);
 
 function resetMappings(results: X3ParseResult[]) {
@@ -123,6 +167,27 @@ function resetMappings(results: X3ParseResult[]) {
       backup: true
     };
   });
+}
+
+function buildLocalParseResult(): X3ParseResult[] {
+  const dataset = testDataRepository.getDataset();
+  const ordres = dataset.x3OrdresFabrication;
+  const composants = dataset.x3ComposantsOF;
+  const headers = ['OF', 'Article', 'Type matiere', 'Quantite consommee'];
+  const rows = composants.map((composant) => [
+    composant.numeroOF,
+    ordres.find((of) => of.numeroOF === composant.numeroOF)?.codeArticleParent || '',
+    composant.codeComposant,
+    composant.quantiteConsommee
+  ]);
+  return [
+    {
+      sheetName: 'TEST_SORTIES_MAGASIN',
+      headers,
+      rows,
+      ofs: ordres.map((of) => of.numeroOF)
+    }
+  ];
 }
 
 async function onFile(e: Event) {
@@ -140,8 +205,8 @@ async function onFile(e: Event) {
     created.value = [];
     mappings.length = 0;
     input.value = '';
-    await dialog.alert(error instanceof Error ? error.message : 'Import X3 impossible.', {
-      title: 'Import X3',
+    await dialog.alert(error instanceof Error ? error.message : 'Import impossible.', {
+      title: 'Import',
       tone: 'warning'
     });
   }
@@ -150,24 +215,17 @@ async function onFile(e: Event) {
 async function loadIntegratedReference() {
   isLoadingReference.value = true;
   try {
-    const [reference, results] = await Promise.all([
-      x3ReferenceService.getReference(),
-      x3ReferenceService.getReferenceAsParseResult()
-    ]);
+    const results = buildLocalParseResult();
     parses.value = results;
     created.value = [];
+    const dataset = testDataRepository.getDataset();
     referenceSummary.value = {
-      sorties: reference.sheets.LISTEOFX3.aggregatedRows,
-      ofs: reference.sheets.LISTEOFX3.uniqueOf,
-      articles: reference.sheets.GAMME.uniqueArticles,
-      materials: reference.sheets.BOM.uniqueMaterials
+      sorties: dataset.x3MouvementsStock.length,
+      ofs: dataset.x3OrdresFabrication.length,
+      articles: dataset.refNomenclature.length,
+      materials: dataset.refTypesMatiere.length
     };
     resetMappings(results);
-  } catch (error) {
-    await dialog.alert(error instanceof Error ? error.message : 'Chargement de la référence impossible.', {
-      title: 'Référence X3',
-      tone: 'warning'
-    });
   } finally {
     isLoadingReference.value = false;
   }
@@ -177,8 +235,8 @@ async function importOfs(ofs: string[]) {
   if (!ofs || !ofs.length) return;
   const createdRecs = insertOfsAsReceptions(ofs, { user: 'IMPORT_UI' });
   created.value = createdRecs;
-  await dialog.alert(`${createdRecs.length} réceptions de test ajoutées.`, {
-    title: 'Import terminé',
+  await dialog.alert(`${createdRecs.length} receptions de test ajoutees.`, {
+    title: 'Import termine',
     tone: 'success'
   });
 }
@@ -197,11 +255,11 @@ async function importMapped(sheetIndex: number) {
   const p = parses.value[sheetIndex];
   const m = mappings[sheetIndex];
   if (!p || !m) {
-    await dialog.alert('Mapping introuvable.', { title: 'Import X3', tone: 'warning' });
+    await dialog.alert('Mapping introuvable.', { title: 'Import', tone: 'warning' });
     return;
   }
   if (typeof m.ofIndex !== 'number' || m.ofIndex < 0) {
-    await dialog.alert('Sélectionner la colonne OF.', { title: 'Import X3', tone: 'warning' });
+    await dialog.alert('Selectionner la colonne OF.', { title: 'Import', tone: 'warning' });
     return;
   }
   const createdRecs = mapRowsToReceptions(
@@ -216,8 +274,8 @@ async function importMapped(sheetIndex: number) {
     { sync: !!m.sync, backup: !!m.backup }
   );
   created.value = createdRecs;
-  await dialog.alert(`${createdRecs.length} réceptions importées et ajoutées au stockage local.`, {
-    title: 'Import terminé',
+  await dialog.alert(`${createdRecs.length} receptions importees et ajoutees au stockage local.`, {
+    title: 'Import termine',
     tone: 'success'
   });
 }
@@ -226,7 +284,7 @@ async function previewMapped(sheetIndex: number) {
   const p = parses.value[sheetIndex];
   const m = mappings[sheetIndex];
   if (!p || !m || typeof m.ofIndex !== 'number') {
-    await dialog.alert('Mapping introuvable.', { title: 'Aperçu mapping', tone: 'warning' });
+    await dialog.alert('Mapping introuvable.', { title: 'Apercu mapping', tone: 'warning' });
     return;
   }
   const preview = p.rows.slice(0, 10).map((row: X3Cell[]) => {
@@ -235,8 +293,8 @@ async function previewMapped(sheetIndex: number) {
     const poids = typeof m.poidsIndex === 'number' && row[m.poidsIndex] !== undefined ? row[m.poidsIndex] : '';
     return { of, article, poids };
   });
-  await dialog.alert('Aperçu des 10 premières lignes mappées.', {
-    title: 'Aperçu mapping',
+  await dialog.alert('Apercu des 10 premieres lignes mappees.', {
+    title: 'Apercu mapping',
     details: JSON.stringify(preview, null, 2)
   });
 }
@@ -246,29 +304,15 @@ async function autoDetect(sheetIndex: number) {
   if (!p) return;
   const mapping = detectMappingFromHeaders(p.sheetName, p.headers);
   if (!mapping) {
-    await dialog.alert('Auto-détection impossible pour cette feuille.', { title: 'Mapping X3', tone: 'warning' });
+    await dialog.alert('Auto-detection impossible pour cette feuille.', { title: 'Mapping', tone: 'warning' });
     return;
   }
   mappings[sheetIndex].ofIndex = mapping.ofIndex;
   mappings[sheetIndex].articleIndex = mapping.articleIndex !== undefined ? mapping.articleIndex : '';
   mappings[sheetIndex].poidsIndex = mapping.poidsIndex !== undefined ? mapping.poidsIndex : '';
-  await dialog.alert('Mapping détecté automatiquement. Vérifiez puis importez.', {
-    title: 'Mapping X3',
+  await dialog.alert('Mapping detecte automatiquement. Verifiez puis importez.', {
+    title: 'Mapping',
     tone: 'success'
   });
 }
 </script>
-
-<style scoped>
-.btn {
-  padding: 0.4rem 0.75rem;
-  border-radius: 0.375rem;
-  background: #eee;
-  border: 1px solid #ddd;
-}
-.btn-primary {
-  background: #0069d9;
-  color: white;
-  border-color: #0056b3;
-}
-</style>

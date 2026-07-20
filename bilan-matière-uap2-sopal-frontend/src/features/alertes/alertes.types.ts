@@ -1,16 +1,24 @@
+import type { SourceDonnee } from '@/types/domain.types';
+
 export interface AlertesWeightAlert {
   id: number;
-  numOf: string;
+  numeroOF: string;
   dateReception: string;
   codeArticle: string;
   designationArticle: string;
   codeTypeMatiere: string;
-  poidsKg: number;
-  poidsPhysique: number;
+  poidsTheoriqueTotalKg: number;
+  poidsTotalReceptionneKg: number;
+  poidsKg?: number;
+  poidsPhysique?: number;
+  poidsTheoriqueUnitaireKg?: number;
+  poidsPhysiqueUnitaireKg?: number;
+  ecartPoidsUnitaireKg?: number;
+  tauxEcartPoids?: number;
   difference: number;
   atelierOrigine: string;
   mois: string;
-  source: string;
+  source: SourceDonnee;
 }
 
 export interface AlertesBilanAlert {

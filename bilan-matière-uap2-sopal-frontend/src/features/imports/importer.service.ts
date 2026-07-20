@@ -1,4 +1,5 @@
-import { storage } from '@/utils/storage';
+import { testDataRepository } from '@/services/testDataRepository.service';
+import { buildReceptionDefaults, calculateReceptionWeight } from '@/services/bilanCalculation.service';
 import { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
 import type { Sheet } from 'read-excel-file/browser';
 
@@ -31,6 +32,31 @@ const parsePoids = (cell: X3Cell | undefined): number => {
   return Number.isFinite(value) ? value : 0;
 };
 
+const getArticleReference = (codeArticle: string) => {
+  const dataset = testDataRepository.getDataset();
+  const nomenclature = dataset.refNomenclature.find(
+    (item) => item.codeArticleParent.toLowerCase() === codeArticle.toLowerCase()
+  );
+  const ordre = dataset.x3OrdresFabrication.find(
+    (item) => item.codeArticleParent.toLowerCase() === codeArticle.toLowerCase()
+  );
+  return nomenclature
+    ? {
+        codeArticle,
+        designation: nomenclature.designationArticleParent,
+        poidsUnitaireKg: nomenclature.quantiteLienCumulee,
+        typeMatiere: nomenclature.codeComposant
+      }
+    : ordre
+      ? { codeArticle, designation: ordre.designationArticle, poidsUnitaireKg: 0, typeMatiere: 'M3010L0' as const }
+      : undefined;
+};
+
+const getOfReference = (numeroOF: string) =>
+  testDataRepository
+    .getDataset()
+    .x3OrdresFabrication.find((of) => of.numeroOF.toLowerCase() === numeroOF.toLowerCase());
+
 export async function parseX3ArrayBuffer(buffer: ArrayBuffer): Promise<X3ParseResult[]> {
   let readExcelFile: ReadExcelFileBrowser;
   try {
@@ -54,11 +80,11 @@ export async function parseX3ArrayBuffer(buffer: ArrayBuffer): Promise<X3ParseRe
       row.forEach((cell) => {
         const s = cellToString(cell);
         if (!s) return;
-        if (/OF-?\d{3,}/i.test(s)) {
+        if (/^OF\d{8}$/i.test(s)) {
           ofSet.add(s.toUpperCase().replace(/\s+/g, ''));
         }
         if (/^\d{4,}$/.test(s)) {
-          ofSet.add('OF-' + s);
+          ofSet.add(`OF${s.padStart(8, '0')}`);
         }
       });
     });
@@ -162,31 +188,104 @@ export function insertOfsAsReceptions(
   ofs: string[],
   options?: { user?: string; month?: string }
 ): ReceptionUsinage2Mouvement[] {
-  const existing = storage.getReceptions();
+  const dataset = testDataRepository.getDataset();
+  const existing = dataset.receptionsUsinage2;
   const startId = existing.length ? Math.max(...existing.map((r) => r.id)) + 1 : 1;
   const now = new Date();
   const mois = options?.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const user = options?.user || 'IMPORT_TEST';
 
-  const created: ReceptionUsinage2Mouvement[] = ofs.map((of, idx) => ({
-    id: startId + idx,
-    numOf: of,
-    dateReception: mois + '-01',
-    codeArticle: 'ART-IMPRT',
-    designationArticle: 'Article importé',
-    poidsKg: 0,
-    nombrePieces: 0,
-    atelierOrigine: 'FONDERIE',
-    codeTypeMatiere: 'M0000',
-    designationTypeMatiere: 'Matière importée',
-    mois: mois,
-    poidsPhysique: 0,
-    source: 'Import X3',
-    utilisateur: user
-  }));
+  const created: ReceptionUsinage2Mouvement[] = ofs.map((of, idx) => {
+    const ofRef = getOfReference(of);
+    const numeroOF = ofRef?.numeroOF || of;
+    const pieces = ofRef
+      ? (dataset.x3OperationsOF.find((item) => item.numeroOF === ofRef.numeroOF)?.quantiteRealisee ?? 1)
+      : 1;
+    const poidsKg = ofRef
+      ? Number((buildReceptionDefaults(dataset, numeroOF).poidsTheoriqueUnitaireKg * pieces).toFixed(2))
+      : 0;
+    const calculated = ofRef
+      ? calculateReceptionWeight(dataset, {
+          numeroOF,
+          dateReception: `${mois}-01`,
+          origine: 'FONDERIE',
+          poidsTotalReceptionneKg: poidsKg,
+          nombrePiecesReceptionnees: pieces
+        })
+      : null;
+    const item = calculated
+      ? {
+          id: startId + idx,
+          ...calculated,
+          statut: 'Valide' as const,
+          source: 'Excel' as const,
+          creePar: user,
+          creeLe: now.toISOString()
+        }
+      : null;
+    if (!item)
+      return {
+        id: startId + idx,
+        numeroOF: of,
+        dateReception: `${mois}-01`,
+        codeArticle: '',
+        designationArticle: 'Article importe',
+        origine: 'FONDERIE' as const,
+        poidsTotalReceptionneKg: 0,
+        nombrePiecesReceptionnees: 0,
+        atelierOrigine: '',
+        codeTypeMatiere: 'M3010L0',
+        designationTypeMatiere: 'Matiere importee',
+        mois,
+        poidsPhysiqueUnitaireKg: 0,
+        quantiteLienUtilisee: 0,
+        uniteQuantiteLien: 'KG' as const,
+        poidsTheoriqueUnitaireKg: 0,
+        poidsTheoriqueTotalKg: 0,
+        ecartPoidsUnitaireKg: 0,
+        tauxEcartPoids: 0,
+        statutAlertePoids: 'Conforme' as const,
+        seuilAlertePoidsPourcentage: 0,
+        gammeFabricationId: 0,
+        nomenclatureId: 0,
+        statut: 'Brouillon' as const,
+        source: 'Excel' as const,
+        utilisateur: user,
+        creeLe: now.toISOString()
+      };
+    dataset.receptionsUsinage2.push(item);
+    return {
+      id: item.id,
+      numeroOF: item.numeroOF,
+      dateReception: item.dateReception,
+      codeArticle: item.codeArticle,
+      designationArticle: item.designationArticle,
+      origine: item.origine,
+      poidsTotalReceptionneKg: item.poidsTotalReceptionneKg,
+      nombrePiecesReceptionnees: item.nombrePiecesReceptionnees,
+      atelierOrigine: item.atelierOrigine,
+      codeTypeMatiere: item.codeTypeMatiere,
+      designationTypeMatiere: `Matiere ${item.codeTypeMatiere}`,
+      mois: item.mois,
+      poidsPhysiqueUnitaireKg: item.poidsPhysiqueUnitaireKg,
+      quantiteLienUtilisee: item.quantiteLienUtilisee,
+      uniteQuantiteLien: item.uniteQuantiteLien,
+      poidsTheoriqueUnitaireKg: item.poidsTheoriqueUnitaireKg,
+      poidsTheoriqueTotalKg: item.poidsTheoriqueTotalKg,
+      ecartPoidsUnitaireKg: item.ecartPoidsUnitaireKg,
+      tauxEcartPoids: item.tauxEcartPoids,
+      statutAlertePoids: item.statutAlertePoids,
+      seuilAlertePoidsPourcentage: item.seuilAlertePoidsPourcentage,
+      gammeFabricationId: item.gammeFabricationId,
+      nomenclatureId: item.nomenclatureId,
+      statut: item.statut,
+      source: item.source,
+      utilisateur: item.creePar,
+      creeLe: item.creeLe
+    };
+  });
 
-  const merged = existing.concat(created);
-  storage.saveReceptions(merged);
+  testDataRepository.saveReceptions(dataset.receptionsUsinage2);
   return created;
 }
 
@@ -206,7 +305,8 @@ export function mapRowsToReceptions(
   mapping: ColumnMapping,
   options?: { sync?: boolean; backup?: boolean }
 ): ReceptionUsinage2Mouvement[] {
-  const existing = storage.getReceptions();
+  const dataset = testDataRepository.getDataset();
+  const existing = dataset.receptionsUsinage2;
   const startId = existing.length ? Math.max(...existing.map((r) => r.id)) + 1 : 1;
   const now = new Date();
   const mois = mapping.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -221,29 +321,65 @@ export function mapRowsToReceptions(
     const article =
       mapping.articleIndex !== undefined && row[mapping.articleIndex]
         ? cellToString(row[mapping.articleIndex])
-        : 'ART-IMPORT';
+        : '0101A03-1';
+    const articleRef = getArticleReference(article);
     const poids = parsePoids(mapping.poidsIndex !== undefined ? row[mapping.poidsIndex] : undefined);
 
     created.push({
       id: startId + idx,
-      numOf: of,
+      numeroOF: of,
       dateReception: mois + '-01',
       codeArticle: article,
-      designationArticle: 'Article importé',
-      poidsKg: Number(Number.isFinite(poids) ? poids : 0),
-      nombrePieces: 0,
-      atelierOrigine: 'FONDERIE',
-      codeTypeMatiere: mapping.codeTypeMatiere || 'M0000',
-      designationTypeMatiere: 'Matière importée',
+      designationArticle: articleRef?.designation || 'Article importe',
+      poidsTotalReceptionneKg: Number(Number.isFinite(poids) ? poids : 0),
+      nombrePiecesReceptionnees: 0,
+      atelierOrigine: '19',
+      codeTypeMatiere: mapping.codeTypeMatiere || articleRef?.typeMatiere || 'M3010L0',
+      designationTypeMatiere: articleRef ? `Matiere ${articleRef.typeMatiere}` : 'Matiere importee',
       mois: mois,
-      poidsPhysique: Number(Number.isFinite(poids) ? poids : 0),
-      source: options && options.sync ? 'Synchronisé ERP' : 'Import X3',
-      utilisateur: options && options.sync ? 'SYSTEM' : user
+      origine: 'FONDERIE',
+      poidsPhysiqueUnitaireKg: 0,
+      quantiteLienUtilisee: 0,
+      uniteQuantiteLien: 'KG',
+      poidsTheoriqueUnitaireKg: articleRef?.poidsUnitaireKg ?? 0,
+      poidsTheoriqueTotalKg: 0,
+      ecartPoidsUnitaireKg: 0,
+      tauxEcartPoids: 0,
+      statutAlertePoids: 'Conforme',
+      seuilAlertePoidsPourcentage: dataset.parametresApplication.seuilAlertePoidsPourcentage,
+      gammeFabricationId: 0,
+      nomenclatureId: 0,
+      statut: 'Brouillon',
+      source: options && options.sync ? 'X3Api' : 'Excel',
+      utilisateur: options && options.sync ? 'SYSTEM' : user,
+      creeLe: now.toISOString()
     });
     idx++;
   });
 
-  const merged = existing.concat(created);
+  created.forEach((reception) => {
+    const of = getOfReference(reception.numeroOF);
+    if (!of) return;
+    const defaults = buildReceptionDefaults(dataset, of.numeroOF);
+    const pieces = 1;
+    const poids =
+      reception.poidsTotalReceptionneKg > 0 ? reception.poidsTotalReceptionneKg : defaults.poidsTheoriqueUnitaireKg;
+    const calculated = calculateReceptionWeight(dataset, {
+      numeroOF: of.numeroOF,
+      dateReception: reception.dateReception,
+      origine: 'FONDERIE',
+      poidsTotalReceptionneKg: poids,
+      nombrePiecesReceptionnees: pieces
+    });
+    dataset.receptionsUsinage2.push({
+      id: startId + dataset.receptionsUsinage2.length,
+      ...calculated,
+      statut: 'Valide',
+      source: options?.sync ? 'X3Api' : 'Excel',
+      creePar: options?.sync ? 'SYSTEM' : user,
+      creeLe: now.toISOString()
+    });
+  });
 
   // Optional backup in localStorage before overwrite
   if (options && options.backup) {
@@ -255,6 +391,6 @@ export function mapRowsToReceptions(
     }
   }
 
-  storage.saveReceptions(merged);
+  testDataRepository.saveReceptions(dataset.receptionsUsinage2);
   return created;
 }

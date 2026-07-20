@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { Loader2 } from 'lucide-vue-next';
-defineProps<{
-  message?: string;
-}>();
+import SkeletonLoader from './SkeletonLoader.vue';
+
+withDefaults(defineProps<{ message?: string; variant?: 'content' | 'cards' | 'table' }>(), {
+  variant: 'content'
+});
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center p-8 min-h-[200px] text-slate-500">
-    <Loader2 class="w-8 h-8 animate-spin text-blue-900 mb-2" />
-    <span class="text-xs font-semibold uppercase tracking-wider">{{
-      message || 'Chargement des données en cours...'
-    }}</span>
+  <div class="min-h-[200px] p-2" role="status" aria-live="polite">
+    <span class="sr-only">{{ message || 'Chargement des données en cours…' }}</span>
+    <SkeletonLoader :variant="variant" />
   </div>
 </template>

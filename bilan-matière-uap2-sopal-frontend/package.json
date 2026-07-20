@@ -7,7 +7,7 @@
     "dev": "vite --port=3000 --host=127.0.0.1",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "node scripts/clean.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit && eslint \"src/**/*.{ts,vue}\"",
     "format": "prettier --write \"src/**/*.{ts,vue,css,json,md}\" \"*.{js,ts,json,md}\"",
@@ -21,7 +21,8 @@
     "pinia": "^3.0.4",
     "read-excel-file": "^9.2.0",
     "vue": "^3.5.39",
-    "vue-router": "^4.3.0"
+    "vue-router": "^4.3.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

@@ -1,29 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useAuthStore } from '@/features/auth/auth.store';
 import { LogOut, User } from 'lucide-vue-next';
+import { useAuthStore } from '@/features/auth/auth.store';
+import AppButton from '@/components/ui/AppButton.vue';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
-const pageTitle = computed(() => {
-  return (route.meta?.title as string) || 'Bilan Matière';
-});
-
-const pageSubtitle = computed(() => {
-  return (route.meta?.subtitle as string) || "Gestion de l'exploitation industrielle";
-});
-
+const pageTitle = computed(() => (route.meta?.title as string) || 'Accueil');
+const pageSubtitle = computed(() => (route.meta?.subtitle as string) || 'Vue générale');
 const currentUser = computed(() => authStore.user);
 
 const formatRoleLabel = (role: string | undefined): string => {
-  if (!role) return '';
+  if (!role) return 'Rôle non défini';
   const mapping: Record<string, string> = {
     Admin: 'Administrateur',
-    ResponsableFonderie: 'Resp. Fonderie',
-    ResponsableUsinage2: 'Resp. Usinage 2'
+    ResponsableFonderie: 'Responsable Fonderie',
+    ResponsableUsinage2: 'Responsable Usinage 2'
   };
   return mapping[role] || role;
 };
@@ -36,40 +31,61 @@ const handleLogout = () => {
 
 <template>
   <header
-    class="h-16 bg-white border-b border-slate-200/80 flex items-center justify-between px-8 z-10 select-none shrink-0"
+    class="app-header z-10 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-6 xl:px-8"
   >
-    <!-- Breadcrumb & Page Info -->
-    <div>
-      <div class="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-        <span>SOPAL</span>
-        <span>/</span>
-        <span class="text-blue-600">{{ pageTitle }}</span>
+    <div class="min-w-0">
+      <div class="app-header__breadcrumb flex items-center gap-1.5 text-xs font-medium">
+        <span class="text-primary-700">SOPAL</span><span class="text-[var(--color-border-strong)]" aria-hidden="true">/</span
+        ><span class="truncate text-[var(--color-text)]">{{ pageTitle }}</span>
       </div>
-      <h2 class="text-sm font-black text-slate-800 leading-tight tracking-tight">{{ pageSubtitle }}</h2>
+      <p class="mt-0.5 truncate text-sm font-semibold text-[var(--color-text)]">{{ pageSubtitle }}</p>
     </div>
 
-    <!-- Active User Profile & Actions -->
-    <div class="flex items-center gap-6">
-      <div class="flex items-center gap-3 pl-4 border-l border-slate-100">
+    <div class="flex shrink-0 items-center gap-2 sm:gap-4">
+      <div class="app-header__user hidden items-center gap-3 pl-4 md:flex">
         <div
-          class="w-8 h-8 rounded-full bg-slate-50 border border-slate-150 flex items-center justify-center text-slate-600 shrink-0"
+          class="app-header__avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary-100 bg-primary-50 text-primary-700"
         >
-          <User class="w-4 h-4 text-slate-400" />
+          <User class="h-4 w-4" aria-hidden="true" />
         </div>
-        <div class="text-left hidden sm:block">
-          <p class="text-xs font-bold text-slate-800 leading-none">{{ currentUser?.fullName || 'Utilisateur' }}</p>
-          <p class="text-[10px] font-semibold text-blue-600 mt-1">Rôle : {{ formatRoleLabel(currentUser?.role) }}</p>
+        <div class="text-left">
+          <p class="text-sm font-semibold leading-none text-slate-900">{{ currentUser?.fullName || 'Utilisateur' }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ formatRoleLabel(currentUser?.role) }}</p>
         </div>
       </div>
 
-      <button
-        @click="handleLogout"
-        class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all text-xs font-bold cursor-pointer"
+      <AppButton
+        variant="secondary"
+        size="sm"
         title="Déconnexion sécurisée"
+        aria-label="Se déconnecter de l’application"
+        @click="handleLogout"
       >
-        <LogOut class="w-3.5 h-3.5" />
-        Déconnexion
-      </button>
+        <template #icon><LogOut class="h-4 w-4" aria-hidden="true" /></template>
+        <span class="hidden sm:inline">Déconnexion</span>
+      </AppButton>
     </div>
   </header>
 </template>
+
+<style scoped>
+.app-header {
+  border-color: rgb(203 221 234 / 0.88);
+  background: rgb(255 255 255 / 0.96);
+  box-shadow: var(--shadow-header);
+  backdrop-filter: blur(12px);
+}
+
+.app-header__breadcrumb {
+  color: var(--color-text-muted);
+  letter-spacing: 0.01em;
+}
+
+.app-header__user {
+  border-left: 1px solid var(--color-border);
+}
+
+.app-header__avatar {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7);
+}
+</style>

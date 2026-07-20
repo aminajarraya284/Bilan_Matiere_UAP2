@@ -4,12 +4,30 @@ import { AuthUser } from './auth.types';
 import { UserRole } from '@/types/common.types';
 import { authService } from './auth.service';
 
+const VALID_ROLES: UserRole[] = ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'];
+
+const isAuthUser = (value: unknown): value is AuthUser => {
+  if (!value || typeof value !== 'object') return false;
+  const user = value as Partial<AuthUser>;
+  return (
+    typeof user.id === 'number' &&
+    typeof user.fullName === 'string' &&
+    typeof user.username === 'string' &&
+    typeof user.email === 'string' &&
+    typeof user.role === 'string' &&
+    VALID_ROLES.includes(user.role as UserRole) &&
+    user.status === 'Actif'
+  );
+};
+
 const readStoredUser = (): AuthUser | null => {
   const storedUser = localStorage.getItem('sopal_auth_user');
   if (!storedUser) return null;
 
   try {
-    return JSON.parse(storedUser) as AuthUser;
+    const parsed = JSON.parse(storedUser) as unknown;
+    if (!isAuthUser(parsed)) throw new Error('Invalid stored user');
+    return parsed;
   } catch {
     localStorage.removeItem('sopal_auth_token');
     localStorage.removeItem('sopal_auth_user');

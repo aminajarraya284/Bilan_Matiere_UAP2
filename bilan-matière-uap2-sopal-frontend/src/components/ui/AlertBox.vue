@@ -1,48 +1,36 @@
 <script setup lang="ts">
+import { computed, type Component } from 'vue';
 import { Info, CheckCircle2, AlertTriangle, AlertOctagon } from 'lucide-vue-next';
 
-withDefaults(
-  defineProps<{
-    type?: 'info' | 'success' | 'warning' | 'danger';
-    title?: string;
-    message?: string;
-  }>(),
-  {
-    type: 'info'
-  }
-);
+type AlertType = 'info' | 'success' | 'warning' | 'attention' | 'danger';
+const props = withDefaults(defineProps<{ type?: AlertType; title?: string; message?: string }>(), {
+  type: 'info',
+  title: '',
+  message: ''
+});
+
+const alertStyles: Record<AlertType, { icon: Component; container: string }> = {
+  info: { icon: Info, container: 'alert-box--info' },
+  success: { icon: CheckCircle2, container: 'alert-box--success' },
+  warning: { icon: AlertTriangle, container: 'alert-box--warning' },
+  attention: { icon: AlertTriangle, container: 'alert-box--attention' },
+  danger: { icon: AlertOctagon, container: 'alert-box--danger' }
+};
+const currentAlert = computed(() => alertStyles[props.type]);
+const accessibilityRole = computed(() => (props.type === 'danger' || props.type === 'warning' ? 'alert' : 'status'));
 </script>
 
 <template>
   <div
-    class="flex items-start gap-3.5 p-4 rounded-xl border text-xs"
-    :class="{
-      'bg-blue-50/50 border-blue-100 text-blue-900': type === 'info',
-      'bg-emerald-50/50 border-emerald-100 text-emerald-900': type === 'success',
-      'bg-amber-50/50 border-amber-100 text-amber-900': type === 'warning',
-      'bg-rose-50/50 border-rose-100 text-rose-900': type === 'danger'
-    }"
+    class="motion-alert flex items-start gap-3 rounded-lg border p-4 text-sm"
+    :class="currentAlert.container"
+    :role="accessibilityRole"
+    :aria-live="type === 'danger' ? 'assertive' : 'polite'"
   >
-    <!-- Icon -->
-    <div class="shrink-0 mt-0.5">
-      <Info v-if="type === 'info'" class="w-4 h-4 text-blue-600" />
-      <CheckCircle2 v-else-if="type === 'success'" class="w-4 h-4 text-emerald-600" />
-      <AlertTriangle v-else-if="type === 'warning'" class="w-4 h-4 text-amber-600" />
-      <AlertOctagon v-else-if="type === 'danger'" class="w-4 h-4 text-rose-600" />
-    </div>
-
-    <!-- Content -->
-    <div class="space-y-0.5 leading-relaxed">
-      <h5 v-if="title" class="font-bold tracking-tight">{{ title }}</h5>
-      <p
-        class="font-medium text-slate-600 text-[11px]"
-        :class="{
-          'text-blue-700': type === 'info',
-          'text-emerald-700': type === 'success',
-          'text-amber-700': type === 'warning',
-          'text-rose-700': type === 'danger'
-        }"
-      >
+    <component :is="currentAlert.icon" class="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+    <div class="min-w-0 space-y-1 leading-relaxed">
+      <h5 v-if="title" class="text-sm font-semibold text-current">{{ title }}</h5>
+      <p v-if="$slots.default || message" class="text-[13px] text-current/85">
         <slot>{{ message }}</slot>
       </p>
     </div>

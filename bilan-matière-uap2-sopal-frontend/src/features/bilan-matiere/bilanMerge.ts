@@ -6,5 +6,5 @@ export const mergeBilansForPeriod = (
   periodBilans: BilanMatiereReport[]
 ): BilanMatiereReport[] => {
   const otherPeriods = currentBilans.filter((b) => b.periode !== periode);
-  return [...otherPeriods, ...periodBilans].sort((a, b) => a.id - b.id);
+  return [...otherPeriods, ...periodBilans].sort((a, b) => a.bilanKey.localeCompare(b.bilanKey));
 };

@@ -33,9 +33,18 @@ const formArticle = ref({
 });
 
 const materialTypes = [
-  { code: 'M3010L0', label: 'Laiton Sanitaire (Sans Plomb)', description: 'Usage sanitaire.', colorClass: 'text-blue-600' },
-  { code: 'M3000L0', label: 'Laiton Standard Industriel', description: 'Usage standard.', colorClass: 'text-indigo-600' },
-  { code: 'M3020L0', label: 'Type matière M3020L0', description: 'Type matière autorisé SOPAL.', colorClass: 'text-emerald-600' }
+  {
+    code: 'M3010L0',
+    label: 'Type matiere M3010L0',
+    description: 'Type matiere autorise SOPAL.',
+    colorClass: 'text-blue-600'
+  },
+  {
+    code: 'M3000L0',
+    label: 'Type matiere M3000L0',
+    description: 'Type matiere autorise SOPAL.',
+    colorClass: 'text-indigo-600'
+  }
 ];
 
 const loadAdminData = async () => {
@@ -137,7 +146,10 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <PageHeader title="Espace Administration" description="Utilisateurs, seuils et articles." />
+    <PageHeader
+      title="Administration"
+      description="Gérer les utilisateurs, les seuils de contrôle et les articles de référence."
+    />
 
     <!-- Notice -->
     <div
@@ -149,54 +161,30 @@ onMounted(() => {
     </div>
 
     <!-- Tab navigation -->
-    <div class="flex border-b border-slate-200 gap-1 select-none">
-      <button
-        @click="activeTab = 'users'"
-        class="px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2"
-        :class="
-          activeTab === 'users'
-            ? 'border-blue-900 text-blue-900'
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        "
-      >
+    <div class="app-tabs select-none">
+      <button @click="activeTab = 'users'" class="app-tab" :class="activeTab === 'users' ? 'app-tab--active' : ''">
         <Users class="w-4 h-4" />
         Utilisateurs & Rôles
       </button>
 
       <button
         @click="activeTab = 'articles'"
-        class="px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2"
-        :class="
-          activeTab === 'articles'
-            ? 'border-blue-900 text-blue-900'
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        "
+        class="app-tab"
+        :class="activeTab === 'articles' ? 'app-tab--active' : ''"
       >
         <Package class="w-4 h-4" />
         Articles d'Exploitation
       </button>
 
-      <button
-        @click="activeTab = 'types'"
-        class="px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2"
-        :class="
-          activeTab === 'types'
-            ? 'border-blue-900 text-blue-900'
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        "
-      >
+      <button @click="activeTab = 'types'" class="app-tab" :class="activeTab === 'types' ? 'app-tab--active' : ''">
         <Layers class="w-4 h-4" />
         Types Matière
       </button>
 
       <button
         @click="activeTab = 'settings'"
-        class="px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2"
-        :class="
-          activeTab === 'settings'
-            ? 'border-blue-900 text-blue-900'
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        "
+        class="app-tab"
+        :class="activeTab === 'settings' ? 'app-tab--active' : ''"
       >
         <Settings class="w-4 h-4" />
         Paramètres & Seuils
@@ -299,10 +287,10 @@ onMounted(() => {
                       :class="
                         u.actif
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          : 'bg-rose-50 text-rose-700 border border-rose-100'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
                       "
                     >
-                      <span class="w-1 h-1 rounded-full" :class="u.actif ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                      <span class="w-1 h-1 rounded-full" :class="u.actif ? 'bg-emerald-500' : 'bg-slate-500'"></span>
                       {{ u.actif ? 'Actif' : 'Désactivé' }}
                     </span>
                   </td>
@@ -341,7 +329,7 @@ onMounted(() => {
                 type="text"
                 v-model="formArticle.code"
                 class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold w-full focus:bg-white font-mono"
-                placeholder="ART-0000"
+                placeholder="0101A03-1"
                 required
               />
             </FormField>
@@ -410,10 +398,10 @@ onMounted(() => {
                       :class="
                         a.actif
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          : 'bg-rose-50 text-rose-700 border border-rose-100'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
                       "
                     >
-                      <span class="w-1 h-1 rounded-full" :class="a.actif ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                      <span class="w-1 h-1 rounded-full" :class="a.actif ? 'bg-emerald-500' : 'bg-slate-500'"></span>
                       {{ a.actif ? 'Actif' : 'Inactif' }}
                     </span>
                   </td>

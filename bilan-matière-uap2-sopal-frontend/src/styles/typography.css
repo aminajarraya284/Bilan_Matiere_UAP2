@@ -1,0 +1,85 @@
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+select,
+textarea,
+table {
+  font-size: inherit;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-sans);
+  text-wrap: balance;
+}
+
+.page-title {
+  color: var(--color-text);
+  font-size: var(--font-size-page-title);
+  font-weight: 750;
+  letter-spacing: -0.032em;
+  line-height: 1.2;
+}
+
+.page-description {
+  max-width: 72ch;
+  color: var(--color-text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 450;
+  line-height: 1.55;
+}
+
+.section-title {
+  color: var(--color-text);
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  line-height: 1.35;
+}
+
+.section-description {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.card-title {
+  color: var(--color-text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.technical-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.numeric-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.app-workspace a {
+  color: var(--color-primary-700);
+}

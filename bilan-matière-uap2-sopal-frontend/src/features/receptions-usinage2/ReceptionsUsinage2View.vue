@@ -22,13 +22,13 @@ const controleNonReception = ref<ControleNonReception[]>([]);
 const isLoading = ref(true);
 const isLoadingControle = ref(false);
 const successMessage = ref('');
+const highlightedReceptionId = ref<number | null>(null);
 const selectedControle = ref<ControleNonReception | null>(null);
 const verificationForm = ref<VerificationControleNonReceptionPayload>({
   statutControle: 'AVerifier',
   commentaireControle: '',
   justification: ''
 });
-const isMockControle = import.meta.env.VITE_USE_REAL_API !== 'true';
 
 // Access checks
 const isAdmin = computed(() => authStore.userRole === 'Admin');
@@ -36,32 +36,32 @@ const canAdd = computed(() => authStore.userRole === 'Admin' || authStore.userRo
 
 // Form state
 const formRec = ref({
-  numOf: '',
+  numeroOF: '',
   dateReception: BUSINESS_RULES.dateFinParDefaut,
-  codeArticle: 'ART-00912',
-  designationArticle: 'Corps Robinet 1/2',
-  poidsKg: 0,
-  nombrePieces: 0,
-  atelierOrigine: 'FONDERIE' as const,
-  codeTypeMatiere: 'M3010L0',
-  designationTypeMatiere: 'Laiton Sanitaire (Sans Plomb)',
-  mois: BUSINESS_RULES.periodeParDefaut,
-  poidsPhysique: 0
+  origine: 'FONDERIE' as 'FONDERIE' | 'AUTRE',
+  poidsTotalReceptionneKg: 0,
+  nombrePiecesReceptionnees: 0,
+  codeArticle: '',
+  designationArticle: '',
+  atelierOrigine: '',
+  codeTypeMatiere: '',
+  quantiteLienUtilisee: 0,
+  uniteQuantiteLien: 'KG',
+  poidsTheoriqueUnitaireKg: 0
 });
 
-const articlesList = [
-  { code: 'ART-00912', label: 'Corps Robinet 1/2', mat: 'M3010L0', matLabel: 'Laiton Sanitaire (Sans Plomb)' },
-  { code: 'ART-00984', label: 'Raccord Coudé M2', mat: 'M3000L0', matLabel: 'Laiton Standard Industriel' },
-  { code: 'ART-01005', label: "Robinet d'arrêt DN20", mat: 'M3010L0', matLabel: 'Laiton Sanitaire (Sans Plomb)' },
-  { code: 'ART-3020', label: 'Article type M3020L0', mat: 'M3020L0', matLabel: 'Type matière M3020L0' }
-];
-
-const handleArticleChange = () => {
-  const selected = articlesList.find((a) => a.code === formRec.value.codeArticle);
-  if (selected) {
-    formRec.value.designationArticle = selected.label;
-    formRec.value.codeTypeMatiere = selected.mat;
-    formRec.value.designationTypeMatiere = selected.matLabel;
+const loadReceptionDefaults = async () => {
+  if (!formRec.value.numeroOF.trim()) return;
+  try {
+    const defaults = await receptionsService.getReceptionDefaults(formRec.value.numeroOF.trim().toUpperCase());
+    formRec.value = { ...formRec.value, ...defaults };
+  } catch {
+    formRec.value.codeArticle = '';
+    formRec.value.designationArticle = '';
+    formRec.value.atelierOrigine = '';
+    formRec.value.codeTypeMatiere = '';
+    formRec.value.quantiteLienUtilisee = 0;
+    formRec.value.poidsTheoriqueUnitaireKg = 0;
   }
 };
 
@@ -165,9 +165,17 @@ const getControleStatusMeta = (row: ControleNonReception) => {
     case 'Justifie':
       return { label: 'Justifié', className: 'bg-blue-50 border-blue-100 text-blue-700', dot: 'bg-blue-500' };
     case 'Regularise':
-      return { label: 'Régularisé', className: 'bg-teal-50 border-teal-100 text-teal-700', dot: 'bg-teal-500' };
+      return {
+        label: 'Régularisé',
+        className: 'bg-emerald-50 border-emerald-100 text-emerald-800',
+        dot: 'bg-emerald-600'
+      };
     default:
-      return { label: row.statutControle, className: 'bg-slate-50 border-slate-200 text-slate-700', dot: 'bg-slate-500' };
+      return {
+        label: row.statutControle,
+        className: 'bg-slate-50 border-slate-200 text-slate-700',
+        dot: 'bg-slate-500'
+      };
   }
 };
 
@@ -204,10 +212,10 @@ const submitControleVerification = async () => {
 
 const handleAddReception = async () => {
   if (
-    !formRec.value.numOf ||
-    !formRec.value.designationArticle?.trim() ||
-    formRec.value.poidsPhysique <= 0 ||
-    formRec.value.nombrePieces <= 0
+    !formRec.value.numeroOF ||
+    !formRec.value.codeArticle ||
+    formRec.value.poidsTotalReceptionneKg <= 0 ||
+    formRec.value.nombrePiecesReceptionnees <= 0
   ) {
     await dialog.alert('Veuillez remplir correctement tous les champs obligatoires.', {
       title: 'Saisie incomplète',
@@ -218,26 +226,22 @@ const handleAddReception = async () => {
 
   try {
     const payload = {
-      numOf: formRec.value.numOf,
+      numeroOF: formRec.value.numeroOF.trim().toUpperCase(),
       dateReception: formRec.value.dateReception,
-      codeArticle: formRec.value.codeArticle,
-      designationArticle: formRec.value.designationArticle,
-      poidsKg: formRec.value.poidsPhysique,
-      nombrePieces: formRec.value.nombrePieces,
-      atelierOrigine: formRec.value.atelierOrigine,
-      codeTypeMatiere: formRec.value.codeTypeMatiere,
-      designationTypeMatiere: formRec.value.designationTypeMatiere,
-      mois: formRec.value.mois,
-      poidsPhysique: formRec.value.poidsPhysique
+      origine: formRec.value.origine,
+      poidsTotalReceptionneKg: formRec.value.poidsTotalReceptionneKg,
+      nombrePiecesReceptionnees: formRec.value.nombrePiecesReceptionnees
     };
 
-    await receptionsService.createReception(payload);
-    formRec.value.numOf = '';
-    formRec.value.nombrePieces = 0;
-    formRec.value.poidsPhysique = 0;
-    handleArticleChange();
+    const createdReception = await receptionsService.createReception(payload);
+    formRec.value.numeroOF = '';
+    formRec.value.poidsTotalReceptionneKg = 0;
+    formRec.value.nombrePiecesReceptionnees = 0;
+    await loadReceptionDefaults();
     successMessage.value = 'Réception Usinage 2 enregistrée avec succès !';
     await loadReceptions();
+    highlightedReceptionId.value = createdReception.id;
+    setTimeout(() => (highlightedReceptionId.value = null), 700);
     setTimeout(() => (successMessage.value = ''), 4000);
   } catch (err) {
     console.error(err);
@@ -273,87 +277,40 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <PageHeader title="Réceptions Usinage 2 (UAP2)" description="Réceptions U2 issues de la fonderie." />
+    <PageHeader
+      title="Réceptions Usinage 2"
+      description="Saisir, contrôler et suivre les réceptions U2 issues de la fonderie."
+    />
 
     <!-- Notifications -->
-    <div
-      v-if="successMessage"
-      class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3"
-    >
-      <CheckCircle2 class="w-5 h-5 text-emerald-500 shrink-0" />
-      <span>{{ successMessage }}</span>
-    </div>
+    <Transition name="toast-motion">
+      <div
+        v-if="successMessage"
+        class="motion-alert bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3"
+        role="status"
+        aria-live="polite"
+      >
+        <CheckCircle2 class="w-5 h-5 text-emerald-500 shrink-0" />
+        <span>{{ successMessage }}</span>
+      </div>
+    </Transition>
 
     <!-- Rule notification -->
-    <div class="bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex items-center gap-3 text-xs text-amber-950">
-      <AlertCircle class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+    <div class="semantic-attention border rounded-xl p-3 flex items-center gap-3 text-xs">
+      <AlertCircle class="w-5 h-5 shrink-0 mt-0.5" />
       <p class="font-bold">
-        Bilan matière : seules les lignes <strong class="text-amber-800">Origine = FONDERIE</strong> sont prises en
-        compte.
+        Bilan matière : seules les lignes <strong>Origine = FONDERIE</strong> sont prises en compte.
       </p>
     </div>
 
     <!-- Admin-only non reception control -->
     <div v-if="isAdmin" class="bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-5">
       <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4 border-b border-slate-100 pb-4">
-        <div class="space-y-2 max-w-4xl">
+        <div class="max-w-4xl">
           <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
             <AlertCircle class="w-4 h-4 text-blue-900" />
             Alerte quantité non réceptionnée
           </h3>
-          <p class="text-xs leading-relaxed text-slate-600 font-semibold">
-            Cette alerte compare la quantité EMR issue de l’état X3 synchronisé avec les quantités réceptionnées saisies ou validées dans l’application Réceptions Usinage 2.
-          </p>
-        </div>
-
-        <span
-          v-if="isMockControle"
-          class="inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-700"
-        >
-          Données de démonstration — backend non connecté
-        </span>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div class="bg-slate-900 rounded-xl p-4 text-white space-y-3">
-          <h4 class="text-[10px] font-black uppercase tracking-wider text-slate-300">Formules métier</h4>
-          <div class="space-y-2 text-xs font-bold font-mono">
-            <div class="rounded-lg bg-slate-950 p-3 text-blue-200 text-[11px]">
-              Quantité non réceptionnée = Total Qté EMR issue de X3 - Total Qté réceptionnée Usinage 2 issue de l’application
-            </div>
-            <div class="rounded-lg bg-slate-950 p-3 text-emerald-200 text-[11px]">
-              Écart par pièce = Quantité non réceptionnée / Nombre de pièces
-            </div>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto rounded-xl border border-slate-100">
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr class="bg-slate-50 text-[10px] text-slate-500 font-black uppercase tracking-wider">
-                <th class="p-3">Élément</th>
-                <th class="p-3">Source</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-              <tr>
-                <td class="p-3 font-bold">Total quantité EMR</td>
-                <td class="p-3">Rapport journalier machine / état X3 synchronisé</td>
-              </tr>
-              <tr>
-                <td class="p-3 font-bold">Total quantité réceptionnée Usinage 2</td>
-                <td class="p-3">Réceptions Usinage 2</td>
-              </tr>
-              <tr>
-                <td class="p-3 font-bold">Quantité non réceptionnée</td>
-                <td class="p-3">Calcul backend</td>
-              </tr>
-              <tr>
-                <td class="p-3 font-bold">Écart par pièce</td>
-                <td class="p-3">Quantité non réceptionnée / nombre de pièces</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
 
@@ -419,7 +376,9 @@ onMounted(() => {
                 {{ formatNumber(row.quantiteNonReceptionnee, 2) }}
               </td>
               <td class="p-3 text-right font-bold font-mono text-slate-700">{{ formatNumber(row.nombrePieces, 0) }}</td>
-              <td class="p-3 text-right font-bold font-mono text-slate-700">{{ formatNumber(row.ecartParPiece, 4) }}</td>
+              <td class="p-3 text-right font-bold font-mono text-slate-700">
+                {{ formatNumber(row.ecartParPiece, 4) }}
+              </td>
               <td class="p-3">
                 <span
                   class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap"
@@ -467,9 +426,10 @@ onMounted(() => {
         <FormField id="r-of" label="N° OF" hint="Ordre de fabrication." required>
           <input
             type="text"
-            v-model="formRec.numOf"
+            v-model="formRec.numeroOF"
+            @change="loadReceptionDefaults"
             class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full focus:bg-white font-mono"
-            placeholder="OF-9900"
+            placeholder="OF18100563"
             required
           />
         </FormField>
@@ -483,18 +443,22 @@ onMounted(() => {
           />
         </FormField>
 
-        <FormField id="r-art" label="Article" hint="Sélectionne l'article reçu." required>
-          <select
+        <FormField id="r-art" label="Article" hint="Déterminé depuis l’OF sélectionné." required automatic>
+          <input
+            type="text"
             v-model="formRec.codeArticle"
-            @change="handleArticleChange"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-            required
-          >
-            <option v-for="a in articlesList" :key="a.code" :value="a.code">{{ a.code }} - {{ a.label }}</option>
-          </select>
+            readonly
+            class="bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
+          />
         </FormField>
 
-        <FormField id="r-designation" label="Désignation" hint="Remplie automatiquement." required>
+        <FormField
+          id="r-designation"
+          label="Désignation"
+          hint="Remplie depuis la référence article."
+          required
+          automatic
+        >
           <input
             type="text"
             v-model="formRec.designationArticle"
@@ -505,22 +469,19 @@ onMounted(() => {
           />
         </FormField>
 
-        <FormField id="r-atelier" label="Origine" hint="FONDERIE entre dans le bilan." required>
-          <select
+        <FormField id="r-atelier-auto" label="Atelier d’origine" hint="Rempli depuis la gamme." required automatic>
+          <input
+            type="text"
             v-model="formRec.atelierOrigine"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-            required
-          >
-            <option value="FONDERIE">FONDERIE (Inclus Bilan)</option>
-            <option value="USINAGE 1">USINAGE 1 (Exclu Bilan)</option>
-            <option value="AUTRE">AUTRE (Exclu Bilan)</option>
-          </select>
+            readonly
+            class="bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
+          />
         </FormField>
 
-        <FormField id="r-poidsphys" label="Poids physique (kg)" hint="Poids mesuré à la réception." required>
+        <FormField id="r-poidsphys" label="Poids physique (kg)" hint="Poids total saisi à la réception." required>
           <input
             type="number"
-            v-model="formRec.poidsPhysique"
+            v-model="formRec.poidsTotalReceptionneKg"
             class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full focus:bg-white font-mono"
             min="1"
             placeholder="0.00"
@@ -531,11 +492,35 @@ onMounted(() => {
         <FormField id="r-pcs" label="Nombre de pièces" hint="Quantité reçue en pièces." required>
           <input
             type="number"
-            v-model="formRec.nombrePieces"
+            v-model="formRec.nombrePiecesReceptionnees"
             class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full focus:bg-white font-mono"
             min="1"
             placeholder="0"
             required
+          />
+        </FormField>
+
+        <FormField id="r-matiere-auto" label="Type matière" hint="Rempli depuis la nomenclature." required automatic>
+          <input
+            type="text"
+            v-model="formRec.codeTypeMatiere"
+            readonly
+            class="bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
+          />
+        </FormField>
+
+        <FormField
+          id="r-lien-auto"
+          label="Quantité de lien théorique"
+          hint="Remplie depuis la nomenclature."
+          required
+          automatic
+        >
+          <input
+            type="text"
+            :value="`${formRec.quantiteLienUtilisee} ${formRec.uniteQuantiteLien}`"
+            readonly
+            class="bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
           />
         </FormField>
 
@@ -586,9 +571,12 @@ onMounted(() => {
               v-for="row in receptions"
               :key="row.id"
               class="hover:bg-slate-50/30 transition-colors"
-              :class="{ 'bg-amber-50/10': row.atelierOrigine !== 'FONDERIE' }"
+              :class="{
+                'bg-amber-50/10': row.atelierOrigine !== 'FONDERIE',
+                'motion-row-added': row.id === highlightedReceptionId
+              }"
             >
-              <td class="p-3 font-bold text-slate-800 font-mono">{{ row.numOf }}</td>
+              <td class="p-3 font-bold text-slate-800 font-mono">{{ row.numeroOF }}</td>
               <td class="p-3 font-mono text-slate-600">{{ row.dateReception }}</td>
               <td class="p-3 font-bold font-mono text-blue-900">{{ row.codeTypeMatiere }}</td>
               <td class="p-3">
@@ -634,143 +622,149 @@ onMounted(() => {
     </div>
 
     <!-- verification modal -->
-    <div
-      v-if="selectedControle"
-      class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 px-4 py-6"
-      role="dialog"
-      aria-modal="true"
-      @click.self="closeControleVerification"
-    >
-      <div class="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-slate-100">
-        <div class="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
-          <div>
-            <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider">Vérifier le contrôle</h3>
-            <p class="mt-1 text-xs font-semibold text-slate-500">
-              Les données X3 et les quantités calculées sont affichées en lecture seule.
-            </p>
-          </div>
-          <button
-            @click="closeControleVerification"
-            class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-          >
-            Fermer
-          </button>
-        </div>
-
-        <div class="p-5 space-y-5">
-          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Article</div>
-              <div class="mt-1 text-xs font-black text-slate-800">{{ selectedControle.codeArticle }}</div>
-              <div class="mt-0.5 text-[10px] font-semibold text-slate-500">
-                {{ selectedControle.designationArticle || '—' }}
-              </div>
+    <Transition name="dialog-motion">
+      <div
+        v-if="selectedControle"
+        class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 px-4 py-6"
+        role="dialog"
+        aria-modal="true"
+        @click.self="closeControleVerification"
+      >
+        <div
+          class="app-dialog-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-slate-100"
+        >
+          <div class="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+            <div>
+              <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider">Vérifier le contrôle</h3>
+              <p class="mt-1 text-xs font-semibold text-slate-500">
+                Les données X3 et les quantités calculées sont affichées en lecture seule.
+              </p>
             </div>
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Type matière</div>
-              <div class="mt-1 text-xs font-black font-mono text-blue-900">{{ selectedControle.codeTypeMatiere }}</div>
-            </div>
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Quantité EMR issue de X3
-              </div>
-              <div class="mt-1 text-xs font-black font-mono text-slate-800">
-                {{ formatNumber(selectedControle.quantiteEmrX3, 2) }}
-              </div>
-            </div>
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Quantité réceptionnée U2 application
-              </div>
-              <div class="mt-1 text-xs font-black font-mono text-slate-800">
-                {{ formatNumber(selectedControle.quantiteReceptionneeU2Application, 2) }}
-              </div>
-            </div>
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Quantité non réceptionnée
-              </div>
-              <div class="mt-1 text-xs font-black font-mono text-amber-700">
-                {{ formatNumber(selectedControle.quantiteNonReceptionnee, 2) }}
-              </div>
-            </div>
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Nombre de pièces</div>
-              <div class="mt-1 text-xs font-black font-mono text-slate-800">
-                {{ formatNumber(selectedControle.nombrePieces, 0) }}
-              </div>
-            </div>
-            <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Écart par pièce</div>
-              <div class="mt-1 text-xs font-black font-mono text-slate-800">
-                {{ formatNumber(selectedControle.ecartParPiece, 4) }}
-              </div>
-            </div>
-          </div>
-
-          <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-            <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Statut actuel</div>
-            <div class="mt-2">
-              <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border"
-                :class="getControleStatusMeta(selectedControle).className"
-              >
-                <span class="w-1.5 h-1.5 rounded-full" :class="getControleStatusMeta(selectedControle).dot"></span>
-                {{ getControleStatusMeta(selectedControle).label }}
-              </span>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField id="controle-statut" label="Statut de vérification" hint="Champ modifiable Admin." required>
-              <select
-                v-model="verificationForm.statutControle"
-                class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-              >
-                <option value="OK">OK</option>
-                <option value="AVerifier">À vérifier</option>
-                <option value="Justifie">Justifié</option>
-                <option value="Regularise">Régularisé</option>
-                <option value="Anomalie">Anomalie</option>
-              </select>
-            </FormField>
-
-            <FormField id="controle-commentaire" label="Commentaire (Observation)" hint="Commentaire de contrôle.">
-              <textarea
-                v-model="verificationForm.commentaireControle"
-                rows="3"
-                class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white"
-                placeholder="Commentaire de contrôle (Observation)"
-              ></textarea>
-            </FormField>
-          </div>
-
-          <FormField id="controle-justification" label="Justification" hint="Justification Admin de l'écart.">
-            <textarea
-              v-model="verificationForm.justification"
-              rows="4"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white"
-              placeholder="Ex. lot en attente, réception non saisie, retard transfert, anomalie poids..."
-            ></textarea>
-          </FormField>
-
-          <div class="flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-4">
             <button
               @click="closeControleVerification"
-              class="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
             >
-              Annuler
+              Fermer
             </button>
-            <button
-              @click="submitControleVerification"
-              class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-bold cursor-pointer"
-            >
-              <CheckCircle2 class="w-3.5 h-3.5" />
-              Enregistrer la justification
-            </button>
+          </div>
+
+          <div class="p-5 space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Article</div>
+                <div class="mt-1 text-xs font-black text-slate-800">{{ selectedControle.codeArticle }}</div>
+                <div class="mt-0.5 text-[10px] font-semibold text-slate-500">
+                  {{ selectedControle.designationArticle || '—' }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Type matière</div>
+                <div class="mt-1 text-xs font-black font-mono text-blue-900">
+                  {{ selectedControle.codeTypeMatiere }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Quantité EMR issue de X3
+                </div>
+                <div class="mt-1 text-xs font-black font-mono text-slate-800">
+                  {{ formatNumber(selectedControle.quantiteEmrX3, 2) }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Quantité réceptionnée U2 application
+                </div>
+                <div class="mt-1 text-xs font-black font-mono text-slate-800">
+                  {{ formatNumber(selectedControle.quantiteReceptionneeU2Application, 2) }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Quantité non réceptionnée
+                </div>
+                <div class="mt-1 text-xs font-black font-mono text-amber-700">
+                  {{ formatNumber(selectedControle.quantiteNonReceptionnee, 2) }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Nombre de pièces</div>
+                <div class="mt-1 text-xs font-black font-mono text-slate-800">
+                  {{ formatNumber(selectedControle.nombrePieces, 0) }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Écart par pièce</div>
+                <div class="mt-1 text-xs font-black font-mono text-slate-800">
+                  {{ formatNumber(selectedControle.ecartParPiece, 4) }}
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+              <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Statut actuel</div>
+              <div class="mt-2">
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border"
+                  :class="getControleStatusMeta(selectedControle).className"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="getControleStatusMeta(selectedControle).dot"></span>
+                  {{ getControleStatusMeta(selectedControle).label }}
+                </span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField id="controle-statut" label="Statut de vérification" hint="Champ modifiable Admin." required>
+                <select
+                  v-model="verificationForm.statutControle"
+                  class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white cursor-pointer"
+                >
+                  <option value="OK">OK</option>
+                  <option value="AVerifier">À vérifier</option>
+                  <option value="Justifie">Justifié</option>
+                  <option value="Regularise">Régularisé</option>
+                  <option value="Anomalie">Anomalie</option>
+                </select>
+              </FormField>
+
+              <FormField id="controle-commentaire" label="Commentaire (Observation)" hint="Commentaire de contrôle.">
+                <textarea
+                  v-model="verificationForm.commentaireControle"
+                  rows="3"
+                  class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white"
+                  placeholder="Commentaire de contrôle (Observation)"
+                ></textarea>
+              </FormField>
+            </div>
+
+            <FormField id="controle-justification" label="Justification" hint="Justification Admin de l'écart.">
+              <textarea
+                v-model="verificationForm.justification"
+                rows="4"
+                class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white"
+                placeholder="Ex. lot en attente, réception non saisie, retard transfert, anomalie poids..."
+              ></textarea>
+            </FormField>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-4">
+              <button
+                @click="closeControleVerification"
+                class="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                @click="submitControleVerification"
+                class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                <CheckCircle2 class="w-3.5 h-3.5" />
+                Enregistrer la justification
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>

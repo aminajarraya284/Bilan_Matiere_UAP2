@@ -1,34 +1,41 @@
 <script setup lang="ts">
-import { useAuthStore } from '@/features/auth/auth.store';
-import { computed } from 'vue';
-
 defineProps<{
   title: string;
   description?: string;
+  breadcrumb?: string[];
 }>();
-
-const authStore = useAuthStore();
-const isAuthenticated = computed(() => authStore.isAuthenticated);
 </script>
 
 <template>
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1 border-b border-slate-100">
-    <div class="space-y-1">
-      <h2 class="text-xl font-bold text-slate-800 tracking-tight font-display">{{ title }}</h2>
-      <p v-if="description" class="text-xs text-slate-500 font-semibold leading-snug max-w-xl">
-        {{ description }}
-      </p>
-    </div>
-    <div class="flex items-center gap-3 shrink-0">
-      <slot name="actions"></slot>
-      <!-- Demo Data Banner -->
-      <span
-        v-if="isAuthenticated"
-        class="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200/60 rounded-lg text-[10px] font-bold text-amber-700"
+  <header class="page-header flex flex-col gap-5 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
+    <div class="min-w-0 space-y-2">
+      <nav
+        v-if="breadcrumb?.length"
+        class="page-header__breadcrumb flex flex-wrap items-center gap-1.5 text-xs"
+        aria-label="Fil d’Ariane"
       >
-        <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
-        Données de démonstration — backend non connecté
-      </span>
+        <template v-for="(item, index) in breadcrumb" :key="`${item}-${index}`">
+          <span v-if="index" aria-hidden="true">/</span>
+          <span :class="index === breadcrumb.length - 1 ? 'font-semibold text-slate-700' : ''">{{ item }}</span>
+        </template>
+      </nav>
+      <h1 class="page-title">{{ title }}</h1>
+      <p v-if="description" class="page-description">{{ description }}</p>
     </div>
-  </div>
+
+    <div class="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
+      <slot name="actions" />
+    </div>
+  </header>
 </template>
+
+<style scoped>
+.page-header {
+  border-color: var(--color-border);
+}
+
+.page-header__breadcrumb {
+  color: var(--color-text-muted);
+}
+
+</style>

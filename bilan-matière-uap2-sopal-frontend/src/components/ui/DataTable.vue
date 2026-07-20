@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// Generic data table wrapper to style all our lists consistently
+import SkeletonLoader from './SkeletonLoader.vue';
+
 defineProps<{
   title?: string;
   loading?: boolean;
@@ -7,30 +8,31 @@ defineProps<{
 </script>
 
 <template>
-  <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-    <!-- Header -->
+  <section class="app-table-shell flex flex-col" :aria-busy="loading || undefined">
     <div
       v-if="title || $slots.header"
-      class="px-6 py-4 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50/20 shrink-0"
+      class="flex shrink-0 flex-col items-start justify-between gap-3 border-b border-[var(--color-border)] bg-white px-4 py-4 sm:flex-row sm:items-center sm:px-5"
     >
-      <h3 v-if="title" class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-        <slot name="title-icon"></slot>
+      <h3 v-if="title" class="card-title flex items-center gap-2">
+        <slot name="title-icon" />
         {{ title }}
       </h3>
-      <slot name="header"></slot>
+      <slot name="header" />
     </div>
 
-    <!-- Table content container -->
-    <div class="overflow-x-auto">
-      <slot></slot>
+    <div class="table-wrapper relative overflow-x-auto">
+      <div v-if="loading" class="absolute inset-0 z-10 bg-white p-4">
+        <span class="sr-only">Chargement…</span>
+        <SkeletonLoader variant="table" />
+      </div>
+      <slot />
     </div>
 
-    <!-- Footer / Pagination -->
     <div
       v-if="$slots.footer"
-      class="px-6 py-3 border-t border-slate-50 bg-slate-50/10 flex items-center justify-between shrink-0"
+      class="flex shrink-0 items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface-soft)] px-4 py-3 sm:px-5"
     >
-      <slot name="footer"></slot>
+      <slot name="footer" />
     </div>
-  </div>
+  </section>
 </template>

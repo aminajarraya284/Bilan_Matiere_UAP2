@@ -9,10 +9,23 @@ const mockUsers: AdminUser[] = [
 ];
 
 const mockArticles: AdminArticle[] = [
-  { id: 1, code: 'ART-00912', designation: 'Corps Robinet 1/2', typeMatiere: 'M3010L0', unite: 'KG', actif: true },
-  { id: 2, code: 'ART-00984', designation: 'Raccord Coudé M2', typeMatiere: 'M3000L0', unite: 'KG', actif: true },
-  { id: 3, code: 'ART-01005', designation: "Robinet d'arrêt DN20", typeMatiere: 'M3010L0', unite: 'KG', actif: true },
-  { id: 4, code: 'ART-3020', designation: 'Article type M3020L0', typeMatiere: 'M3020L0', unite: 'KG', actif: true }
+  {
+    id: 1,
+    code: '0101A03-1',
+    designation: 'CORPS MINI VANNE BS 1/2',
+    typeMatiere: 'M3010L0',
+    unite: 'KG',
+    actif: true
+  },
+  {
+    id: 2,
+    code: '0102A03-1',
+    designation: 'CORPS MINI VANNE BS 1/2 MF',
+    typeMatiere: 'M3000L0',
+    unite: 'KG',
+    actif: true
+  },
+  { id: 3, code: '0203203-1', designation: 'CORPS MINI VANNE', typeMatiere: 'M3060L0', unite: 'KG', actif: true }
 ];
 
 let mockSettings: AdminSettings = {

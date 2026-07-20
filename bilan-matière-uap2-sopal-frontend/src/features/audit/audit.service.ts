@@ -40,7 +40,7 @@ const mockLogs: AuditLogEntry[] = [
     role: 'Resp. Usinage 2',
     action: 'Saisie Réception',
     module: 'Réceptions Usinage 2',
-    detail: "Saisie manuelle du lot d'OF-9835 pour l'atelier Usinage 1.",
+    detail: "Saisie manuelle du lot d'OF18100565 pour l'atelier 09.",
     statut: 'Succès'
   },
   {

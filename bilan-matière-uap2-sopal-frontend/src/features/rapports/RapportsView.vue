@@ -85,7 +85,7 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <PageHeader title="Rapports d'Exploitation" description="Consultation et export." />
+    <PageHeader title="Rapports" description="Consulter et exporter les rapports d’exploitation du bilan matière." />
 
     <!-- Notifications -->
     <div
@@ -151,6 +151,7 @@ onMounted(() => {
             <option value="Réceptions">Réceptions Usinage 2</option>
             <option value="Sage X3">Synchronisation sorties X3</option>
             <option value="Inventaire">Inventaire Fonderie</option>
+            <option value="Alertes">Alertes</option>
           </select>
         </div>
       </div>
@@ -203,7 +204,7 @@ onMounted(() => {
               <button
                 v-if="rep.formatDisponible.includes('Excel')"
                 @click="handleExport(rep.id, 'Excel', rep.titre)"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-800 hover:bg-blue-100 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
               >
                 <FileSpreadsheet class="w-3.5 h-3.5" />
                 EXCEL

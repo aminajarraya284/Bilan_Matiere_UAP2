@@ -1,8 +1,6 @@
 import api from '@/services/api';
-import {
-  SourceSynchronisationX3,
-  DonneeApplicationStatus
-} from '@/features/receptions-usinage2/receptions.types';
+import { SourceSynchronisationX3, DonneeApplicationStatus } from '@/features/receptions-usinage2/receptions.types';
+import { testDataRepository } from '@/services/testDataRepository.service';
 
 // Storage key for mock synchronization data to allow modifications in the UI
 const KEYS = {
@@ -91,8 +89,17 @@ const getLocalStorageItem = <T>(key: string, defaultValue: T): T => {
     return defaultValue;
   }
   try {
-    return JSON.parse(stored) as T;
+    const parsed = JSON.parse(stored) as unknown;
+    const hasCompatibleShape = Array.isArray(defaultValue)
+      ? Array.isArray(parsed)
+      : parsed !== null && typeof parsed === typeof defaultValue;
+    if (!hasCompatibleShape) {
+      localStorage.setItem(key, JSON.stringify(defaultValue));
+      return defaultValue;
+    }
+    return parsed as T;
   } catch {
+    localStorage.setItem(key, JSON.stringify(defaultValue));
     return defaultValue;
   }
 };
@@ -103,7 +110,7 @@ const setLocalStorageItem = <T>(key: string, value: T): void => {
 
 const updateMockSource = (id: string, updates: Partial<SourceSynchronisationX3>) => {
   const current = getLocalStorageItem(KEYS.MOCK_X3_STATUS, SEED_X3_STATUS);
-  const updated = current.map(item => {
+  const updated = current.map((item) => {
     if (item.id === id) {
       return {
         ...item,
@@ -128,9 +135,10 @@ export const synchronisationService = {
 
   async syncAll(): Promise<SourceSynchronisationX3[]> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+      testDataRepository.synchronizeX3();
       // Simulate sync for all sources
       const current = getLocalStorageItem(KEYS.MOCK_X3_STATUS, SEED_X3_STATUS);
-      const updated = current.map(item => ({
+      const updated = current.map((item) => ({
         ...item,
         statut: 'Synchronise' as const,
         nombreErreurs: 0,
@@ -145,6 +153,7 @@ export const synchronisationService = {
 
   async syncEmr(): Promise<SourceSynchronisationX3[]> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+      testDataRepository.synchronizeX3();
       return updateMockSource('emr', { statut: 'Synchronise', nombreErreurs: 0 });
     }
     await api.post('/synchronisation/x3/emr');
@@ -153,6 +162,7 @@ export const synchronisationService = {
 
   async syncSortiesMp(): Promise<SourceSynchronisationX3[]> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+      testDataRepository.synchronizeX3();
       return updateMockSource('sorties-mp', { statut: 'Synchronise', nombreErreurs: 0 });
     }
     await api.post('/synchronisation/x3/sorties-mp');
@@ -161,6 +171,7 @@ export const synchronisationService = {
 
   async syncRapportMachine(): Promise<SourceSynchronisationX3[]> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+      testDataRepository.synchronizeX3();
       return updateMockSource('rapport-machine', { statut: 'Synchronise', nombreErreurs: 0 });
     }
     await api.post('/synchronisation/x3/rapport-machine');
@@ -169,6 +180,7 @@ export const synchronisationService = {
 
   async syncRebuts(): Promise<SourceSynchronisationX3[]> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+      testDataRepository.synchronizeX3();
       return updateMockSource('rebuts', { statut: 'Synchronise', nombreErreurs: 0 });
     }
     await api.post('/synchronisation/x3/rebuts');
@@ -180,7 +192,7 @@ export const synchronisationService = {
       return [
         `[${new Date().toISOString().slice(0, 10)}] Synchronisation globale X3 lancée.`,
         'Vérification de la connectivité avec la base Sage X3 réussie.',
-        'Importation de 24 nouvelles lignes de l\'état EMR X3.',
+        "Importation de 24 nouvelles lignes de l'état EMR X3.",
         'Synchronisation réussie.'
       ];
     }
@@ -191,7 +203,7 @@ export const synchronisationService = {
   async getReceptionsStatus(): Promise<DonneeApplicationStatus> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
       const all = getLocalStorageItem(KEYS.MOCK_APP_STATUS, SEED_APP_STATUS);
-      return all.find(item => item.id === 'receptions-u2') || SEED_APP_STATUS[0];
+      return all.find((item) => item.id === 'receptions-u2') || SEED_APP_STATUS[0];
     }
     const res = await api.get<DonneeApplicationStatus>('/receptions-usinage-2/status');
     return res.data;
@@ -200,7 +212,7 @@ export const synchronisationService = {
   async getInventairesStatus(): Promise<DonneeApplicationStatus> {
     if (import.meta.env.VITE_USE_REAL_API !== 'true') {
       const all = getLocalStorageItem(KEYS.MOCK_APP_STATUS, SEED_APP_STATUS);
-      return all.find(item => item.id === 'inventaire') || SEED_APP_STATUS[1];
+      return all.find((item) => item.id === 'inventaire') || SEED_APP_STATUS[1];
     }
     const res = await api.get<DonneeApplicationStatus>('/inventaires/status');
     return res.data;

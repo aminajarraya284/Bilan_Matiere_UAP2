@@ -41,7 +41,10 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <PageHeader title="Journal d'Audit Système" description="Traçabilité des actions." />
+    <PageHeader
+      title="Journal d’audit"
+      description="Consulter la traçabilité des actions et des opérations réalisées dans l’application."
+    />
 
     <!-- Filter/Search Bar -->
     <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm flex items-center gap-3">
@@ -109,7 +112,7 @@ onMounted(() => {
                   class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold"
                   :class="{
                     'bg-emerald-50 text-emerald-700 border border-emerald-100': log.statut === 'Succès',
-                    'bg-amber-50 text-amber-700 border border-amber-100': log.statut === 'Attention',
+                    'semantic-attention border': log.statut === 'Attention',
                     'bg-rose-50 text-rose-700 border border-rose-100': log.statut === 'Échec'
                   }"
                 >
@@ -117,7 +120,7 @@ onMounted(() => {
                     class="w-1.5 h-1.5 rounded-full"
                     :class="{
                       'bg-emerald-500': log.statut === 'Succès',
-                      'bg-amber-500': log.statut === 'Attention',
+                      'bg-[var(--color-attention)]': log.statut === 'Attention',
                       'bg-rose-500': log.statut === 'Échec'
                     }"
                   ></span>

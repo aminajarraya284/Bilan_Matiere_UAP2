@@ -1,0 +1,368 @@
+@keyframes motion-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes motion-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-chart-grow {
+  from {
+    opacity: 0.55;
+    transform: scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes motion-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes motion-progress {
+  from {
+    transform: translateX(-105%) scaleX(0.45);
+  }
+  to {
+    transform: translateX(210%) scaleX(0.75);
+  }
+}
+
+@keyframes motion-row-highlight {
+  0%,
+  35% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-skeleton {
+  from {
+    opacity: 0.48;
+  }
+  to {
+    opacity: 0.82;
+  }
+}
+
+.page-motion-enter-active {
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.page-motion-leave-active {
+  transition:
+    opacity var(--motion-duration-fast) ease,
+    transform var(--motion-duration-fast) ease;
+}
+
+.page-motion-enter-from {
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+}
+
+.page-motion-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -2px, 0);
+}
+
+.dashboard-enter,
+.motion-reveal {
+  opacity: 0;
+  animation: motion-fade-up var(--motion-duration-base) var(--motion-ease-standard) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+.motion-card,
+.dashboard-card {
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    border-color var(--motion-duration-base) ease,
+    box-shadow var(--motion-duration-base) ease;
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .motion-card:hover,
+  .dashboard-card:hover {
+    transform: translate3d(0, -2px, 0);
+    border-color: var(--color-primary-200);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+.dashboard-bar,
+.motion-chart {
+  transform-origin: left center;
+  animation: motion-chart-grow var(--motion-duration-chart) var(--motion-ease-emphasized) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+.motion-spinner {
+  animation: motion-spin 700ms linear infinite;
+}
+
+.motion-alert {
+  animation: motion-fade-up var(--motion-duration-base) var(--motion-ease-standard) both;
+}
+
+.motion-auto-field {
+  opacity: 0;
+  animation: motion-fade-up var(--motion-duration-base) var(--motion-ease-standard) forwards;
+}
+
+.grid > .motion-auto-field:nth-child(2n) {
+  animation-delay: 40ms;
+}
+
+.grid > .motion-auto-field:nth-child(3n) {
+  animation-delay: 80ms;
+}
+
+.grid > .motion-auto-field:nth-child(4n) {
+  animation-delay: 120ms;
+}
+
+.motion-row-added > td {
+  position: relative;
+}
+
+.motion-row-added > td::after {
+  position: absolute;
+  inset: 0;
+  background: var(--color-primary-100);
+  content: '';
+  pointer-events: none;
+  animation: motion-row-highlight 700ms ease-out forwards;
+}
+
+.dialog-motion-enter-active,
+.dialog-motion-leave-active {
+  transition: opacity var(--motion-duration-base) ease;
+}
+
+.dialog-motion-enter-active .app-dialog-panel,
+.dialog-motion-leave-active .app-dialog-panel {
+  transition:
+    opacity var(--motion-duration-base) ease,
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.dialog-motion-enter-from,
+.dialog-motion-leave-to,
+.dialog-motion-enter-from .app-dialog-panel,
+.dialog-motion-leave-to .app-dialog-panel {
+  opacity: 0;
+}
+
+.dialog-motion-enter-from .app-dialog-panel,
+.dialog-motion-leave-to .app-dialog-panel {
+  transform: scale(0.985) translate3d(0, 4px, 0);
+}
+
+.toast-motion-enter-active,
+.toast-motion-leave-active {
+  transition:
+    opacity var(--motion-duration-base) ease,
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.toast-motion-enter-from,
+.toast-motion-leave-to {
+  opacity: 0;
+  transform: translate3d(10px, 0, 0);
+}
+
+.motion-progress__bar {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-primary-100);
+}
+
+.motion-progress__bar::after {
+  position: absolute;
+  inset: 0;
+  width: 48%;
+  border-radius: inherit;
+  background: var(--color-primary-600);
+  content: '';
+  transform-origin: left center;
+  animation: motion-progress 700ms ease-in-out infinite;
+}
+
+.motion-progress__step {
+  opacity: 0.42;
+  animation: motion-fade-up var(--motion-duration-base) ease forwards;
+}
+
+.motion-progress__step:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.motion-progress__step:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.skeleton-block {
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  animation: motion-skeleton 700ms ease-in-out infinite alternate;
+}
+
+.app-button,
+.app-workspace button:not(.app-tab),
+.sidebar-link {
+  transition:
+    color var(--motion-duration-fast) ease,
+    background-color var(--motion-duration-fast) ease,
+    border-color var(--motion-duration-fast) ease,
+    box-shadow var(--motion-duration-fast) ease,
+    opacity var(--motion-duration-fast) ease,
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.app-button:hover:not(:disabled),
+.app-workspace button:not(.app-tab):hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+}
+
+.app-button:active:not(:disabled),
+.app-workspace button:not(.app-tab):active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.app-button:disabled,
+.app-workspace button:disabled {
+  transform: none;
+}
+
+.sidebar {
+  transition:
+    width var(--motion-duration-base) var(--motion-ease-standard),
+    flex-basis var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.sidebar-link {
+  position: relative;
+}
+
+.sidebar-link::before {
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--color-primary-200);
+  content: '';
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition:
+    opacity var(--motion-duration-base) ease,
+    transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.sidebar-link--active::before {
+  opacity: 0.9;
+  transform: scaleY(1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-link:hover {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+.app-tab {
+  position: relative;
+  border-bottom-color: transparent !important;
+  transition:
+    color var(--motion-duration-base) ease,
+    background-color var(--motion-duration-base) ease;
+}
+
+.app-tab::after {
+  position: absolute;
+  right: 0.75rem;
+  bottom: -1px;
+  left: 0.75rem;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: var(--color-primary-700);
+  content: '';
+  transform: scaleX(0);
+  transition: transform var(--motion-duration-base) var(--motion-ease-standard);
+}
+
+.app-tab--active::after {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-enter,
+  .dashboard-bar,
+  .motion-alert,
+  .motion-auto-field,
+  .motion-chart,
+  .motion-progress__bar::after,
+  .motion-progress__step,
+  .motion-reveal,
+  .motion-row-added > td::after,
+  .motion-spinner,
+  .skeleton-block {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .motion-card,
+  .dashboard-card,
+  .app-button,
+  .app-workspace button,
+  .sidebar,
+  .sidebar-link,
+  .sidebar-link::before,
+  .app-tab,
+  .app-tab::after,
+  .page-motion-enter-active,
+  .page-motion-leave-active,
+  .dialog-motion-enter-active,
+  .dialog-motion-leave-active,
+  .dialog-motion-enter-active .app-dialog-panel,
+  .dialog-motion-leave-active .app-dialog-panel,
+  .toast-motion-enter-active,
+  .toast-motion-leave-active {
+    transition: none !important;
+  }
+
+  .motion-card:hover,
+  .dashboard-card:hover,
+  .app-button:hover,
+  .app-workspace button:hover,
+  .sidebar-link:hover {
+    transform: none !important;
+  }
+}

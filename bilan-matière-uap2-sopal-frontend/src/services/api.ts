@@ -1,7 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import router from '@/router';
 
-// Base URL configured for future ASP.NET Core API (default to localhost:7001)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://localhost:7001/api';
+// Keep the fallback aligned with .env.example and the documented ASP.NET Core URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -28,17 +29,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    if (error.response && error.response.status === 401) {
+    const isLoginRequest = error.config?.url?.includes('/auth/login') === true;
+    if (error.response?.status === 401 && !isLoginRequest) {
       // Clear authentication credentials and redirect to login
       localStorage.removeItem('sopal_auth_token');
       localStorage.removeItem('sopal_auth_user');
 
-      // Lazy load router to avoid initialization issues in test environment
-      const { default: router } = await import('@/router');
-      router.push({
-        name: 'Login',
-        query: { error: 'session_expired' }
-      });
+      if (router.currentRoute.value.name !== 'Login') {
+        await router.push({
+          name: 'Login',
+          query: { error: 'session_expired' }
+        });
+      }
     }
     return Promise.reject(error);
   }
