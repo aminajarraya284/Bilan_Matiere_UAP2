@@ -1,7 +1,11 @@
 import { BUSINESS_RULES } from '@/config/businessRules';
 import { AlertesWeightAlert, AlertesBilanAlert, AlertesSummary } from './alertes.types';
 import { testDataRepository } from '@/services/testDataRepository.service';
-import { findNomenclatureMatiereByArticle, findOrdreFabrication, getActiveAlerts } from '@/services/bilanCalculation.service';
+import {
+  findNomenclatureMatiereByArticle,
+  findOrdreFabrication,
+  getActiveAlerts
+} from '@/services/bilanCalculation.service';
 import { readControlesPoidsFonderie } from '@/features/controle-poids-fonderie/controlePoidsFonderie.storage';
 
 const buildControlePoidsAlerts = (periode: string): AlertesWeightAlert[] => {
@@ -13,15 +17,11 @@ const buildControlePoidsAlerts = (periode: string): AlertesWeightAlert[] => {
     .map((controle, index): AlertesWeightAlert | null => {
       const pointValues = Object.values(controle.points ?? {});
       const totalPieces =
-        controle.totalPiecesControle ??
-        pointValues.reduce((sum, point) => sum + (Number(point.pieces) || 0), 0);
+        controle.totalPiecesControle ?? pointValues.reduce((sum, point) => sum + (Number(point.pieces) || 0), 0);
       const totalPoidsNet =
-        controle.totalPoidsNetKg ??
-        pointValues.reduce((sum, point) => sum + (Number(point.poidsNetKg) || 0), 0);
+        controle.totalPoidsNetKg ?? pointValues.reduce((sum, point) => sum + (Number(point.poidsNetKg) || 0), 0);
       const poidsPhyKg =
-        controle.poidsPhysiqueUnitaireKg ??
-        controle.poidsPhyKg ??
-        (totalPieces > 0 ? totalPoidsNet / totalPieces : 0);
+        controle.poidsPhysiqueUnitaireKg ?? controle.poidsPhyKg ?? (totalPieces > 0 ? totalPoidsNet / totalPieces : 0);
 
       if (totalPieces <= 0 || poidsPhyKg <= 0) return null;
 

@@ -67,7 +67,21 @@ describe('reference fabrication Excel imports', () => {
         'Type lien',
         'Pourcentage rebut'
       ],
-      ['0101A03-1', 'M3010L0', '0101A03-1', 'Article test', 1, 'Matière M3010L0', '10', '1,5', '1,750', 'KG', 'MATIERE', 'NORMAL', '2,5']
+      [
+        '0101A03-1',
+        'M3010L0',
+        '0101A03-1',
+        'Article test',
+        1,
+        'Matière M3010L0',
+        '10',
+        '1,5',
+        '1,750',
+        'KG',
+        'MATIERE',
+        'NORMAL',
+        '2,5'
+      ]
     ];
 
     const result = parseNomenclatureRows(rows, 'IMP-TEST-BOM');

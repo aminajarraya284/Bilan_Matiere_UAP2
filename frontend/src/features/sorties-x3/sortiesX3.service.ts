@@ -46,24 +46,8 @@ const HEADER_ALIASES: Record<ColumnRole, string[]> = {
     'pieceorigin',
     'pieceorigine'
   ],
-  dateMouvement: [
-    'date',
-    'dateimput',
-    'dateimputation',
-    'datemouvement',
-    'datemvt',
-    'datecreation',
-    'datecrea'
-  ],
-  codeTypeMatiere: [
-    'code',
-    'codematiere',
-    'typematiere',
-    'codetypematiere',
-    'matiere',
-    'articlematiere',
-    'composant'
-  ],
+  dateMouvement: ['date', 'dateimput', 'dateimputation', 'datemouvement', 'datemvt', 'datecreation', 'datecrea'],
+  codeTypeMatiere: ['code', 'codematiere', 'typematiere', 'codetypematiere', 'matiere', 'articlematiere', 'composant'],
   sortieMP: [
     'sortiemp',
     'quantite',
@@ -108,10 +92,7 @@ export const toNumber = (value: unknown): number => {
   if (value === null || value === undefined || value === '') return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
 
-  const normalized = text(value)
-    .replace(/\s/g, '')
-    .replace(/kg$/i, '')
-    .replace(',', '.');
+  const normalized = text(value).replace(/\s/g, '').replace(/kg$/i, '').replace(',', '.');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -181,8 +162,7 @@ export const parseMouvementStockRows = (sheetRows: unknown[][]): MouvementStockS
     .slice(rowIndex + 1)
     .filter((row) => row.some((cell) => text(cell) !== ''))
     .map((row) => ({
-      transactionVcr:
-        indexes.transactionVcr === undefined ? '' : text(row[indexes.transactionVcr]),
+      transactionVcr: indexes.transactionVcr === undefined ? '' : text(row[indexes.transactionVcr]),
       numeroOF: indexes.numeroOF === undefined ? '' : normalizeOF(row[indexes.numeroOF]),
       dateMouvement: parseExcelDate(row[indexes.dateMouvement!]),
       codeTypeMatiere: text(row[indexes.codeTypeMatiere!]),

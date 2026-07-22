@@ -381,7 +381,8 @@ export const calculateBilanUap2 = (dataset: SopalTestDataset, periode: string = 
       const rebutTRN = saisiesRebutsUap2.reduce((sum, item) => sum + item.rebutTrnKg, 0);
       const totalRebutEmrSciTrn = rebutEMR + rebutSCI + rebutTRN;
       const rebutsUsinage2 = dataset.rebutsUsinage2.filter(
-        (item) => item.numeroOF === ordre.numeroOF && item.statut === 'Valide' && isInPeriod(item.dateDeclaration, periode)
+        (item) =>
+          item.numeroOF === ordre.numeroOF && item.statut === 'Valide' && isInPeriod(item.dateDeclaration, periode)
       );
       const rebutUsinage2Pieces = rebutsUsinage2.reduce((sum, item) => sum + item.nombrePiecesRebut, 0);
       const rebutUsinage2 = rebutsUsinage2.reduce((sum, item) => sum + item.poidsRebutKg, 0);
@@ -493,22 +494,22 @@ export const calculateDashboard = (dataset: SopalTestDataset, periode: string = 
         weightAlerts.map((alert) => {
           const reception = dataset.receptionsUsinage2.find((item) => item.id === alert.id);
           return {
-          id: 1000 + alert.id,
-          type: 'warning' as const,
-          category: 'weight',
-          actionLabel: 'Consulter',
-          actionTo: '/receptions-usinage-2',
-          numeroOF: alert.numeroOF,
-          codeArticle: alert.codeArticle,
-          typeMatiere: alert.codeTypeMatiere,
-          poidsTheoriqueUnitaireKg: reception?.poidsTheoriqueUnitaireKg,
-          poidsPhysiqueUnitaireKg: reception?.poidsPhysiqueUnitaireKg,
-          tauxEcart: reception?.tauxEcartPoids,
-          seuil: dataset.parametresApplication.seuilAlertePoidsPourcentage,
-          statut: 'Alerte',
-          title: `Alerte poids : ${alert.numeroOF}`,
-          description: `${alert.codeArticle} dépasse le seuil de ${dataset.parametresApplication.seuilAlertePoidsPourcentage} %.`
-        };
+            id: 1000 + alert.id,
+            type: 'warning' as const,
+            category: 'weight',
+            actionLabel: 'Consulter',
+            actionTo: '/receptions-usinage-2',
+            numeroOF: alert.numeroOF,
+            codeArticle: alert.codeArticle,
+            typeMatiere: alert.codeTypeMatiere,
+            poidsTheoriqueUnitaireKg: reception?.poidsTheoriqueUnitaireKg,
+            poidsPhysiqueUnitaireKg: reception?.poidsPhysiqueUnitaireKg,
+            tauxEcart: reception?.tauxEcartPoids,
+            seuil: dataset.parametresApplication.seuilAlertePoidsPourcentage,
+            statut: 'Alerte',
+            title: `Alerte poids : ${alert.numeroOF}`,
+            description: `${alert.codeArticle} dépasse le seuil de ${dataset.parametresApplication.seuilAlertePoidsPourcentage} %.`
+          };
         })
       )
   ];
@@ -562,7 +563,10 @@ export const getActiveAlerts = (dataset: SopalTestDataset, periode: string = dat
 };
 
 const latestDate = (values: Array<string | undefined | null>): string | undefined =>
-  values.filter((value): value is string => Boolean(value)).sort().at(-1);
+  values
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
 
 const resolveSourceStatus = (updatedAt: string | undefined, rowCount: number): DashboardDataSourceStatusValue => {
   if (!updatedAt || rowCount <= 0) return 'Non disponible';
@@ -616,13 +620,7 @@ const buildDashboardSources = (dataset: SopalTestDataset): DashboardDataSourceSt
       batchByType('BOMARTPARENT')?.dateFin,
       dataset.refNomenclature.length
     ),
-    makeSource(
-      'x3-emr',
-      'X3',
-      'Rapport EMR',
-      batchByType('YRJMCH')?.dateFin,
-      dataset.x3RapportsMachine.length
-    ),
+    makeSource('x3-emr', 'X3', 'Rapport EMR', batchByType('YRJMCH')?.dateFin, dataset.x3RapportsMachine.length),
     makeSource(
       'app-inventaire',
       'Application',

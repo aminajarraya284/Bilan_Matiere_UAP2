@@ -446,7 +446,11 @@ onUnmounted(() => {
       </DashboardSection>
 
       <DashboardSection>
-        <AlertSummaryCard class="dashboard-alerts-wide dashboard-enter" style="--delay: 320ms" :alerts="visibleAlerts" />
+        <AlertSummaryCard
+          class="dashboard-alerts-wide dashboard-enter"
+          style="--delay: 320ms"
+          :alerts="visibleAlerts"
+        />
       </DashboardSection>
 
       <DashboardSection>
@@ -870,7 +874,9 @@ onUnmounted(() => {
   height: 0.75rem;
   flex: 0 0 auto;
   border-radius: 0.2rem;
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px rgba(148, 163, 184, 0.45);
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 3px rgba(148, 163, 184, 0.45);
 }
 
 .dashboard-legend-dot--input {

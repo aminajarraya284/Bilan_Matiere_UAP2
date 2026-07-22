@@ -114,9 +114,7 @@ export const bilanService = {
     return (await api.post<BilanUap2ParOF[]>('/bilans/uap2/calculer', request)).data;
   },
 
-  async createRebutUsinage2(
-    data: Omit<RebutUsinage2, 'id' | 'statut' | 'creePar'>
-  ): Promise<RebutUsinage2> {
+  async createRebutUsinage2(data: Omit<RebutUsinage2, 'id' | 'statut' | 'creePar'>): Promise<RebutUsinage2> {
     if (isMock()) {
       const current = testDataRepository.getRebutsUsinage2();
       const id = current.length ? Math.max(...current.map((item) => item.id)) + 1 : 1;
@@ -132,9 +130,7 @@ export const bilanService = {
     return (await api.post<RebutUsinage2>('/rebuts-usinage-2', data)).data;
   },
 
-  async saveRebutsUap2(
-    data: Omit<RebutUap2Saisie, 'id' | 'statut' | 'creePar'>
-  ): Promise<RebutUap2Saisie> {
+  async saveRebutsUap2(data: Omit<RebutUap2Saisie, 'id' | 'statut' | 'creePar'>): Promise<RebutUap2Saisie> {
     if (isMock()) {
       const current = testDataRepository.getRebutsUap2();
       const periode = data.dateDeclaration.slice(0, 7);
@@ -149,9 +145,7 @@ export const bilanService = {
       };
       testDataRepository.saveRebutsUap2([
         created,
-        ...current.filter(
-          (item) => !(item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode))
-        )
+        ...current.filter((item) => !(item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode)))
       ]);
       return created;
     }

@@ -1,15 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import {
-  CheckCircle2,
-  ClipboardCheck,
-  Gauge,
-  History,
-  Plus,
-  RotateCcw,
-  Scale,
-  Trash2
-} from 'lucide-vue-next';
+import { CheckCircle2, ClipboardCheck, Gauge, History, Plus, RotateCcw, Scale, Trash2 } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
 import { BUSINESS_RULES } from '@/config/businessRules';
@@ -78,14 +69,10 @@ const validNetWeights = computed(() =>
     .filter((value) => Number.isFinite(value) && value > 0)
 );
 
-const totalPoidsNetKg = computed(() =>
-  validNetWeights.value.reduce((total, value) => total + value, 0)
-);
+const totalPoidsNetKg = computed(() => validNetWeights.value.reduce((total, value) => total + value, 0));
 
 const poidsPhysiqueKg = computed(() =>
-  validNetWeights.value.length
-    ? Number((totalPoidsNetKg.value / validNetWeights.value.length).toFixed(3))
-    : 0
+  validNetWeights.value.length ? Number((totalPoidsNetKg.value / validNetWeights.value.length).toFixed(3)) : 0
 );
 
 const ecartBrutNetKg = computed(() =>
@@ -179,14 +166,11 @@ const saveControle = async () => {
 };
 
 const deleteControle = async (controle: ControlePoids, index: number) => {
-  const confirmed = await dialog.confirm(
-    `Supprimer le contrôle ${controle.numeroOF} du ${controle.dateControle} ?`,
-    {
-      title: 'Supprimer le contrôle',
-      tone: 'danger',
-      confirmLabel: 'Supprimer'
-    }
-  );
+  const confirmed = await dialog.confirm(`Supprimer le contrôle ${controle.numeroOF} du ${controle.dateControle} ?`, {
+    title: 'Supprimer le contrôle',
+    tone: 'danger',
+    confirmLabel: 'Supprimer'
+  });
   if (!confirmed) return;
 
   controles.value = controles.value.filter((_, itemIndex) => itemIndex !== index);
@@ -231,7 +215,8 @@ onMounted(loadControles);
         <p class="mt-3 text-xs font-semibold text-slate-500">
           Moyenne des {{ validNetWeights.length }} mesure{{ validNetWeights.length > 1 ? 's' : '' }} nette{{
             validNetWeights.length > 1 ? 's' : ''
-          }} renseignée{{ validNetWeights.length > 1 ? 's' : '' }}.
+          }}
+          renseignée{{ validNetWeights.length > 1 ? 's' : '' }}.
         </p>
       </article>
 
@@ -260,7 +245,11 @@ onMounted(loadControles);
           <span class="rounded-xl bg-amber-50 p-2.5 text-amber-700"><ClipboardCheck class="h-5 w-5" /></span>
         </div>
         <p class="mt-3 text-xs font-semibold text-slate-500">
-          {{ lastControle ? `${lastControle.dateControle} · ${formatNumber(lastControle.poidsPhysiqueUnitaireKg, 3)} kg` : 'Aucun contrôle enregistré.' }}
+          {{
+            lastControle
+              ? `${lastControle.dateControle} · ${formatNumber(lastControle.poidsPhysiqueUnitaireKg, 3)} kg`
+              : 'Aucun contrôle enregistré.'
+          }}
         </p>
       </article>
     </section>
@@ -268,7 +257,9 @@ onMounted(loadControles);
     <form class="space-y-5" @submit.prevent="saveControle">
       <section class="surface-card overflow-hidden">
         <header class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-900">1</span>
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-900"
+            >1</span
+          >
           <div>
             <h2 class="text-sm font-black text-slate-800">Identification du contrôle</h2>
             <p class="mt-0.5 text-xs font-semibold text-slate-500">Renseignez la référence et l’origine de la pesée.</p>
@@ -316,9 +307,14 @@ onMounted(loadControles);
       </section>
 
       <section class="surface-card overflow-hidden">
-        <header class="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <header
+          class="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div class="flex items-center gap-3">
-            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-900">2</span>
+            <span
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-900"
+              >2</span
+            >
             <div>
               <h2 class="text-sm font-black text-slate-800">Mesures de pesée</h2>
               <p class="mt-0.5 text-xs font-semibold text-slate-500">
@@ -378,7 +374,9 @@ onMounted(loadControles);
                   />
                 </td>
                 <td class="bg-blue-50/70 p-3 text-right">
-                  <span class="block text-[10px] font-black uppercase tracking-wider text-blue-700">Poids PHY moyen</span>
+                  <span class="block text-[10px] font-black uppercase tracking-wider text-blue-700"
+                    >Poids PHY moyen</span
+                  >
                   <span class="mt-1 block text-base font-black font-mono text-blue-950">
                     {{ formatNumber(poidsPhysiqueKg, 3) }} kg
                   </span>
@@ -405,7 +403,9 @@ onMounted(loadControles);
           </div>
         </div>
 
-        <footer class="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:flex-row sm:justify-end">
+        <footer
+          class="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:flex-row sm:justify-end"
+        >
           <button
             type="button"
             class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
@@ -426,7 +426,9 @@ onMounted(loadControles);
     </form>
 
     <section class="surface-card overflow-hidden">
-      <header class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <header
+        class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div class="flex items-center gap-2">
           <History class="h-4 w-4 text-blue-900" />
           <h2 class="text-sm font-black text-slate-800">Historique récent</h2>
@@ -458,7 +460,9 @@ onMounted(loadControles);
                 <p class="mt-0.5 text-[10px] font-semibold text-slate-400">{{ controle.designation || '—' }}</p>
               </td>
               <td class="p-3 font-semibold text-slate-600">{{ controle.atelier || '—' }}</td>
-              <td class="p-3 text-right font-mono font-bold text-slate-700">{{ controle.totalPiecesControle || '—' }}</td>
+              <td class="p-3 text-right font-mono font-bold text-slate-700">
+                {{ controle.totalPiecesControle || '—' }}
+              </td>
               <td class="p-3 text-right font-mono font-black text-blue-900">
                 {{ formatNumber(controle.poidsPhysiqueUnitaireKg, 3) }} kg
               </td>

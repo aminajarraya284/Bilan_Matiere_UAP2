@@ -35,7 +35,8 @@ const handleLogout = () => {
   >
     <div class="min-w-0">
       <div class="app-header__breadcrumb flex items-center gap-1.5 text-xs font-medium">
-        <span class="text-primary-700">SOPAL</span><span class="text-[var(--color-border-strong)]" aria-hidden="true">/</span
+        <span class="text-primary-700">SOPAL</span
+        ><span class="text-[var(--color-border-strong)]" aria-hidden="true">/</span
         ><span class="truncate text-[var(--color-text)]">{{ pageTitle }}</span>
       </div>
       <p class="mt-0.5 truncate text-sm font-semibold text-[var(--color-text)]">{{ pageSubtitle }}</p>
