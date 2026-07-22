@@ -54,23 +54,31 @@ public sealed class DechetFonderieRepository(BilanMatiereUAP2DbContext dbContext
         var periodQuery = dbContext.DechetsFonderie
             .AsNoTracking()
             .Where(entity =>
+                !entity.EstSupprime &&
                 entity.DateDeclaration >= dateDebutIncluse &&
-                entity.DateDeclaration < dateFinExclusive);
+                entity.DateDeclaration < dateFinExclusive)
+            .Select(entity => new
+            {
+                entity.TypeMatiereId,
+                TypeMatiereCode = entity.TypeMatiere.Code,
+                entity.TypeDechet,
+                entity.PoidsKg
+            });
 
         // EF Core 8 SQLite cannot aggregate decimal directly. This branch is used only by
         // the isolated integration-test provider; SQL Server keeps exact decimal aggregation.
         if (dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
         {
             var sqliteData = await periodQuery
-                .GroupBy(entity => new { entity.TypeMatiereId, entity.TypeMatiere.Code })
+                .GroupBy(entity => new { entity.TypeMatiereId, entity.TypeMatiereCode })
                 .Select(group => new
                 {
                     group.Key.TypeMatiereId,
-                    TypeMatiereCode = group.Key.Code,
-                    TotalBavureKg = group.Where(entity => entity.TypeDechet == TypeDechet.Bavure)
-                        .Sum(entity => (double)entity.PoidsKg),
-                    TotalPoudreKg = group.Where(entity => entity.TypeDechet == TypeDechet.Poudre)
-                        .Sum(entity => (double)entity.PoidsKg)
+                    group.Key.TypeMatiereCode,
+                    TotalBavureKg = group.Sum(entity =>
+                        entity.TypeDechet == TypeDechet.Bavure ? (double)entity.PoidsKg : 0d),
+                    TotalPoudreKg = group.Sum(entity =>
+                        entity.TypeDechet == TypeDechet.Poudre ? (double)entity.PoidsKg : 0d)
                 })
                 .OrderBy(item => item.TypeMatiereCode)
                 .ToListAsync(cancellationToken);
@@ -82,17 +90,25 @@ public sealed class DechetFonderieRepository(BilanMatiereUAP2DbContext dbContext
                 decimal.Round(Convert.ToDecimal(item.TotalPoudreKg), 3))).ToArray();
         }
 
-        return await periodQuery
-            .GroupBy(entity => new { entity.TypeMatiereId, entity.TypeMatiere.Code })
-            .Select(group => new ResumeDechetsFonderieData(
+        var sqlServerData = await periodQuery
+            .GroupBy(entity => new { entity.TypeMatiereId, entity.TypeMatiereCode })
+            .Select(group => new
+            {
                 group.Key.TypeMatiereId,
-                group.Key.Code,
-                group.Where(entity => entity.TypeDechet == TypeDechet.Bavure)
-                    .Sum(entity => (decimal?)entity.PoidsKg) ?? 0,
-                group.Where(entity => entity.TypeDechet == TypeDechet.Poudre)
-                    .Sum(entity => (decimal?)entity.PoidsKg) ?? 0))
+                group.Key.TypeMatiereCode,
+                TotalBavureKg = group.Sum(entity =>
+                    entity.TypeDechet == TypeDechet.Bavure ? entity.PoidsKg : 0m),
+                TotalPoudreKg = group.Sum(entity =>
+                    entity.TypeDechet == TypeDechet.Poudre ? entity.PoidsKg : 0m)
+            })
             .OrderBy(item => item.TypeMatiereCode)
             .ToListAsync(cancellationToken);
+
+        return sqlServerData.Select(item => new ResumeDechetsFonderieData(
+            item.TypeMatiereId,
+            item.TypeMatiereCode,
+            item.TotalBavureKg,
+            item.TotalPoudreKg)).ToArray();
     }
 
     public async Task AddAsync(DechetFonderie dechet, CancellationToken cancellationToken)

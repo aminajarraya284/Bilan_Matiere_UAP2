@@ -125,7 +125,9 @@ const handleSyncX3ExcelSource = async (fileType: X3ExcelFileType) => {
 };
 
 const handleSyncBothX3ExcelSources = async () => {
-  const hasSourcesForBothBilans = bilanTypes.every(({ id: bilanType }) => x3ExcelImportService.hasBothSources(bilanType));
+  const hasSourcesForBothBilans = bilanTypes.every(({ id: bilanType }) =>
+    x3ExcelImportService.hasBothSources(bilanType)
+  );
 
   if (!hasSourcesForBothBilans) {
     refreshX3ExcelStatuses();

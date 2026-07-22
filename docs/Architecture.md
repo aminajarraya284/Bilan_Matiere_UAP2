@@ -13,16 +13,16 @@ Le frontend et le backend peuvent etre installes, executes et testes independamm
 
 ## Projets backend
 
-- **BilanMatiereUAP2.Domain** : futur coeur metier. Il ne depend d'aucun autre projet interne.
-- **BilanMatiereUAP2.Contracts** : futurs contrats d'echange de l'API. Il ne depend d'aucun projet metier interne.
-- **BilanMatiereUAP2.Application** : futurs cas d'usage et validations. Il depend de Domain et Contracts.
+- **BilanMatiereUAP2.Domain** : coeur metier et invariants. Il ne depend d'aucun autre projet interne.
+- **BilanMatiereUAP2.Contracts** : contrats d'echange de l'API. Il ne depend d'aucun projet metier interne.
+- **BilanMatiereUAP2.Application** : cas d'usage et validations. Il depend de Domain et Contracts.
 - **BilanMatiereUAP2.Infrastructure** : integration technique, Entity Framework Core et SQL Server. Il depend d'Application et Domain.
 - **BilanMatiereUAP2.Api** : point d'entree HTTP et composition des dependances. Il depend d'Application, Infrastructure et Contracts.
 - **BilanMatiereUAP2.Api.IntegrationTests** : tests de l'API en memoire. Il depend d'Api.
 
 Ces dependances sont unidirectionnelles et ne forment aucun cycle.
 
-## Flux applicatif cible
+## Flux applicatif
 
 ```text
 Frontend Vue.js
@@ -40,9 +40,9 @@ Infrastructure (Entity Framework Core)
 SQL Server
 ```
 
-La couche API recoit les requetes du frontend. La couche Application portera les cas d'usage. Infrastructure executera les acces techniques vers SQL Server. Domain contiendra les concepts metier lorsqu'ils seront definis.
+La couche API recoit les requetes du frontend sous `/api/v1`. La couche Application execute les cas d'usage, Infrastructure realise les acces techniques via Entity Framework Core et Domain porte les concepts et invariants metier.
 
-Le backend contient maintenant une premiere verticale complete pour les Types matiere et les Dechets Fonderie. Les autres domaines restent au stade de prototype frontend ou de squelette backend.
+La verticale Types matiere / Dechets Fonderie est operationnelle de bout en bout. En environnement Development, elle utilise la base `BilanMatiereUAP2` sur l'instance `.\SQLEXPRESS` et initialise les matieres `M3000L0`, `M3010L0` et `M3060L0`. Les autres domaines restent au stade de prototype frontend ou de squelette backend.
 
 La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
 

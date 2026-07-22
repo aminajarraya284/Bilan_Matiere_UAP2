@@ -44,7 +44,11 @@ const months = [
 </script>
 
 <template>
-  <form class="dashboard-filters dashboard-card" aria-label="Filtres du tableau de bord" @submit.prevent="emit('apply')">
+  <form
+    class="dashboard-filters dashboard-card"
+    aria-label="Filtres du tableau de bord"
+    @submit.prevent="emit('apply')"
+  >
     <div class="dashboard-filters__title">
       <Filter class="h-4 w-4" aria-hidden="true" />
       <span>Filtres</span>
@@ -52,14 +56,22 @@ const months = [
 
     <label class="dashboard-filter-field">
       <span>Mois</span>
-      <select :value="month" :disabled="loading" @change="emit('update:month', ($event.target as HTMLSelectElement).value)">
+      <select
+        :value="month"
+        :disabled="loading"
+        @change="emit('update:month', ($event.target as HTMLSelectElement).value)"
+      >
         <option v-for="item in months" :key="item.value" :value="item.value">{{ item.label }}</option>
       </select>
     </label>
 
     <label class="dashboard-filter-field">
       <span>Année</span>
-      <select :value="year" :disabled="loading" @change="emit('update:year', ($event.target as HTMLSelectElement).value)">
+      <select
+        :value="year"
+        :disabled="loading"
+        @change="emit('update:year', ($event.target as HTMLSelectElement).value)"
+      >
         <option v-for="item in years" :key="item" :value="String(item)">{{ item }}</option>
       </select>
     </label>

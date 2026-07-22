@@ -147,7 +147,9 @@ onMounted(loadMouvements);
       </article>
     </div>
 
-    <div class="flex flex-col gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      class="flex flex-col gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
       <div class="flex items-start gap-3">
         <Link2 class="mt-0.5 h-5 w-5 shrink-0 text-blue-900" />
         <div>

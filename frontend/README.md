@@ -87,10 +87,11 @@ Le frontend ne doit plus dependre de ces fichiers. En mode mock local, les servi
 
 ### Regle type matiere
 
-L'application travaille uniquement avec deux types matiere :
+L'application travaille avec trois types matiere :
 
 - `M3000L0`
 - `M3010L0`
+- `M3060L0`
 
 Le champ `typeMatiere` ou `codeTypeMatiere` ne doit jamais contenir `Composant`, `Laiton`, `Aluminium`, `Zamak` ou un autre code matiere.
 
@@ -155,7 +156,7 @@ Les services doivent consommer la data locale au lieu des anciennes references X
 - `src/features/rapports/exporter.ts` : generation des exports PDF texte et CSV
 - `src/utils/storage.ts` : persistance mock dans `localStorage`
 
-En mode API reelle (`VITE_USE_REAL_API === 'true'`), les services appellent le backend. En mode mock local, ils doivent rester autonomes avec `testData.ts` et `localStorage`.
+Les Types matiere et les Dechets Fonderie selectionnent explicitement leur source avec `VITE_TYPES_MATIERE_SOURCE` et `VITE_DECHETS_SOURCE`. Les autres services continuent d'utiliser `VITE_USE_REAL_API`. En mode mock local, ils restent autonomes avec `testData.ts` et `localStorage`.
 
 ### Inventaire ESR
 
@@ -237,12 +238,13 @@ Cette operation recharge les donnees de test propres depuis `src/data/testData.t
 - déclaration de déchets avec type de matière, cause et type de déchet
 - suppression de la colonne `Article Concerné` de la page de déclaration des déchets
 - validation et suppression des déclarations
+- verticale operationnelle avec le backend et SQL Server lorsque les sources Types matiere et Dechets Fonderie sont configurees sur `api`
 
 ## Mode de fonctionnement
 
 ### Mode mock local
 
-Le projet supporte un mode mock local si `VITE_USE_REAL_API !== 'true'` :
+Le projet supporte un mode mock local. Pour les Types matiere et les Dechets Fonderie, il est selectionne avec `VITE_TYPES_MATIERE_SOURCE=mock` et `VITE_DECHETS_SOURCE=mock`. Les autres modules restent pilotes par `VITE_USE_REAL_API` :
 
 - les donnees initiales proviennent de `src/data/testData.ts`
 - `src/utils/storage.ts` persiste les donnees dans `localStorage`
@@ -252,6 +254,8 @@ Le projet supporte un mode mock local si `VITE_USE_REAL_API !== 'true'` :
 ### Mode API réelle
 
 - configure `VITE_API_URL` pour pointer vers le backend réel
+- configure `VITE_TYPES_MATIERE_SOURCE=api` et `VITE_DECHETS_SOURCE=api` pour activer la verticale connectee
+- les endpoints de cette verticale sont exposes sous `/api/v1`
 - le client Axios ajoute automatiquement le token Bearer
 - les erreurs `401` redirigent vers la page de login
 
@@ -275,6 +279,8 @@ npm run lint
 
 - `VITE_API_URL` : URL du backend API
 - `VITE_USE_REAL_API` : `true` pour utiliser l'API réelle, `false` pour utiliser les données mock
+- `VITE_TYPES_MATIERE_SOURCE` : `api` ou `mock` pour le referentiel Types matiere
+- `VITE_DECHETS_SOURCE` : `api` ou `mock` pour les Dechets Fonderie
 
 ## Notes de développement
 
@@ -304,7 +310,7 @@ Verifier aussi qu'il ne reste aucune reference aux anciens fichiers X3 statiques
 rg "x3-reference|ListeOFX3|x3Reference|X3_REFERENCE"
 ```
 
-Verifier que les types matiere restent limites a `M3000L0` et `M3010L0` :
+Verifier que les types matiere restent limites a `M3000L0`, `M3010L0` et `M3060L0` :
 
 ```bash
 rg "typeMatiere|codeTypeMatiere|codeMatiere" src/data/testData.ts
@@ -313,7 +319,7 @@ rg "typeMatiere|codeTypeMatiere|codeMatiere" src/data/testData.ts
 Controle fonctionnel rapide en mode mock :
 
 - ouvrir le Dashboard et verifier que les indicateurs se chargent
-- ouvrir Sorties magasin X3 et verifier que les sorties affichent uniquement `M3000L0` et `M3010L0`
+- ouvrir Sorties magasin X3 et verifier que les sorties affichent uniquement `M3000L0`, `M3010L0` et `M3060L0`
 - ouvrir Bilan matiere Fonderie, Usinage 2 et UAP2 pour verifier les memes periodes
 - ouvrir Inventaire Fonderie et verifier les totaux rapport/bilan
 - ouvrir Rapports et exporter `Rapport Inventaire ESR`
@@ -322,6 +328,6 @@ Controle fonctionnel rapide en mode mock :
 ## Améliorations possibles
 
 - nettoyer les dépendances inutilisées restées de templates précédents
-- ajouter un vrai backend d'API pour la gestion des inventaires et bilans
+- connecter progressivement au backend les inventaires, bilans et autres verticales encore en mode mock
 - renforcer la validation des formulaires et l'expérience d'impression
 - ajouter des tests unitaires et e2e

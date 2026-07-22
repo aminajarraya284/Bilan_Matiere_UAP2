@@ -40,9 +40,7 @@ const getDifferenceBarWidth = (item: ComparisonItem): string => {
   return percentage === 0 ? '0%' : `${Math.max(3, percentage)}%`;
 };
 
-const criticalItems = computed(() =>
-  props.series.filter((item) => getStatusMeta(item).tone === 'critical')
-);
+const criticalItems = computed(() => props.series.filter((item) => getStatusMeta(item).tone === 'critical'));
 
 const formatSigned = (value: number): string => {
   const formatted = formatNumber(value, 0);
@@ -127,11 +125,7 @@ const formatSigned = (value: number): string => {
 
           <div class="flow-bar-line">
             <span>Input</span>
-            <div
-              class="flow-track"
-              role="img"
-              :aria-label="`Input ${formatNumber(item.input, 0)} kilogrammes`"
-            >
+            <div class="flow-track" role="img" :aria-label="`Input ${formatNumber(item.input, 0)} kilogrammes`">
               <i
                 class="flow-fill flow-fill--input"
                 :class="{ 'bar-animated': props.motionEnabled }"
@@ -143,11 +137,7 @@ const formatSigned = (value: number): string => {
 
           <div class="flow-bar-line">
             <span>Output</span>
-            <div
-              class="flow-track"
-              role="img"
-              :aria-label="`Output ${formatNumber(item.output, 0)} kilogrammes`"
-            >
+            <div class="flow-track" role="img" :aria-label="`Output ${formatNumber(item.output, 0)} kilogrammes`">
               <i
                 class="flow-fill flow-fill--output"
                 :class="{ 'bar-animated': props.motionEnabled }"

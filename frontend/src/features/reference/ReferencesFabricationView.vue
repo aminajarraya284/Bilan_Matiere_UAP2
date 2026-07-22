@@ -24,17 +24,12 @@ const PAGE_SIZE = 100;
 const gammePage = ref(1);
 const nomenclaturePage = ref(1);
 const gammePageCount = computed(() => Math.max(1, Math.ceil(gammeReferences.value.length / PAGE_SIZE)));
-const nomenclaturePageCount = computed(() =>
-  Math.max(1, Math.ceil(nomenclatureReferences.value.length / PAGE_SIZE))
-);
+const nomenclaturePageCount = computed(() => Math.max(1, Math.ceil(nomenclatureReferences.value.length / PAGE_SIZE)));
 const paginatedGammes = computed(() =>
   gammeReferences.value.slice((gammePage.value - 1) * PAGE_SIZE, gammePage.value * PAGE_SIZE)
 );
 const paginatedNomenclatures = computed(() =>
-  nomenclatureReferences.value.slice(
-    (nomenclaturePage.value - 1) * PAGE_SIZE,
-    nomenclaturePage.value * PAGE_SIZE
-  )
+  nomenclatureReferences.value.slice((nomenclaturePage.value - 1) * PAGE_SIZE, nomenclaturePage.value * PAGE_SIZE)
 );
 
 const loadDataTestGamme = async () => {
@@ -84,9 +79,7 @@ const handleImport = async (target: ReferenceTabKey, event: Event) => {
 };
 
 const showImportResult = async (importedCount: number, ignoredCount: number, fileName: string) => {
-  const ignoredMessage = ignoredCount
-    ? ` ${ignoredCount} ligne(s) invalide(s) ou en double ont été ignorées.`
-    : '';
+  const ignoredMessage = ignoredCount ? ` ${ignoredCount} ligne(s) invalide(s) ou en double ont été ignorées.` : '';
   await dialog.alert(`${importedCount} référence(s) importée(s) depuis « ${fileName} ».${ignoredMessage}`, {
     title: 'Import terminé',
     tone: ignoredCount ? 'warning' : 'success'

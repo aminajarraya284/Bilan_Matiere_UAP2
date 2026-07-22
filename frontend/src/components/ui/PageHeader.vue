@@ -37,5 +37,4 @@ defineProps<{
 .page-header__breadcrumb {
   color: var(--color-text-muted);
 }
-
 </style>

@@ -59,9 +59,7 @@ body {
   flex: 1;
   min-width: 0;
   overflow-x: hidden;
-  background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.62) 0, rgb(245 247 250 / 0) 11rem),
-    var(--color-background);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.62) 0, rgb(245 247 250 / 0) 11rem), var(--color-background);
 }
 
 button:disabled,

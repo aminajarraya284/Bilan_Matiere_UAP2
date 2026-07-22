@@ -116,6 +116,50 @@ describe('DechetsFonderieView', () => {
     expect(wrapper.get('[data-testid="waste-row"]').text()).toContain('125,5 kg');
   });
 
+  it('keeps a material loading error visible and retries only that request', async () => {
+    mocks.getTypesMatiere.mockRejectedValueOnce(new Error('Service indisponible')).mockResolvedValueOnce([material]);
+    const wrapper = await mountView();
+
+    expect(wrapper.get('[data-testid="types-error"]').text()).toContain(
+      'Impossible de charger les types matière. Service indisponible'
+    );
+    expect(wrapper.find('[data-testid="api-error"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="submit-waste"]').attributes('disabled')).toBeDefined();
+
+    await wrapper.get('[data-testid="retry-types"]').trigger('click');
+    await flushPromises();
+
+    expect(mocks.getTypesMatiere).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('[data-testid="types-error"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="material-select"]').text()).toContain('M3000L0');
+  });
+
+  it('shows an explicit message when the API returns no active material type', async () => {
+    mocks.getTypesMatiere.mockResolvedValueOnce([{ ...material, estActif: false }]);
+    const wrapper = await mountView();
+
+    expect(wrapper.get('[data-testid="types-empty"]').text()).toBe('Aucun type matière actif disponible');
+    expect(wrapper.get('[data-testid="material-select"]').findAll('option')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="submit-waste"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('clears the previous list, total and summary when a new data request fails', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.findAll('[data-testid="waste-row"]')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="waste-total"]').text()).toContain('1 déclaration(s)');
+    expect(wrapper.get('[data-testid="summary-total"]').text()).toContain('125,5 kg');
+
+    mocks.getResumeDechetsFonderie.mockRejectedValueOnce(new Error('Résumé indisponible'));
+    await wrapper.get('[data-testid="period-filter"]').setValue('2026-06');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="api-error"]').text()).toContain('Résumé indisponible');
+    expect(wrapper.find('[data-testid="waste-row"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="waste-total"]').text()).toContain('0 déclaration(s)');
+    expect(wrapper.find('[data-testid="summary-total"]').exists()).toBe(false);
+  });
+
   it('creates a waste with the allowed payload only', async () => {
     const wrapper = await mountView();
     await wrapper.get('[data-testid="date-input"]').setValue('2026-07-22');

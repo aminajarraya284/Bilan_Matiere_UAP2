@@ -183,9 +183,7 @@ const loadBilansUsinage = async () => {
       filterDateDebut.value,
       filterDateFin.value
     );
-    if (
-      !bilansUsinage.value.some((item) => item.numeroOF === rebutUsinageForm.value.numeroOF)
-    ) {
+    if (!bilansUsinage.value.some((item) => item.numeroOF === rebutUsinageForm.value.numeroOF)) {
       rebutUsinageForm.value.numeroOF = bilansUsinage.value[0]?.numeroOF ?? '';
     }
   } catch (err) {
@@ -229,8 +227,7 @@ const getUsinageEntreeOfPieces = (item: BilanUsinage2ParPiece): number =>
 
 const getUsinageResultatEcartPieces = (item: BilanUsinage2ParPiece): number => {
   const displayItem = item as BilanUsinage2Display;
-  const savedValue =
-    displayItem.resultatEcartPieces ?? displayItem.ecartUsinage2Pieces ?? displayItem.ecartPieces;
+  const savedValue = displayItem.resultatEcartPieces ?? displayItem.ecartUsinage2Pieces ?? displayItem.ecartPieces;
 
   if (typeof savedValue === 'number' && Number.isFinite(savedValue)) {
     return savedValue;
@@ -284,7 +281,9 @@ const handleAddRebutUsinage2 = async () => {
     await bilanService.createRebutUsinage2({
       numeroOF: bilan.numeroOF,
       codeArticle: bilan.codeArticle,
-      codeTypeMatiere: bilan.codeTypeMatiere as Parameters<typeof bilanService.createRebutUsinage2>[0]['codeTypeMatiere'],
+      codeTypeMatiere: bilan.codeTypeMatiere as Parameters<
+        typeof bilanService.createRebutUsinage2
+      >[0]['codeTypeMatiere'],
       dateDeclaration: filterDateFin.value,
       nombrePiecesRebut: Math.trunc(rebutUsinageForm.value.nombrePiecesRebut),
       poidsRebutKg: 0,
@@ -566,10 +565,7 @@ onMounted(() => {
                 </td>
               </tr>
               <tr v-if="!filteredReports.length">
-                <td
-                  colspan="11"
-                  class="p-6 text-center text-slate-400 font-bold uppercase tracking-wider"
-                >
+                <td colspan="11" class="p-6 text-center text-slate-400 font-bold uppercase tracking-wider">
                   Aucun bilan matière disponible pour cette sélection
                 </td>
               </tr>
@@ -616,7 +612,6 @@ onMounted(() => {
           </table>
         </div>
       </div>
-
     </template>
 
     <!-- ===================== ONGLET USINAGE 2 ===================== -->

@@ -111,6 +111,59 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
     }
 
     [Fact]
+    public async Task GetResumeDechetsFonderie_ReturnsAggregatedTotalsWithoutTranslationError()
+    {
+        var m3000 = await GetSeedAsync("M3000L0");
+        var m3010 = await GetSeedAsync("M3010L0");
+        await CreateWasteAsync(m3000.Id, 2.500m, "Poudre", new DateOnly(2026, 6, 15));
+        await CreateWasteAsync(m3010.Id, 99m, "Bavure", new DateOnly(2026, 5, 31));
+        await CreateWasteAsync(m3010.Id, 10.125m, "Bavure", new DateOnly(2026, 6, 1));
+        await CreateWasteAsync(m3010.Id, 1.375m, "Bavure", new DateOnly(2026, 6, 30));
+        await CreateWasteAsync(m3010.Id, 5.250m, "Poudre", new DateOnly(2026, 6, 30));
+        await CreateWasteAsync(m3010.Id, 88m, "Poudre", new DateOnly(2026, 7, 1));
+        var deletedResponse = await CreateWasteAsync(
+            m3010.Id,
+            77m,
+            "Bavure",
+            new DateOnly(2026, 6, 20));
+        var deleted = await deletedResponse.Content.ReadFromJsonAsync<DechetFonderieResponse>(JsonOptions);
+        await _client.DeleteAsync($"/api/v1/dechets-fonderie/{deleted!.Id}");
+
+        var response = await _client.GetAsync("/api/v1/dechets-fonderie/resume?periode=2026-06");
+        var resume = await response.Content.ReadFromJsonAsync<ResumeDechetsFonderieResponse>(JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(resume);
+        Assert.Equal(19.250m, resume.TotalGeneralKg);
+        Assert.Collection(
+            resume.TotauxParTypeMatiere,
+            first =>
+            {
+                Assert.Equal("M3000L0", first.TypeMatiereCode);
+                Assert.Equal(0m, first.TotalBavureKg);
+                Assert.Equal(2.500m, first.TotalPoudreKg);
+            },
+            second =>
+            {
+                Assert.Equal("M3010L0", second.TypeMatiereCode);
+                Assert.Equal(11.500m, second.TotalBavureKg);
+                Assert.Equal(5.250m, second.TotalPoudreKg);
+            });
+    }
+
+    [Fact]
+    public async Task GetResumeDechetsFonderie_EmptyPeriod_ReturnsEmptyTotals()
+    {
+        var response = await _client.GetAsync("/api/v1/dechets-fonderie/resume?periode=2030-01");
+        var resume = await response.Content.ReadFromJsonAsync<ResumeDechetsFonderieResponse>(JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(resume);
+        Assert.Empty(resume.TotauxParTypeMatiere);
+        Assert.Equal(0m, resume.TotalGeneralKg);
+    }
+
+    [Fact]
     public async Task ResponsableUsinage2_CannotReadWaste()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/dechets-fonderie?periode=2026-06");
@@ -127,12 +180,16 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
         return items!.Single(item => item.Code == code);
     }
 
-    private Task<HttpResponseMessage> CreateWasteAsync(Guid typeMatiereId, decimal weight, string kind = "Bavure")
+    private Task<HttpResponseMessage> CreateWasteAsync(
+        Guid typeMatiereId,
+        decimal weight,
+        string kind = "Bavure",
+        DateOnly? date = null)
     {
         return _client.PostAsJsonAsync(
             "/api/v1/dechets-fonderie",
             new CreateDechetFonderieRequest(
-                new DateOnly(2026, 6, 30),
+                date ?? new DateOnly(2026, 6, 30),
                 typeMatiereId,
                 kind,
                 weight,

@@ -19,8 +19,7 @@ const summary = ref<AlertesSummary | null>(null);
 const toleranceAlertePoids = ref(BUSINESS_RULES.seuilAlertePoidsPourcentage);
 
 const getEcartPoidsUnitaireKg = (alert: AlertesWeightAlert): number =>
-  alert.ecartPoidsUnitaireKg ??
-  (alert.poidsPhysiqueUnitaireKg ?? 0) - (alert.poidsTheoriqueUnitaireKg ?? 0);
+  alert.ecartPoidsUnitaireKg ?? (alert.poidsPhysiqueUnitaireKg ?? 0) - (alert.poidsTheoriqueUnitaireKg ?? 0);
 
 const getTauxEcartPoids = (alert: AlertesWeightAlert): number => {
   if (typeof alert.tauxEcartPoids === 'number') return alert.tauxEcartPoids;
@@ -148,9 +147,7 @@ onMounted(() => {
                 </div>
                 <div class="mt-3 grid grid-cols-2 gap-3 text-[12px] text-slate-600">
                   <div class="rounded-2xl bg-white p-3 border border-slate-100">
-                    <div class="text-[10px] uppercase tracking-[0.24em] text-slate-400">
-                      Poids théorique unitaire
-                    </div>
+                    <div class="text-[10px] uppercase tracking-[0.24em] text-slate-400">Poids théorique unitaire</div>
                     <div class="mt-2 text-xl font-extrabold text-slate-900">
                       {{ formatNumber(alert.poidsTheoriqueUnitaireKg || 0, 3) }} kg/pièce
                     </div>

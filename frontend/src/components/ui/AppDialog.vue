@@ -47,7 +47,9 @@ const toneClass = computed(() => {
             </div>
           </div>
 
-          <div class="flex justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-soft)] px-5 py-4">
+          <div
+            class="flex justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-soft)] px-5 py-4"
+          >
             <AppButton
               v-if="dialogState.mode === 'confirm'"
               type="button"

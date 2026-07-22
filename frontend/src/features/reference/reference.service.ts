@@ -2,12 +2,7 @@ import * as XLSX from 'xlsx';
 import api from '@/services/api';
 import { testDataRepository } from '@/services/testDataRepository.service';
 import { sopalTestDataset } from '@/mocks/sopalTestDataset';
-import type {
-  ImportBatchTest,
-  RefGammeFabrication,
-  RefNomenclature,
-  TypeMatiereCode
-} from '@/mocks/sopalTestDataset';
+import type { ImportBatchTest, RefGammeFabrication, RefNomenclature, TypeMatiereCode } from '@/mocks/sopalTestDataset';
 
 export type ReferenceTabKey = 'gamme' | 'nomenclature';
 
@@ -110,7 +105,9 @@ const textValue = (value: unknown): string => String(value ?? '').trim();
 
 const numberValue = (value: unknown, fallback = 0): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
-  const normalized = textValue(value).replace(/\s|\u00a0/g, '').replace(',', '.');
+  const normalized = textValue(value)
+    .replace(/\s|\u00a0/g, '')
+    .replace(',', '.');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : fallback;
 };

@@ -35,7 +35,8 @@ const isSubmitting = ref(false);
 const deletingId = ref<string | null>(null);
 const editingId = ref<string | null>(null);
 const successMessage = ref('');
-const errorMessage = ref('');
+const typesError = ref('');
+const dataError = ref('');
 const fieldErrors = ref<FieldErrors>({});
 let filterTimer: ReturnType<typeof setTimeout> | undefined;
 let messageTimer: ReturnType<typeof setTimeout> | undefined;
@@ -58,6 +59,7 @@ const typesDechetList: DechetType[] = ['Bavure', 'Poudre'];
 const semaineIso = computed(() => getIsoWeek(formDechet.value.dateDeclaration));
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const isReadOnly = computed(() => authStore.userRole !== 'Admin' && authStore.userRole !== 'ResponsableFonderie');
+const hasNoActiveTypes = computed(() => !isLoadingTypes.value && !typesError.value && typesMatiere.value.length === 0);
 
 const showSuccess = (message: string) => {
   if (messageTimer) clearTimeout(messageTimer);
@@ -65,31 +67,40 @@ const showSuccess = (message: string) => {
   messageTimer = setTimeout(() => (successMessage.value = ''), 4000);
 };
 
-const readApiError = (error: unknown) => {
-  fieldErrors.value = {};
+const getApiErrorMessage = (error: unknown): string => {
   if (!axios.isAxiosError<ProblemDetails>(error)) {
-    errorMessage.value = error instanceof Error ? error.message : 'Une erreur inattendue est survenue.';
-    return;
+    return error instanceof Error ? error.message : 'Une erreur inattendue est survenue.';
   }
 
   const problem = error.response?.data;
-  Object.entries(problem?.errors ?? {}).forEach(([property, messages]) => {
-    if (property in formDechet.value) {
-      fieldErrors.value[property as keyof DechetFonderiePayload] = messages[0];
-    }
-  });
-  errorMessage.value = problem?.detail || problem?.title || 'La requête a échoué.';
+  return problem?.detail || problem?.title || 'La requête a échoué.';
+};
+
+const readApiError = (error: unknown) => {
+  fieldErrors.value = {};
+  if (axios.isAxiosError<ProblemDetails>(error)) {
+    const problem = error.response?.data;
+    Object.entries(problem?.errors ?? {}).forEach(([property, messages]) => {
+      if (property in formDechet.value) {
+        fieldErrors.value[property as keyof DechetFonderiePayload] = messages[0];
+      }
+    });
+  }
+  dataError.value = getApiErrorMessage(error);
 };
 
 const loadTypesMatiere = async () => {
   isLoadingTypes.value = true;
+  typesError.value = '';
   try {
     typesMatiere.value = (await dechetsService.getTypesMatiere()).filter((item) => item.estActif);
-    if (!formDechet.value.typeMatiereId && typesMatiere.value.length) {
-      formDechet.value.typeMatiereId = typesMatiere.value[0].id;
+    if (!typesMatiere.value.some((item) => item.id === formDechet.value.typeMatiereId)) {
+      formDechet.value.typeMatiereId = typesMatiere.value[0]?.id ?? '';
     }
   } catch (error) {
-    readApiError(error);
+    typesMatiere.value = [];
+    formDechet.value.typeMatiereId = '';
+    typesError.value = `Impossible de charger les types matière. ${getApiErrorMessage(error)}`;
   } finally {
     isLoadingTypes.value = false;
   }
@@ -97,7 +108,7 @@ const loadTypesMatiere = async () => {
 
 const loadData = async () => {
   isLoading.value = true;
-  errorMessage.value = '';
+  dataError.value = '';
   try {
     const [listResponse, summaryResponse] = await Promise.all([
       dechetsService.getDechetsFonderie({
@@ -113,6 +124,9 @@ const loadData = async () => {
     total.value = listResponse.total;
     resume.value = summaryResponse;
   } catch (error) {
+    dechets.value = [];
+    total.value = 0;
+    resume.value = null;
     readApiError(error);
   } finally {
     isLoading.value = false;
@@ -143,7 +157,7 @@ const resetEditableFields = () => {
 const handleSubmit = async () => {
   if (isReadOnly.value || isSubmitting.value || !validateForm()) return;
   isSubmitting.value = true;
-  errorMessage.value = '';
+  dataError.value = '';
   const payload: DechetFonderiePayload = {
     dateDeclaration: formDechet.value.dateDeclaration,
     typeMatiereId: formDechet.value.typeMatiereId,
@@ -246,11 +260,36 @@ onBeforeUnmount(() => {
       <span>{{ successMessage }}</span>
     </div>
     <div
-      v-if="errorMessage"
+      v-if="typesError"
+      data-testid="types-error"
+      role="alert"
+      class="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
+    >
+      <span>{{ typesError }}</span>
+      <button
+        type="button"
+        data-testid="retry-types"
+        class="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-2 font-bold text-rose-700 hover:bg-rose-100"
+        @click="loadTypesMatiere"
+      >
+        Réessayer
+      </button>
+    </div>
+    <div
+      v-else-if="hasNoActiveTypes"
+      data-testid="types-empty"
+      role="status"
+      class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-800"
+    >
+      Aucun type matière actif disponible
+    </div>
+    <div
+      v-if="dataError"
       data-testid="api-error"
+      role="alert"
       class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
     >
-      {{ errorMessage }}
+      {{ dataError }}
     </div>
 
     <section v-if="resume" aria-label="Résumé des déchets" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -428,7 +467,9 @@ onBeforeUnmount(() => {
 
       <div class="flex items-center justify-between border-b border-slate-50 px-6 py-4">
         <h2 class="text-xs font-black uppercase tracking-wider text-slate-700">Historique des déchets Fonderie</h2>
-        <span class="font-mono text-[10px] font-bold text-slate-400">{{ total }} déclaration(s)</span>
+        <span data-testid="waste-total" class="font-mono text-[10px] font-bold text-slate-400">
+          {{ total }} déclaration(s)
+        </span>
       </div>
 
       <LoadingState v-if="isLoading" />
