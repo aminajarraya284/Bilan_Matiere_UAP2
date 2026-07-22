@@ -1,6 +1,6 @@
 # Bilan Matière UAP2
 
-Application SOPAL de bilan matiere pour l'UAP2. Le depot rassemble le frontend Vue.js existant et le socle technique d'une API ASP.NET Core destinee a communiquer avec SQL Server.
+Application SOPAL de bilan matiere pour l'UAP2. Le depot rassemble le frontend Vue.js et une API ASP.NET Core active, connectee a SQL Server pour la verticale Types matiere / Dechets Fonderie.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ BilanMatiereUAP2/
 
 - Node.js et npm compatibles avec les dependances du frontend.
 - SDK .NET 8.
-- SQL Server pour les futurs acces aux donnees.
+- SQL Server Express pour executer localement la verticale connectee.
 
 ## Frontend
 
@@ -70,24 +70,25 @@ Avec le profil HTTP defini dans `launchSettings.json` :
 
 - Swagger : `http://localhost:5000/swagger`
 - Health check : `http://localhost:5000/health`
+- API metier versionnee : `http://localhost:5000/api/v1`
 
 Le profil HTTPS utilise `https://localhost:7000`.
 
 ## Configuration locale
 
-La chaine `ConnectionStrings:DefaultConnection` utilise l'authentification Windows locale et ne contient aucun mot de passe :
+En environnement Development, `ConnectionStrings:DefaultConnection` utilise l'authentification Windows locale et ne contient aucun mot de passe :
 
 ```text
-Server=localhost;Database=BilanMatiereUAP2Db;Trusted_Connection=True;TrustServerCertificate=True;
+Server=.\SQLEXPRESS;Database=BilanMatiereUAP2;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True
 ```
 
-Les origines CORS sont lues depuis `Cors:AllowedOrigins`. Elles incluent le port demande `5173` ainsi que le port actuel du frontend `3000`.
+Les origines CORS sont lues depuis `Cors:AllowedOrigins`. Elles incluent le port `5173` ainsi que les ports frontend `3000` et `3001` pour `localhost` ou `127.0.0.1`.
 
-Pour les futures migrations EF Core, le projet cible sera `BilanMatiereUAP2.Infrastructure` et le projet de demarrage sera `BilanMatiereUAP2.Api`. Elles ne doivent pas etre dupliquees dans `database/migrations/`. Le dossier `database/` accueille uniquement les scripts SQL manuels et la documentation associee.
+Pour les migrations EF Core, le projet cible est `BilanMatiereUAP2.Infrastructure` et le projet de demarrage est `BilanMatiereUAP2.Api`. Elles ne doivent pas etre dupliquees dans `database/migrations/`. Le dossier `database/` accueille uniquement les scripts SQL manuels et la documentation associee.
 
 ## Etat actuel
 
-- Le frontend existant a ete conserve sans modification de sa logique, de ses routes, de ses composants ou de ses donnees de test.
-- Le backend fournit le socle technique et une premiere verticale metier complete pour les Types matiere et les Dechets Fonderie : API versionnee, validations, Entity Framework Core, migration SQL Server, seed, suppression logique, resume et tests.
+- Le frontend reste principalement alimente par les donnees de test, tandis que les Types matiere et les Dechets Fonderie peuvent utiliser l'API reelle via `VITE_TYPES_MATIERE_SOURCE` et `VITE_DECHETS_SOURCE`.
+- Le backend fournit une premiere verticale metier operationnelle pour les Types matiere et les Dechets Fonderie sous `/api/v1` : validations, Entity Framework Core, migration SQL Server, seed des trois matieres `M3000L0`, `M3010L0` et `M3060L0`, suppression logique, resume et tests.
 - Les imports Excel, les bilans, la synchronisation X3 et les autres verticales metier ne sont pas encore connectes au backend. Les policies sont preparees, mais l'authentification JWT doit encore remplacer le mode de developpement avant la production.
 - La configuration et les commandes de cette premiere verticale sont documentees dans `docs/VerticaleTypesMatiereDechetsFonderie.md`.

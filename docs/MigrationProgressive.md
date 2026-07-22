@@ -16,7 +16,7 @@ localStorage
 Écrans Vue
 ```
 
-Le backend fournit le socle technique ASP.NET Core, mais il ne possède encore aucun endpoint métier. Il expose uniquement le health check `/health`.
+Le backend ASP.NET Core est actif. Il expose le health check `/health` ainsi que la verticale métier Types matière / Déchets Fonderie sous `/api/v1`.
 
 Le frontend possède actuellement un interrupteur global :
 
@@ -24,10 +24,9 @@ Le frontend possède actuellement un interrupteur global :
 VITE_USE_REAL_API=false
 ```
 
-Le passage direct à `true` demanderait à plusieurs modules d'appeler simultanément des endpoints qui n'existent pas encore :
+Le passage direct à `true` demanderait encore à plusieurs modules non migrés d'appeler simultanément des endpoints qui n'existent pas :
 
 - authentification ;
-- déchets Fonderie ;
 - réceptions Usinage 2 ;
 - inventaires ;
 - bilans ;
@@ -45,9 +44,9 @@ La stratégie recommandée est donc :
 
 > Connecter un module au backend, le tester de bout en bout, puis migrer le module suivant tout en conservant explicitement les autres modules en mode mock.
 
-## Exemple : première verticale Déchets Fonderie
+## État actuel : première verticale Déchets Fonderie
 
-Pendant la première migration :
+À l'issue de la première migration :
 
 ```text
 Types matière      → API réelle + SQL Server
@@ -58,7 +57,7 @@ Bilans             → données mock
 Dashboard          → données mock
 ```
 
-L'application reste utilisable, mais l'écran Déchets Fonderie devient réellement connecté au backend.
+L'application reste utilisable et l'écran Déchets Fonderie est connecté au backend lorsque ses sources sont configurées sur `api`.
 
 Le référentiel minimal des types matière fait partie de cette première verticale, car une déclaration de déchet doit référencer un type matière valide. Dans l'état actuel du code, les trois codes utilisés sont :
 
@@ -68,7 +67,7 @@ M3010L0
 M3060L0
 ```
 
-Cette liste doit être validée avec les responsables métier avant la création de la première migration SQL.
+Cette liste est initialisée par la migration SQL existante. Elle doit être confirmée avec les responsables métier avant une mise en production ou une extension du référentiel.
 
 ## Pourquoi éviter une bascule complète
 
@@ -134,15 +133,11 @@ Il ne faut pas basculer automatiquement vers les mocks lorsqu'un appel API écho
 
 ## Configuration par fonctionnalité
 
-Une configuration explicite peut être ajoutée dans `.env.example` :
+La configuration explicite suivante existe dans `.env.example` :
 
 ```env
-VITE_DATA_SOURCE_DECHETS=mock
-VITE_DATA_SOURCE_RECEPTIONS=mock
-VITE_DATA_SOURCE_INVENTAIRE=mock
-VITE_DATA_SOURCE_BILANS=mock
-VITE_DATA_SOURCE_REFERENCES=mock
-VITE_DATA_SOURCE_CONTROLE_POIDS=mock
+VITE_TYPES_MATIERE_SOURCE=mock
+VITE_DECHETS_SOURCE=mock
 ```
 
 Valeurs autorisées :
@@ -152,7 +147,7 @@ mock
 api
 ```
 
-La lecture de ces variables doit être centralisée dans un fichier tel que :
+La lecture de ces variables est centralisée dans :
 
 ```text
 frontend/src/config/dataSources.ts
@@ -243,27 +238,29 @@ Le client Axios actuel utilise déjà cette base :
 http://localhost:5000/api
 ```
 
-Les repositories frontend doivent donc appeler des chemins relatifs sans répéter `/api` :
+Le service frontend appelle des chemins relatifs versionnés sans répéter `/api` :
 
 ```typescript
-await api.get('/dechets-fonderie');
-await api.get(`/dechets-fonderie/${id}`);
-await api.post('/dechets-fonderie', data);
-await api.put(`/dechets-fonderie/${id}`, data);
-await api.delete(`/dechets-fonderie/${id}`);
+await api.get('/v1/types-matiere');
+await api.get('/v1/dechets-fonderie');
+await api.get(`/v1/dechets-fonderie/${id}`);
+await api.post('/v1/dechets-fonderie', data);
+await api.put(`/v1/dechets-fonderie/${id}`, data);
+await api.delete(`/v1/dechets-fonderie/${id}`);
 ```
 
 Avec la configuration actuelle, les routes backend correspondantes sont :
 
 ```http
-GET    /api/dechets-fonderie
-GET    /api/dechets-fonderie/{id}
-POST   /api/dechets-fonderie
-PUT    /api/dechets-fonderie/{id}
-DELETE /api/dechets-fonderie/{id}
+GET    /api/v1/types-matiere
+GET    /api/v1/dechets-fonderie
+GET    /api/v1/dechets-fonderie/{id}
+POST   /api/v1/dechets-fonderie
+PUT    /api/v1/dechets-fonderie/{id}
+DELETE /api/v1/dechets-fonderie/{id}
 ```
 
-La version `/api/v1` ne doit pas être introduite tant qu'une stratégie de versionnement n'a pas été décidée et configurée dans le backend. Si elle est ajoutée plus tard, elle devra être appliquée de manière cohérente à la base Axios, aux contrôleurs et à la documentation OpenAPI.
+Le préfixe `/api/v1` est appliqué dans les contrôleurs backend et dans les appels du service frontend.
 
 ## Fonctionnement en mode mock
 
@@ -301,13 +298,13 @@ Infrastructure / EF Core
 SQL Server
 ```
 
-La vue reste stable. Seule la source des données change.
+La vue reste stable. Seule la source des données change. En environnement Development, l'API utilise la base `BilanMatiereUAP2` sur l'instance `.\SQLEXPRESS`.
 
-## Première migration recommandée
+## État de la première migration
 
 ### Étape 0 — Validation métier
 
-Avant de créer les entités et la migration SQL, valider :
+Les entités et la migration SQL existent. Les points métier suivants restent à confirmer avant la production et doivent guider leurs évolutions :
 
 - les types matière officiels ;
 - les types de déchets autorisés ;
@@ -322,25 +319,24 @@ Avant de créer les entités et la migration SQL, valider :
 
 ### Étape 1 — Sélection progressive des sources
 
-Créer la configuration centralisée et le contrat `DechetsRepository`.
+La sélection des sources est centralisée dans `frontend/src/config/dataSources.ts`.
 
-Tous les modules restent en mode mock :
+La verticale peut être activée indépendamment des autres modules :
 
 ```env
-VITE_DATA_SOURCE_DECHETS=mock
-VITE_DATA_SOURCE_RECEPTIONS=mock
-VITE_DATA_SOURCE_INVENTAIRE=mock
-VITE_DATA_SOURCE_BILANS=mock
+VITE_TYPES_MATIERE_SOURCE=api
+VITE_DECHETS_SOURCE=api
 ```
 
 ### Étape 2 — Types matière et Déchets Fonderie
 
-Créer le référentiel minimal `TypeMatiere`, la fonctionnalité `DechetFonderie`, les contrats, les validateurs, la persistance EF Core et les endpoints API.
+Le référentiel minimal `TypeMatiere`, la fonctionnalité `DechetFonderie`, les contrats, les validateurs, la persistance EF Core et les endpoints API sont implémentés.
 
-Après validation des tests :
+La verticale opérationnelle utilise :
 
 ```env
-VITE_DATA_SOURCE_DECHETS=api
+VITE_TYPES_MATIERE_SOURCE=api
+VITE_DECHETS_SOURCE=api
 ```
 
 Les autres modules restent explicitement en mode mock.
@@ -462,4 +458,4 @@ Infrastructure / SQL Server
 Tests et observabilité
 ```
 
-La première verticale recommandée reste **Types matière minimaux + Déchets Fonderie**, après validation de ses règles métier.
+La première verticale **Types matière minimaux + Déchets Fonderie** est opérationnelle. Les prochaines migrations doivent conserver la même approche progressive, après stabilisation et validation métier de cette verticale.
