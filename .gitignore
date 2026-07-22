@@ -32,3 +32,6 @@ Thumbs.db
 # Fichiers locaux des agents
 .agents/
 .git_broken/
+
+# Installation locale SQL Server
+SQLEXPR_x64_FRA/

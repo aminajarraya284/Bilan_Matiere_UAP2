@@ -88,5 +88,6 @@ Pour les futures migrations EF Core, le projet cible sera `BilanMatiereUAP2.Infr
 ## Etat actuel
 
 - Le frontend existant a ete conserve sans modification de sa logique, de ses routes, de ses composants ou de ses donnees de test.
-- Le backend fournit uniquement le socle technique : Swagger/OpenAPI, Entity Framework Core avec un `DbContext` vide, SQL Server, Serilog, FluentValidation, CORS, health checks et gestion globale des exceptions.
-- La logique metier, les entites, les tables, les imports Excel, les migrations metier et l'authentification JWT ne sont pas encore developpes.
+- Le backend fournit le socle technique et une premiere verticale metier complete pour les Types matiere et les Dechets Fonderie : API versionnee, validations, Entity Framework Core, migration SQL Server, seed, suppression logique, resume et tests.
+- Les imports Excel, les bilans, la synchronisation X3 et les autres verticales metier ne sont pas encore connectes au backend. Les policies sont preparees, mais l'authentification JWT doit encore remplacer le mode de developpement avant la production.
+- La configuration et les commandes de cette premiere verticale sont documentees dans `docs/VerticaleTypesMatiereDechetsFonderie.md`.

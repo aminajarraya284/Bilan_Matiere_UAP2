@@ -1,6 +1,14 @@
+using System.Text.Json;
+using BilanMatiereUAP2.Api.Authentication;
+using BilanMatiereUAP2.Api.Authorization;
+using BilanMatiereUAP2.Api.Health;
 using BilanMatiereUAP2.Api.Middleware;
+using BilanMatiereUAP2.Api.Services;
 using BilanMatiereUAP2.Application;
+using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 
 const string frontendCorsPolicy = "Frontend";
@@ -15,10 +23,30 @@ builder.Host.UseSerilog((_, loggerConfiguration) =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
-builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = DevelopmentAuthenticationHandler.Scheme;
+        options.DefaultChallengeScheme = DevelopmentAuthenticationHandler.Scheme;
+    })
+    .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthenticationHandler>(
+        DevelopmentAuthenticationHandler.Scheme,
+        _ => { });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthorizationPolicies.ReadTypesMatiere, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
+    options.AddPolicy(AuthorizationPolicies.ManageTypesMatiere, policy =>
+        policy.RequireRole("Admin"));
+    options.AddPolicy(AuthorizationPolicies.ManageDechetsFonderie, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie"));
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<SqlServerHealthCheck>("sql-server", tags: ["ready"]);
 builder.Services.AddProblemDetails();
 
 var allowedOrigins = builder.Configuration
@@ -47,10 +75,27 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(frontendCorsPolicy);
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync(JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description
+            })
+        }));
+    }
+});
 
 app.Run();
 

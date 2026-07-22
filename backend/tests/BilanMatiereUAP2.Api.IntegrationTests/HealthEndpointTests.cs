@@ -1,22 +1,17 @@
-using Microsoft.AspNetCore.Mvc.Testing;
-using Xunit;
-
 namespace BilanMatiereUAP2.Api.IntegrationTests;
 
-public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+[Collection(ApiTestCollection.Name)]
+public sealed class HealthEndpointTests(ApiWebApplicationFactory factory)
 {
-    private readonly HttpClient _client;
-
-    public HealthEndpointTests(WebApplicationFactory<Program> factory)
-    {
-        _client = factory.CreateClient();
-    }
-
     [Fact]
-    public async Task GetHealth_ReturnsSuccessfulStatusCode()
+    public async Task GetHealth_ReturnsApiAndDatabaseStatus()
     {
-        var response = await _client.GetAsync("/health");
+        await factory.ResetDatabaseAsync();
+        var response = await factory.CreateClient().GetAsync("/health");
+        var payload = await response.Content.ReadAsStringAsync();
 
         response.EnsureSuccessStatusCode();
+        Assert.Contains("sql-server", payload);
+        Assert.Contains("Healthy", payload);
     }
 }

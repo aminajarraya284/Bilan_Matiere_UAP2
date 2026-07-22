@@ -1,3 +1,6 @@
+using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Domain.Common;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BilanMatiereUAP2.Api.Middleware;
@@ -15,26 +18,68 @@ public sealed class GlobalExceptionMiddleware(
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Une exception non geree est survenue.");
-
             if (context.Response.HasStarted)
             {
                 throw;
             }
 
-            context.Response.Clear();
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            context.Response.ContentType = "application/problem+json";
-
-            var problem = new ProblemDetails
+            var (status, title) = exception switch
             {
-                Status = StatusCodes.Status500InternalServerError,
-                Title = "Une erreur interne est survenue.",
-                Detail = environment.IsDevelopment() ? exception.Message : null,
-                Instance = context.Request.Path
+                ValidationException => (StatusCodes.Status400BadRequest, "Erreur de validation"),
+                DomainValidationException => (StatusCodes.Status400BadRequest, "Règle métier invalide"),
+                NotFoundException => (StatusCodes.Status404NotFound, "Ressource introuvable"),
+                ConflictException => (StatusCodes.Status409Conflict, "Conflit métier"),
+                _ => (StatusCodes.Status500InternalServerError, "Une erreur interne est survenue.")
             };
 
-            await context.Response.WriteAsJsonAsync(problem);
+            if (status >= 500)
+            {
+                logger.LogError(exception, "Une exception non gérée est survenue.");
+            }
+            else
+            {
+                logger.LogWarning(exception, "La requête a été rejetée avec le statut {StatusCode}.", status);
+            }
+
+            context.Response.Clear();
+            context.Response.StatusCode = status;
+            context.Response.ContentType = "application/problem+json";
+
+            ProblemDetails problem = exception is ValidationException validationException
+                ? new ValidationProblemDetails(validationException.Errors
+                    .GroupBy(error => ToCamelCase(error.PropertyName))
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.Select(error => error.ErrorMessage).Distinct().ToArray()))
+                : new ProblemDetails();
+
+            problem.Status = status;
+            problem.Title = title;
+            problem.Instance = context.Request.Path;
+            problem.Detail = status < 500 || environment.IsDevelopment() ? exception.Message : null;
+
+            if (problem is ValidationProblemDetails validationProblem)
+            {
+                await context.Response.WriteAsJsonAsync(validationProblem);
+            }
+            else
+            {
+                await context.Response.WriteAsJsonAsync(problem);
+            }
         }
+    }
+
+    private static string ToCamelCase(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || char.IsLower(value[0]))
+        {
+            return value;
+        }
+
+        return string.Create(value.Length, value, static (span, source) =>
+        {
+            span[0] = char.ToLowerInvariant(source[0]);
+            source.AsSpan(1).CopyTo(span[1..]);
+        });
     }
 }

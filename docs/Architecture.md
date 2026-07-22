@@ -42,4 +42,8 @@ SQL Server
 
 La couche API recoit les requetes du frontend. La couche Application portera les cas d'usage. Infrastructure executera les acces techniques vers SQL Server. Domain contiendra les concepts metier lorsqu'ils seront definis.
 
-Le backend actuel constitue uniquement le socle technique : aucune entite, table, migration ou logique metier n'est encore implementee.
+Le backend contient maintenant une premiere verticale complete pour les Types matiere et les Dechets Fonderie. Les autres domaines restent au stade de prototype frontend ou de squelette backend.
+
+La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
+
+La configuration de la verticale implementee est detaillee dans [`VerticaleTypesMatiereDechetsFonderie.md`](VerticaleTypesMatiereDechetsFonderie.md).

@@ -1,4 +1,7 @@
+using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Infrastructure.Persistence;
+using BilanMatiereUAP2.Infrastructure.Persistence.Repositories;
+using BilanMatiereUAP2.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +20,10 @@ public static class DependencyInjection
 
         services.AddDbContext<BilanMatiereUAP2DbContext>(options =>
             options.UseSqlServer(connectionString));
+        services.AddScoped<ITypeMatiereRepository, TypeMatiereRepository>();
+        services.AddScoped<IDechetFonderieRepository, DechetFonderieRepository>();
+        services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<BilanMatiereUAP2DbContext>());
+        services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 
         return services;
     }

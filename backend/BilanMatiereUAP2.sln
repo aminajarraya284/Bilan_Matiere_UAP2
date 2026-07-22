@@ -14,6 +14,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Contracts"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.Api.IntegrationTests", "tests\BilanMatiereUAP2.Api.IntegrationTests\BilanMatiereUAP2.Api.IntegrationTests.csproj", "{6D344DBD-1E86-4264-A471-94F28279C7D6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BilanMatiereUAP2.UnitTests", "tests\BilanMatiereUAP2.UnitTests\BilanMatiereUAP2.UnitTests.csproj", "{B1D34E11-0F91-4A04-94B7-C3A9E72E8F01}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,5 +46,9 @@ Global
 		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6D344DBD-1E86-4264-A471-94F28279C7D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1D34E11-0F91-4A04-94B7-C3A9E72E8F01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1D34E11-0F91-4A04-94B7-C3A9E72E8F01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1D34E11-0F91-4A04-94B7-C3A9E72E8F01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1D34E11-0F91-4A04-94B7-C3A9E72E8F01}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -3,6 +3,12 @@ import { ref, computed } from 'vue';
 import { AuthUser } from './auth.types';
 import { UserRole } from '@/types/common.types';
 import { authService } from './auth.service';
+import {
+  AUTH_TOKEN_STORAGE_KEY,
+  AUTH_USER_STORAGE_KEY,
+  clearPersistedAuthSession,
+  registerAuthSessionInvalidator
+} from './auth.session';
 
 const VALID_ROLES: UserRole[] = ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'];
 
@@ -21,7 +27,7 @@ const isAuthUser = (value: unknown): value is AuthUser => {
 };
 
 const readStoredUser = (): AuthUser | null => {
-  const storedUser = localStorage.getItem('sopal_auth_user');
+  const storedUser = localStorage.getItem(AUTH_USER_STORAGE_KEY);
   if (!storedUser) return null;
 
   try {
@@ -29,15 +35,14 @@ const readStoredUser = (): AuthUser | null => {
     if (!isAuthUser(parsed)) throw new Error('Invalid stored user');
     return parsed;
   } catch {
-    localStorage.removeItem('sopal_auth_token');
-    localStorage.removeItem('sopal_auth_user');
+    clearPersistedAuthSession();
     return null;
   }
 };
 
 export const useAuthStore = defineStore('auth', () => {
   const storedUser = readStoredUser();
-  const token = ref<string | null>(storedUser ? localStorage.getItem('sopal_auth_token') : null);
+  const token = ref<string | null>(storedUser ? localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) : null);
   const user = ref<AuthUser | null>(storedUser);
 
   const isAuthenticated = computed(() => !!token.value && !!user.value);
@@ -48,8 +53,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = result.token;
     user.value = result.user;
 
-    localStorage.setItem('sopal_auth_token', result.token);
-    localStorage.setItem('sopal_auth_user', JSON.stringify(result.user));
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, result.token);
+    localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(result.user));
 
     return result.user;
   }
@@ -57,9 +62,13 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     token.value = null;
     user.value = null;
-    localStorage.removeItem('sopal_auth_token');
-    localStorage.removeItem('sopal_auth_user');
+    clearPersistedAuthSession();
   }
+
+  registerAuthSessionInvalidator(() => {
+    token.value = null;
+    user.value = null;
+  });
 
   return {
     token,

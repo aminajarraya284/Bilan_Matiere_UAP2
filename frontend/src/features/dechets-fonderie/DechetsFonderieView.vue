@@ -1,305 +1,534 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import axios from 'axios';
+import { CheckCircle2, Flame, Loader2, Pencil, Plus, Trash2, X } from 'lucide-vue-next';
 import { useAuthStore } from '@/features/auth/auth.store';
-import { Trash2, Plus, CheckCircle2, Flame } from 'lucide-vue-next';
-import { dechetsService } from './dechets.service';
-import { DechetMouvement, DechetType } from './dechets.types';
-import PageHeader from '@/components/ui/PageHeader.vue';
+import { useAppDialog } from '@/composables/useAppDialog';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
 import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
-import { formatNumber } from '@/utils/formatters';
-import { useAppDialog } from '@/composables/useAppDialog';
-import { BUSINESS_RULES } from '@/config/businessRules';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import { dechetsService } from './dechets.service';
+import type {
+  DechetFonderiePayload,
+  DechetFonderieResponse,
+  DechetType,
+  ResumeDechetsFonderieResponse
+} from './dechets.types';
+import type { TypeMatiereResponse } from './typesMatiere.types';
+import { formatWeight, getCurrentPeriod, getIsoWeek, getLocalIsoDate } from './dechets.utils';
+
+type FieldErrors = Partial<Record<keyof DechetFonderiePayload, string>>;
+type ProblemDetails = { title?: string; detail?: string; errors?: Record<string, string[]> };
 
 const authStore = useAuthStore();
 const dialog = useAppDialog();
-const dechets = ref<DechetMouvement[]>([]);
+const dechets = ref<DechetFonderieResponse[]>([]);
+const typesMatiere = ref<TypeMatiereResponse[]>([]);
+const resume = ref<ResumeDechetsFonderieResponse | null>(null);
+const total = ref(0);
+const page = ref(1);
+const pageSize = 20;
 const isLoading = ref(true);
+const isLoadingTypes = ref(true);
+const isSubmitting = ref(false);
+const deletingId = ref<string | null>(null);
+const editingId = ref<string | null>(null);
 const successMessage = ref('');
+const errorMessage = ref('');
+const fieldErrors = ref<FieldErrors>({});
+let filterTimer: ReturnType<typeof setTimeout> | undefined;
+let messageTimer: ReturnType<typeof setTimeout> | undefined;
 
-// Check permissions
-const isReadOnly = computed(() => authStore.userRole !== 'Admin' && authStore.userRole !== 'ResponsableFonderie');
-const canUseComments = computed(() => authStore.userRole === 'Admin');
+const filters = ref({
+  periode: getCurrentPeriod(),
+  typeMatiereId: '',
+  typeDechet: '' as '' | DechetType
+});
 
-// Form state
 const formDechet = ref({
-  dateDeclaration: BUSINESS_RULES.dateFinParDefaut,
-  semaine: BUSINESS_RULES.semaineDeclarationParDefaut,
-  codeTypeMatiere: 'M3010L0',
-  quantiteKg: 0,
-  unite: 'KG' as const,
+  dateDeclaration: getLocalIsoDate(),
+  typeMatiereId: '',
   typeDechet: 'Bavure' as DechetType,
-  commentaire: ''
+  poidsKg: null as number | null,
+  observation: ''
 });
 
 const typesDechetList: DechetType[] = ['Bavure', 'Poudre'];
-const alloysList = ['M3010L0', 'M3000L0', 'M3060L0'];
+const semaineIso = computed(() => getIsoWeek(formDechet.value.dateDeclaration));
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+const isReadOnly = computed(() => authStore.userRole !== 'Admin' && authStore.userRole !== 'ResponsableFonderie');
 
-const loadDechets = async () => {
-  isLoading.value = true;
+const showSuccess = (message: string) => {
+  if (messageTimer) clearTimeout(messageTimer);
+  successMessage.value = message;
+  messageTimer = setTimeout(() => (successMessage.value = ''), 4000);
+};
+
+const readApiError = (error: unknown) => {
+  fieldErrors.value = {};
+  if (!axios.isAxiosError<ProblemDetails>(error)) {
+    errorMessage.value = error instanceof Error ? error.message : 'Une erreur inattendue est survenue.';
+    return;
+  }
+
+  const problem = error.response?.data;
+  Object.entries(problem?.errors ?? {}).forEach(([property, messages]) => {
+    if (property in formDechet.value) {
+      fieldErrors.value[property as keyof DechetFonderiePayload] = messages[0];
+    }
+  });
+  errorMessage.value = problem?.detail || problem?.title || 'La requête a échoué.';
+};
+
+const loadTypesMatiere = async () => {
+  isLoadingTypes.value = true;
   try {
-    dechets.value = await dechetsService.getDechets();
-  } catch (err) {
-    console.error(err);
+    typesMatiere.value = (await dechetsService.getTypesMatiere()).filter((item) => item.estActif);
+    if (!formDechet.value.typeMatiereId && typesMatiere.value.length) {
+      formDechet.value.typeMatiereId = typesMatiere.value[0].id;
+    }
+  } catch (error) {
+    readApiError(error);
+  } finally {
+    isLoadingTypes.value = false;
+  }
+};
+
+const loadData = async () => {
+  isLoading.value = true;
+  errorMessage.value = '';
+  try {
+    const [listResponse, summaryResponse] = await Promise.all([
+      dechetsService.getDechetsFonderie({
+        periode: filters.value.periode,
+        typeMatiereId: filters.value.typeMatiereId || undefined,
+        typeDechet: filters.value.typeDechet || undefined,
+        page: page.value,
+        pageSize
+      }),
+      dechetsService.getResumeDechetsFonderie(filters.value.periode)
+    ]);
+    dechets.value = listResponse.items;
+    total.value = listResponse.total;
+    resume.value = summaryResponse;
+  } catch (error) {
+    readApiError(error);
   } finally {
     isLoading.value = false;
   }
 };
 
-const handleAddDechet = async () => {
-  if (isReadOnly.value) return;
-  if (!formDechet.value.dateDeclaration || formDechet.value.quantiteKg <= 0) {
-    await dialog.alert('Veuillez renseigner une date valide et un poids supérieur à 0 kg.', {
-      title: 'Saisie incomplète',
-      tone: 'warning'
-    });
-    return;
+const validateForm = (): boolean => {
+  const errors: FieldErrors = {};
+  if (!formDechet.value.dateDeclaration) errors.dateDeclaration = 'La date est obligatoire.';
+  if (!formDechet.value.typeMatiereId) errors.typeMatiereId = 'Le type matière est obligatoire.';
+  if (formDechet.value.poidsKg === null || formDechet.value.poidsKg <= 0) {
+    errors.poidsKg = 'Le poids doit être strictement supérieur à zéro.';
   }
-
-  try {
-    const payload = {
-      dateDeclaration: formDechet.value.dateDeclaration,
-      semaine: formDechet.value.semaine,
-      codeTypeMatiere: formDechet.value.codeTypeMatiere,
-      quantiteKg: formDechet.value.quantiteKg,
-      unite: 'KG' as const,
-      typeDechet: formDechet.value.typeDechet,
-      commentaire: canUseComments.value ? formDechet.value.commentaire || undefined : undefined
-    };
-
-    await dechetsService.createDechet(payload);
-    formDechet.value.quantiteKg = 0;
-    formDechet.value.commentaire = '';
-    successMessage.value = 'Déclaration de déchet enregistrée avec succès !';
-    await loadDechets();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
+  if (formDechet.value.observation.length > 500) {
+    errors.observation = 'L’observation ne peut pas dépasser 500 caractères.';
   }
+  fieldErrors.value = errors;
+  return Object.keys(errors).length === 0;
 };
 
-const handleValiderDechet = async (id: number) => {
-  try {
-    await dechetsService.updateDechet(id, { statut: 'Valide' });
-    successMessage.value = 'Déclaration de déchet validée !';
-    await loadDechets();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
-  }
+const resetEditableFields = () => {
+  formDechet.value.poidsKg = null;
+  formDechet.value.observation = '';
+  editingId.value = null;
+  fieldErrors.value = {};
 };
 
-const handleDeleteDechet = async (id: number) => {
-  if (
-    await dialog.confirm('Voulez-vous supprimer cette déclaration de déchet ?', {
-      title: 'Supprimer la déclaration',
-      tone: 'danger',
-      confirmLabel: 'Supprimer'
-    })
-  ) {
-    try {
-      await dechetsService.deleteDechet(id);
-      successMessage.value = 'Déclaration supprimée.';
-      await loadDechets();
-      setTimeout(() => (successMessage.value = ''), 4000);
-    } catch (err) {
-      console.error(err);
+const handleSubmit = async () => {
+  if (isReadOnly.value || isSubmitting.value || !validateForm()) return;
+  isSubmitting.value = true;
+  errorMessage.value = '';
+  const payload: DechetFonderiePayload = {
+    dateDeclaration: formDechet.value.dateDeclaration,
+    typeMatiereId: formDechet.value.typeMatiereId,
+    typeDechet: formDechet.value.typeDechet,
+    poidsKg: formDechet.value.poidsKg!,
+    observation: formDechet.value.observation.trim() || null
+  };
+
+  try {
+    if (editingId.value) {
+      await dechetsService.updateDechetFonderie(editingId.value, payload);
+      showSuccess('Déclaration de déchet modifiée avec succès.');
+    } else {
+      await dechetsService.createDechetFonderie(payload);
+      showSuccess('Déclaration de déchet enregistrée avec succès.');
     }
+    resetEditableFields();
+    await loadData();
+  } catch (error) {
+    readApiError(error);
+  } finally {
+    isSubmitting.value = false;
   }
 };
 
-onMounted(() => {
-  loadDechets();
+const startEdit = (row: DechetFonderieResponse) => {
+  editingId.value = row.id;
+  formDechet.value = {
+    dateDeclaration: row.dateDeclaration,
+    typeMatiereId: row.typeMatiereId,
+    typeDechet: row.typeDechet,
+    poidsKg: row.poidsKg,
+    observation: row.observation ?? ''
+  };
+  fieldErrors.value = {};
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const handleDelete = async (row: DechetFonderieResponse) => {
+  if (deletingId.value) return;
+  const confirmed = await dialog.confirm(
+    `Supprimer logiquement la déclaration du ${row.dateDeclaration} (${formatWeight(row.poidsKg)} kg) ?`,
+    { title: 'Supprimer la déclaration', tone: 'danger', confirmLabel: 'Supprimer' }
+  );
+  if (!confirmed) return;
+
+  deletingId.value = row.id;
+  try {
+    await dechetsService.deleteDechetFonderie(row.id);
+    showSuccess('Déclaration supprimée. Elle ne participe plus au résumé.');
+    if (editingId.value === row.id) resetEditableFields();
+    await loadData();
+  } catch (error) {
+    readApiError(error);
+  } finally {
+    deletingId.value = null;
+  }
+};
+
+const changePage = async (nextPage: number) => {
+  if (nextPage < 1 || nextPage > totalPages.value || nextPage === page.value) return;
+  page.value = nextPage;
+  await loadData();
+};
+
+watch(
+  filters,
+  () => {
+    page.value = 1;
+    if (filterTimer) clearTimeout(filterTimer);
+    filterTimer = setTimeout(loadData, 250);
+  },
+  { deep: true }
+);
+
+onMounted(async () => {
+  await loadTypesMatiere();
+  await loadData();
+});
+
+onBeforeUnmount(() => {
+  if (filterTimer) clearTimeout(filterTimer);
+  if (messageTimer) clearTimeout(messageTimer);
 });
 </script>
 
 <template>
   <div class="space-y-6">
-    <!-- Page Header -->
     <PageHeader
       title="Déchets Fonderie"
-      description="Déclarer et suivre les bavures, poudres et autres déchets de la fonderie."
+      description="Déclarer et suivre les bavures et poudres de la fonderie par type matière."
     />
 
-    <!-- Notifications -->
     <div
       v-if="successMessage"
-      class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3"
+      data-testid="success-message"
+      class="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800"
     >
-      <CheckCircle2 class="w-5 h-5 text-emerald-500 shrink-0" />
+      <CheckCircle2 class="h-5 w-5 shrink-0 text-emerald-500" />
       <span>{{ successMessage }}</span>
     </div>
+    <div
+      v-if="errorMessage"
+      data-testid="api-error"
+      class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
+    >
+      {{ errorMessage }}
+    </div>
 
-    <!-- Saisie form only for Admin & Responsable Fonderie -->
-    <div v-if="!isReadOnly" class="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-6">
-      <div class="flex items-center gap-2 border-b border-slate-50 pb-3">
-        <Flame class="w-4.5 h-4.5 text-blue-900" />
-        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">Saisie d'un Nouveau Déchet de Coulée</h3>
+    <section v-if="resume" aria-label="Résumé des déchets" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <article
+        v-for="item in resume.totauxParTypeMatiere"
+        :key="item.typeMatiereId"
+        class="rounded-xl border border-slate-100 bg-white p-4 shadow-sm"
+      >
+        <p class="font-mono text-xs font-black text-blue-900">{{ item.typeMatiereCode }}</p>
+        <p class="mt-2 text-xl font-black text-slate-800">{{ formatWeight(item.totalKg) }} kg</p>
+        <p class="mt-1 text-[10px] font-semibold text-slate-500">
+          Bavure {{ formatWeight(item.totalBavureKg) }} · Poudre {{ formatWeight(item.totalPoudreKg) }}
+        </p>
+      </article>
+      <article class="rounded-xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
+        <p class="text-xs font-black uppercase tracking-wider text-blue-800">Total général</p>
+        <p data-testid="summary-total" class="mt-2 text-xl font-black text-blue-950">
+          {{ formatWeight(resume.totalGeneralKg) }} kg
+        </p>
+        <p class="mt-1 text-[10px] font-semibold text-blue-700">Période {{ resume.periode }}</p>
+      </article>
+    </section>
+
+    <section v-if="!isReadOnly" class="space-y-6 rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
+      <div class="flex items-center justify-between gap-3 border-b border-slate-50 pb-3">
+        <div class="flex items-center gap-2">
+          <Flame class="h-4.5 w-4.5 text-blue-900" />
+          <h2 class="text-xs font-black uppercase tracking-wider text-slate-700">
+            {{ editingId ? 'Modifier le déchet' : 'Saisir un nouveau déchet' }}
+          </h2>
+        </div>
+        <button
+          v-if="editingId"
+          type="button"
+          class="inline-flex items-center gap-1 text-xs font-bold text-slate-500"
+          @click="resetEditableFields"
+        >
+          <X class="h-4 w-4" /> Annuler la modification
+        </button>
       </div>
 
       <form
-        @submit.prevent="handleAddDechet"
-        class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50/50 border border-slate-100 p-4 rounded-xl"
+        data-testid="waste-form"
+        class="grid grid-cols-1 gap-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:grid-cols-2 lg:grid-cols-4"
+        @submit.prevent="handleSubmit"
       >
-        <FormField id="d-date" label="Date déclaration" hint="Jour de constat du déchet." required>
+        <FormField id="d-date" label="Date déclaration" :error="fieldErrors.dateDeclaration" required>
           <input
-            type="date"
+            id="d-date"
             v-model="formDechet.dateDeclaration"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white"
+            data-testid="date-input"
+            type="date"
             required
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
           />
         </FormField>
 
-        <FormField id="d-sem" label="Semaine" hint="Numéro entre 1 et 53." required>
+        <FormField id="d-week" label="Semaine calculée" automatic>
           <input
-            type="number"
-            v-model="formDechet.semaine"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full focus:bg-white font-mono"
-            min="1"
-            max="53"
-            placeholder="26"
-            required
-          />
-        </FormField>
-
-        <FormField id="d-mat" label="Type Matière" hint="Matière concernée." required>
-          <select
-            v-model="formDechet.codeTypeMatiere"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-            required
-          >
-            <option v-for="alloy in alloysList" :key="alloy" :value="alloy">{{ alloy }}</option>
-          </select>
-        </FormField>
-
-        <FormField id="d-qte" label="Poids déchet (kg)" hint="Poids réel perdu." required>
-          <input
-            type="number"
-            v-model="formDechet.quantiteKg"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full focus:bg-white font-mono"
-            min="1"
-            step="0.5"
-            placeholder="0.00"
-            required
-          />
-        </FormField>
-
-        <FormField id="d-type-dechet" label="Type de déchet" hint="Choisir Bavure ou Poudre." required>
-          <select
-            v-model="formDechet.typeDechet"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-            required
-          >
-            <option v-for="td in typesDechetList" :key="td" :value="td">{{ td }}</option>
-          </select>
-        </FormField>
-
-        <FormField v-if="canUseComments" id="d-comment" label="Observation">
-          <input
+            id="d-week"
+            :value="semaineIso ? `S-${semaineIso}` : ''"
+            data-testid="week-input"
             type="text"
-            v-model="formDechet.commentaire"
-            class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full focus:bg-white"
-            placeholder="Ex. bavure coulée, poudre récupérée..."
+            readonly
+            class="w-full rounded-lg border border-slate-200 bg-slate-100 p-2 font-mono text-xs font-bold"
           />
+        </FormField>
+
+        <FormField id="d-material" label="Type matière" :error="fieldErrors.typeMatiereId" required>
+          <select
+            id="d-material"
+            v-model="formDechet.typeMatiereId"
+            data-testid="material-select"
+            :disabled="isLoadingTypes"
+            required
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
+          >
+            <option disabled value="">Sélectionner</option>
+            <option v-for="material in typesMatiere" :key="material.id" :value="material.id">
+              {{ material.code }} — {{ material.libelle }}
+            </option>
+          </select>
+        </FormField>
+
+        <FormField id="d-weight" label="Poids déchet (kg)" :error="fieldErrors.poidsKg" required>
+          <input
+            id="d-weight"
+            v-model.number="formDechet.poidsKg"
+            data-testid="weight-input"
+            type="number"
+            min="0.001"
+            step="0.001"
+            required
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs font-bold"
+            placeholder="0,000"
+          />
+        </FormField>
+
+        <FormField id="d-kind" label="Type de déchet" :error="fieldErrors.typeDechet" required>
+          <select
+            id="d-kind"
+            v-model="formDechet.typeDechet"
+            data-testid="kind-select"
+            required
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
+          >
+            <option v-for="kind in typesDechetList" :key="kind" :value="kind">{{ kind }}</option>
+          </select>
+        </FormField>
+
+        <FormField id="d-observation" label="Observation" :error="fieldErrors.observation">
+          <textarea
+            id="d-observation"
+            v-model="formDechet.observation"
+            data-testid="observation-input"
+            maxlength="500"
+            rows="2"
+            class="w-full resize-none rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
+            placeholder="Ex. bavures triées…"
+          ></textarea>
         </FormField>
 
         <div class="flex items-end">
           <button
+            data-testid="submit-waste"
             type="submit"
-            class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+            :disabled="isSubmitting || isLoadingTypes || !typesMatiere.length"
+            class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-900 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Plus class="w-4 h-4" />
-            Déclarer Déchet
+            <Loader2 v-if="isSubmitting" class="h-4 w-4 animate-spin" />
+            <Pencil v-else-if="editingId" class="h-4 w-4" />
+            <Plus v-else class="h-4 w-4" />
+            {{ editingId ? 'Enregistrer' : 'Déclarer le déchet' }}
           </button>
         </div>
       </form>
-    </div>
+    </section>
 
-    <!-- Declarations Table -->
-    <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-      <div class="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
-        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">
-          Registre Historique des Déchets Fonderie
-        </h3>
-        <span class="text-[10px] font-bold text-slate-400 font-mono">Déclarations : {{ dechets.length }}</span>
+    <section class="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
+      <div class="grid grid-cols-1 gap-3 border-b border-slate-100 bg-slate-50/30 p-4 sm:grid-cols-3">
+        <FormField id="filter-period" label="Période">
+          <input
+            id="filter-period"
+            v-model="filters.periode"
+            data-testid="period-filter"
+            type="month"
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
+          />
+        </FormField>
+        <FormField id="filter-material" label="Type matière">
+          <select
+            id="filter-material"
+            v-model="filters.typeMatiereId"
+            data-testid="material-filter"
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
+          >
+            <option value="">Tous</option>
+            <option v-for="material in typesMatiere" :key="material.id" :value="material.id">
+              {{ material.code }}
+            </option>
+          </select>
+        </FormField>
+        <FormField id="filter-kind" label="Type de déchet">
+          <select
+            id="filter-kind"
+            v-model="filters.typeDechet"
+            data-testid="kind-filter"
+            class="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold"
+          >
+            <option value="">Tous</option>
+            <option v-for="kind in typesDechetList" :key="kind" :value="kind">{{ kind }}</option>
+          </select>
+        </FormField>
       </div>
 
-      <div v-if="isLoading">
-        <LoadingState />
+      <div class="flex items-center justify-between border-b border-slate-50 px-6 py-4">
+        <h2 class="text-xs font-black uppercase tracking-wider text-slate-700">Historique des déchets Fonderie</h2>
+        <span class="font-mono text-[10px] font-bold text-slate-400">{{ total }} déclaration(s)</span>
       </div>
 
+      <LoadingState v-if="isLoading" />
       <div v-else class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
+        <table data-testid="waste-table" class="w-full border-collapse text-left">
           <thead>
             <tr
-              class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider"
+              class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              <th class="p-3">Date de Saisie</th>
+              <th class="p-3">Date de saisie</th>
               <th class="p-3">Semaine</th>
-              <th class="p-3">Alliage</th>
-              <th class="p-3 text-right">Poids Perdu (kg)</th>
-              <th class="p-3">Type Déchet</th>
-              <th v-if="canUseComments" class="p-3">Commentaires</th>
+              <th class="p-3">Type matière</th>
+              <th class="p-3 text-right">Poids perdu kg</th>
+              <th class="p-3">Type déchet</th>
+              <th class="p-3">Observation</th>
               <th class="p-3">Déclarant</th>
               <th class="p-3">Statut</th>
-              <th class="p-3 text-right" v-if="!isReadOnly">Actions</th>
+              <th v-if="!isReadOnly" class="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 text-xs font-medium">
-            <tr v-for="row in dechets" :key="row.id" class="hover:bg-slate-50/30 transition-colors">
+            <tr v-for="row in dechets" :key="row.id" data-testid="waste-row" class="hover:bg-slate-50/40">
               <td class="p-3 font-mono text-slate-600">{{ row.dateDeclaration }}</td>
-              <td class="p-3 font-mono text-slate-500">S-{{ row.semaine }}</td>
-              <td class="p-3 font-bold font-mono text-blue-900">{{ row.codeTypeMatiere }}</td>
-              <td class="p-3 text-right font-black font-mono text-rose-600">
-                {{ formatNumber(row.quantiteKg, 1) }} kg
-              </td>
+              <td class="p-3 font-mono text-slate-500">S-{{ row.semaineIso }}</td>
+              <td class="p-3 font-mono font-bold text-blue-900">{{ row.typeMatiereCode }}</td>
+              <td class="p-3 text-right font-mono font-black text-rose-600">{{ formatWeight(row.poidsKg) }} kg</td>
               <td class="p-3">
                 <span
-                  class="px-2 py-1 rounded text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-100 uppercase tracking-wider"
-                  >{{ row.typeDechet || 'Non défini' }}</span
+                  class="rounded border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-extrabold uppercase text-blue-800"
+                  >{{ row.typeDechet }}</span
                 >
               </td>
-              <td
-                v-if="canUseComments"
-                class="p-3 text-slate-500 text-[11px] leading-relaxed max-w-xs truncate"
-                :title="row.commentaire"
-              >
-                {{ row.commentaire || 'Aucun détail' }}
+              <td class="max-w-xs truncate p-3 text-[11px] text-slate-500" :title="row.observation ?? ''">
+                {{ row.observation || '—' }}
               </td>
-              <td class="p-3 text-slate-500 text-[10px] font-bold uppercase tracking-wider">{{ row.utilisateur }}</td>
-              <td class="p-3">
-                <BadgeStatus :status="row.statut" />
+              <td class="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                {{ row.declarant || 'Non renseigné' }}
               </td>
-              <td class="p-3 text-right" v-if="!isReadOnly">
-                <div class="inline-flex gap-2">
+              <td class="p-3"><BadgeStatus :status="row.statut" /></td>
+              <td v-if="!isReadOnly" class="p-3 text-right">
+                <div class="inline-flex gap-1">
                   <button
-                    v-if="row.statut === 'Brouillon'"
-                    @click="handleValiderDechet(row.id)"
-                    class="px-2 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 rounded text-[10px] font-extrabold cursor-pointer"
+                    type="button"
+                    :aria-label="`Modifier ${row.id}`"
+                    data-testid="edit-waste"
+                    class="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-700"
+                    @click="startEdit(row)"
                   >
-                    Valider
+                    <Pencil class="h-3.5 w-3.5" />
                   </button>
                   <button
-                    @click="handleDeleteDechet(row.id)"
-                    class="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                    type="button"
+                    :aria-label="`Supprimer ${row.id}`"
+                    data-testid="delete-waste"
+                    :disabled="deletingId === row.id"
+                    class="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                    @click="handleDelete(row)"
                   >
-                    <Trash2 class="w-3.5 h-3.5" />
+                    <Loader2 v-if="deletingId === row.id" class="h-3.5 w-3.5 animate-spin" /><Trash2
+                      v-else
+                      class="h-3.5 w-3.5"
+                    />
                   </button>
                 </div>
               </td>
             </tr>
             <tr v-if="!dechets.length">
               <td
-                :colspan="canUseComments ? 10 : 9"
-                class="p-6 text-center text-slate-400 font-bold uppercase tracking-wider"
+                :colspan="isReadOnly ? 8 : 9"
+                class="p-8 text-center text-xs font-bold uppercase tracking-wider text-slate-400"
               >
-                Aucune déclaration enregistrée
+                Aucune déclaration pour ces filtres
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+
+      <div
+        v-if="totalPages > 1"
+        class="flex items-center justify-end gap-3 border-t border-slate-100 px-4 py-3 text-xs font-semibold text-slate-600"
+      >
+        <button
+          type="button"
+          :disabled="page === 1"
+          class="rounded border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+          @click="changePage(page - 1)"
+        >
+          Précédent
+        </button>
+        <span>Page {{ page }} / {{ totalPages }}</span>
+        <button
+          type="button"
+          :disabled="page === totalPages"
+          class="rounded border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+          @click="changePage(page + 1)"
+        >
+          Suivant
+        </button>
+      </div>
+    </section>
   </div>
 </template>
