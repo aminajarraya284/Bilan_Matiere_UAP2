@@ -70,9 +70,23 @@ public sealed class ApplicationUseCaseTests
         var response = await fixture.Service.GetResumeAsync(new("2026-06"), default);
 
         Assert.Equal(35m, response.TotalGeneralKg);
-        var m3000 = Assert.Single(response.TotauxParTypeMatiere.Where(item => item.TypeMatiereId == fixture.M3000.Id));
+        var m3000 = Assert.Single(response.TotauxParTypeMatiere, item => item.TypeMatiereId == fixture.M3000.Id);
         Assert.Equal(10m, m3000.TotalBavureKg);
         Assert.Equal(20m, m3000.TotalPoudreKg);
+        var m3010 = Assert.Single(response.TotauxParTypeMatiere, item => item.TypeMatiereCode == "M3010L0");
+        Assert.Equal(5m, m3010.TotalBavureKg);
+        Assert.Equal(0m, m3010.TotalPoudreKg);
+    }
+
+    [Fact]
+    public async Task GetResume_PeriodeSansDonnees_RetourneUneListeVide()
+    {
+        var fixture = CreateWasteFixture();
+
+        var response = await fixture.Service.GetResumeAsync(new("2030-01"), default);
+
+        Assert.Empty(response.TotauxParTypeMatiere);
+        Assert.Equal(0m, response.TotalGeneralKg);
     }
 
     [Fact]
