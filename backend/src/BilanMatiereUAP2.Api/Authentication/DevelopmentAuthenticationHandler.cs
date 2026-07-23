@@ -12,7 +12,7 @@ public sealed class DevelopmentAuthenticationHandler(
     IWebHostEnvironment environment,
     IConfiguration configuration) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-    public const string Scheme = "Development";
+    public const string SchemeName = "Development";
     private static readonly string[] AllowedRoles = ["Admin", "ResponsableFonderie", "ResponsableUsinage2"];
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -39,8 +39,8 @@ public sealed class DevelopmentAuthenticationHandler(
             new Claim(ClaimTypes.Name, userName),
             new Claim(ClaimTypes.Role, role)
         };
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));
-        var ticket = new AuthenticationTicket(principal, Scheme);
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
+        var ticket = new AuthenticationTicket(principal, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
 }

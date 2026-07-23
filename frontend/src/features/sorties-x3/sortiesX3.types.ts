@@ -28,4 +28,49 @@ export interface ConsommationsImportResult {
   mouvementCount: number;
   encoursCount: number;
   unmatchedCount: number;
+  consommations: ConsommationComposant[];
+}
+
+export interface ConsommationComposant {
+  id: string;
+  dateImputation: string;
+  numeroOF: string;
+  articlePrincipal: string;
+  designationPrincipale: string | null;
+  composantId: string;
+  codeComposant: string;
+  /** Valeur issue de MVTSTOTRSVCR.Code — représente le type matière, pas l'article de l'OF. */
+  codeTypeMatiere: string;
+  designationComposant: string | null;
+  unite: string;
+  sommeQuantiteX3Signee: number;
+  consommation: number;
+  statut: string;
+  importBatchId: string;
+}
+
+export interface PagedConsommationsComposantsResponse {
+  items: ConsommationComposant[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ImportX3Response {
+  importBatchId: string;
+  statut: string;
+  estDoublon: boolean;
+  encoursProduct: {
+    lignesLues: number;
+    lignesValides: number;
+    lignesIgnorees: number;
+  };
+  mouvementsStock: {
+    lignesLues: number;
+    lignesValides: number;
+    lignesIgnorees: number;
+  };
+  sortiesGenerees: number;
+  nombreAnomalies: number;
+  consommations: ConsommationComposant[];
 }
