@@ -27,8 +27,6 @@ public sealed record ConsommationComposantResponse(
     string NumeroOF,
     string ArticlePrincipal,
     string? DesignationPrincipale,
-    Guid ComposantId,
-    string CodeComposant,
     string CodeTypeMatiere,
     string? DesignationComposant,
     string Unite,

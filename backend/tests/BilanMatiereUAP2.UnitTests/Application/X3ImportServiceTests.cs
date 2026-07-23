@@ -197,9 +197,9 @@ public sealed class X3ImportServiceTests
 
         Assert.Equal(2, response.SortiesGenerees);
         Assert.Equal(2, response.Consommations.Count);
-        Assert.Contains(response.Consommations, c => c.CodeComposant == "M3000L0");
-        Assert.Contains(response.Consommations, c => c.CodeComposant == "M3060L0");
-        Assert.DoesNotContain(response.Consommations, c => c.CodeComposant == "AUTRE99");
+        Assert.Contains(response.Consommations, c => c.CodeTypeMatiere == "M3000L0");
+        Assert.Contains(response.Consommations, c => c.CodeTypeMatiere == "M3060L0");
+        Assert.DoesNotContain(response.Consommations, c => c.CodeTypeMatiere == "AUTRE99");
     }
 
     private sealed class FakeEncoursReader(IReadOnlyList<EncoursProductRow> rows) : IEncoursProductReader
@@ -216,16 +216,17 @@ public sealed class X3ImportServiceTests
 
     private sealed class FakeX3ImportRepository : IX3ImportRepository
     {
-        public Task<ImportX3Batch?> GetBatchByPairHashAsync(string pairHash, CancellationToken cancellationToken) => Task.FromResult<ImportX3Batch?>(null);
+        public Task<ImportX3Batch?> GetCompletedBatchByPairHashAsync(string pairHash, CancellationToken cancellationToken) => Task.FromResult<ImportX3Batch?>(null);
         public Task<ImportX3Batch?> GetBatchByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<ImportX3Batch?>(null);
         public Task<IReadOnlyList<ImportX3Anomaly>> GetAnomaliesAsync(Guid batchId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ImportX3Anomaly>>([]);
         public Task<IReadOnlyDictionary<string, X3OrdreFabrication>> GetOrdresByNumeroAsync(IReadOnlyCollection<string> numerosOF, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyDictionary<string, X3OrdreFabrication>>(new Dictionary<string, X3OrdreFabrication>());
         public Task<X3OrdreFabrication?> GetOrdreContexteAsync(string numeroOF, CancellationToken cancellationToken) => Task.FromResult<X3OrdreFabrication?>(null);
-        public Task<IReadOnlyDictionary<string, Composant>> GetComposantsByCodeAsync(IReadOnlyCollection<string> codes, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyDictionary<string, Composant>>(new Dictionary<string, Composant>());
+        public Task<IReadOnlyDictionary<string, ConsommationComposant>> GetConsommationsByCleMetierAsync(IReadOnlyCollection<string> clesMetier, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyDictionary<string, ConsommationComposant>>(new Dictionary<string, ConsommationComposant>());
         public Task<PagedResult<ConsommationComposant>> GetConsommationsAsync(ConsommationsComposantsFilter filter, CancellationToken cancellationToken) => Task.FromResult(new PagedResult<ConsommationComposant>([], 0));
         public Task AddBatchAsync(ImportX3Batch batch, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task AddOrdresAsync(IEnumerable<X3OrdreFabrication> ordres, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task AddComposantsAsync(IEnumerable<Composant> composants, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task AddConsommationsAsync(IEnumerable<ConsommationComposant> consommations, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeDateTimeProvider : IDateTimeProvider

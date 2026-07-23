@@ -14,13 +14,13 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<ImportX3Anomaly> ImportX3Anomalies => Set<ImportX3Anomaly>();
     public DbSet<X3OrdreFabrication> OrdresFabrication => Set<X3OrdreFabrication>();
     public DbSet<X3OperationOF> OperationsOF => Set<X3OperationOF>();
-    public DbSet<Composant> Composants => Set<Composant>();
-    public DbSet<X3MouvementStock> MouvementsStockX3 => Set<X3MouvementStock>();
     public DbSet<ConsommationComposant> ConsommationsComposants => Set<ConsommationComposant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BilanMatiereUAP2DbContext).Assembly);
+        modelBuilder.Ignore<X3MouvementStock>();
+        modelBuilder.Ignore<Composant>();
         base.OnModelCreating(modelBuilder);
     }
 }

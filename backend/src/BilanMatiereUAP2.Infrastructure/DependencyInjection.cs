@@ -22,7 +22,7 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString));
         services.AddScoped<ITypeMatiereRepository, TypeMatiereRepository>();
         services.AddScoped<IDechetFonderieRepository, DechetFonderieRepository>();
-        services.AddScoped<IX3ImportRepository, InMemoryX3ImportRepository>();
+        services.AddScoped<IX3ImportRepository, X3ImportRepository>();
         services.AddScoped<IEncoursProductReader, EncoursProductExcelReader>();
         services.AddScoped<IMouvementStockX3Reader, MouvementsStockX3ExcelReader>();
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<BilanMatiereUAP2DbContext>());

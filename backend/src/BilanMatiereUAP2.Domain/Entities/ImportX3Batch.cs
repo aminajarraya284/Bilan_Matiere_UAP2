@@ -78,7 +78,9 @@ public sealed class ImportX3Batch
         int lignesEncoursValides,
         int lignesMouvementsLues,
         int lignesMouvementsValides,
-        DateTime dateFinUtc)
+        DateTime dateFinUtc,
+        int? nombreSortiesGenerees = null,
+        int? nombreAnomalies = null)
     {
         if (dateFinUtc < DateCreationUtc)
         {
@@ -89,8 +91,8 @@ public sealed class ImportX3Batch
         LignesEncoursValides = ValiderCompteur(lignesEncoursValides);
         LignesMouvementsLues = ValiderCompteur(lignesMouvementsLues);
         LignesMouvementsValides = ValiderCompteur(lignesMouvementsValides);
-        NombreSortiesGenerees = Consommations.Count;
-        NombreAnomalies = Anomalies.Count;
+        NombreSortiesGenerees = nombreSortiesGenerees ?? Consommations.Count;
+        NombreAnomalies = nombreAnomalies ?? Anomalies.Count;
         Statut = NombreAnomalies == 0
             ? StatutRapprochementX3.Rapproche
             : StatutRapprochementX3.ImportPartiel;

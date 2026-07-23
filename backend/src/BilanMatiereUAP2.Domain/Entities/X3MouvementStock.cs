@@ -84,8 +84,6 @@ public sealed class X3MouvementStock
     public string? StatutX3 { get; private set; }
     public Guid? OrdreFabricationId { get; private set; }
     public X3OrdreFabrication? OrdreFabrication { get; private set; }
-    public Guid? ComposantId { get; private set; }
-    public Composant? Composant { get; private set; }
     public StatutRapprochementX3 StatutRapprochement { get; private set; }
     public DateTime DateCreationUtc { get; private set; }
 
@@ -138,11 +136,9 @@ public sealed class X3MouvementStock
 
     public void DefinirRapprochement(
         Guid? ordreFabricationId,
-        Guid? composantId,
         StatutRapprochementX3 statut)
     {
         OrdreFabricationId = ordreFabricationId;
-        ComposantId = composantId;
         StatutRapprochement = statut;
     }
 }
