@@ -29,6 +29,7 @@ public sealed record ConsommationComposantResponse(
     string? DesignationPrincipale,
     Guid ComposantId,
     string CodeComposant,
+    string CodeTypeMatiere,
     string? DesignationComposant,
     string Unite,
     decimal SommeQuantiteX3Signee,

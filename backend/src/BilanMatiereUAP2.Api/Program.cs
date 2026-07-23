@@ -6,6 +6,7 @@ using BilanMatiereUAP2.Api.Middleware;
 using BilanMatiereUAP2.Api.Services;
 using BilanMatiereUAP2.Application;
 using BilanMatiereUAP2.Application.Abstractions;
+using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -22,17 +23,18 @@ builder.Host.UseSerilog((_, loggerConfiguration) =>
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.Configure<ImportX3Options>(builder.Configuration.GetSection(ImportX3Options.SectionName));
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
 builder.Services
     .AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = DevelopmentAuthenticationHandler.Scheme;
-        options.DefaultChallengeScheme = DevelopmentAuthenticationHandler.Scheme;
+        options.DefaultAuthenticateScheme = DevelopmentAuthenticationHandler.SchemeName;
+        options.DefaultChallengeScheme = DevelopmentAuthenticationHandler.SchemeName;
     })
     .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthenticationHandler>(
-        DevelopmentAuthenticationHandler.Scheme,
+        DevelopmentAuthenticationHandler.SchemeName,
         _ => { });
 builder.Services.AddAuthorization(options =>
 {
@@ -42,6 +44,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.ManageDechetsFonderie, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
+    options.AddPolicy(AuthorizationPolicies.ManageImportsX3, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

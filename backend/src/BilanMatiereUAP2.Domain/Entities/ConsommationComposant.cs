@@ -55,6 +55,7 @@ public sealed class ConsommationComposant
     public Guid ComposantId { get; private set; }
     public Composant Composant { get; private set; } = null!;
     public string CodeComposant { get; private set; } = string.Empty;
+    public string CodeTypeMatiere => CodeComposant;
     public string? DesignationComposant { get; private set; }
     public string Unite { get; private set; } = string.Empty;
     public decimal SommeQuantiteX3Signee { get; private set; }

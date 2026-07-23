@@ -39,6 +39,8 @@ export interface ConsommationComposant {
   designationPrincipale: string | null;
   composantId: string;
   codeComposant: string;
+  /** Valeur issue de MVTSTOTRSVCR.Code — représente le type matière, pas l'article de l'OF. */
+  codeTypeMatiere: string;
   designationComposant: string | null;
   unite: string;
   sommeQuantiteX3Signee: number;

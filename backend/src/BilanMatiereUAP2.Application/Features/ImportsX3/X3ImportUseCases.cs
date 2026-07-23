@@ -186,7 +186,8 @@ public sealed class X3ImportService(
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(X3ImportParsing.NormaliserCode(row.Code)))
+            var normalizedCode = X3ImportParsing.NormaliserCode(row.Code);
+            if (string.IsNullOrWhiteSpace(normalizedCode) || !EstTypeMatiereAutorise(normalizedCode))
             {
                 continue;
             }
@@ -242,7 +243,6 @@ public sealed class X3ImportService(
                 continue;
             }
 
-            var normalizedCode = X3ImportParsing.NormaliserCode(row.Code);
             if (string.IsNullOrWhiteSpace(normalizedCode))
             {
                 AjouterAnomalieMouvement(
@@ -455,12 +455,26 @@ public sealed class X3ImportService(
     private static bool EstSortieMatiere(MouvementStockX3Row row)
     {
         return X3ImportParsing.NormaliserEntete(row.Transaction) == "sortieof" &&
-               X3ImportParsing.NormaliserEntete(row.TypePiece) == "suivimatiere";
+               X3ImportParsing.NormaliserEntete(row.TypePiece) == "suivimatiere" &&
+               X3ImportParsing.EstNumeroOF(row.PieceOrigine);
     }
 
     private static bool EstUniteConservee(string? unite)
     {
         return X3ImportParsing.NormaliserCode(unite) is "UN" or "KG" or "BA" or "M" or "LI";
+    }
+
+    private static readonly HashSet<string> TypesMatiereAutorises = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "M3000L0",
+        "M3010L0",
+        "M3060L0"
+    };
+
+    private static bool EstTypeMatiereAutorise(string? code)
+    {
+        var normalized = X3ImportParsing.NormaliserCode(code);
+        return !string.IsNullOrEmpty(normalized) && TypesMatiereAutorises.Contains(normalized);
     }
 
     private static ImportX3Response ToImportResponse(ImportX3Batch batch, bool duplicate)
@@ -506,6 +520,7 @@ public sealed class X3ImportService(
             entity.DesignationPrincipale,
             entity.ComposantId,
             entity.CodeComposant,
+            entity.CodeTypeMatiere,
             entity.DesignationComposant,
             entity.Unite,
             entity.SommeQuantiteX3Signee,
