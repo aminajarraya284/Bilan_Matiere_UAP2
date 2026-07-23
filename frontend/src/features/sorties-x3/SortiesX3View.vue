@@ -7,9 +7,10 @@ import ProgressSteps from '@/components/ui/ProgressSteps.vue';
 import { useAppToast } from '@/composables/useAppToast';
 import { formatNumber } from '@/utils/formatters';
 import { sortiesX3Service } from './sortiesX3.service';
-import type { SortieX3Mouvement } from './sortiesX3.types';
+import type { ConsommationComposant } from './sortiesX3.types';
 
-const mouvements = ref<SortieX3Mouvement[]>([]);
+const mouvements = ref<ConsommationComposant[]>([]);
+const total = ref(0);
 const mouvementFile = ref<File | null>(null);
 const encoursFile = ref<File | null>(null);
 const isLoading = ref(true);
@@ -21,7 +22,9 @@ const toast = useAppToast();
 const loadMouvements = async () => {
   isLoading.value = true;
   try {
-    mouvements.value = await sortiesX3Service.getMouvements();
+    const response = await sortiesX3Service.getMouvements();
+    mouvements.value = response.items;
+    total.value = response.total;
   } catch (error) {
     console.error(error);
     toast.error('Le chargement des consommations composants a échoué.');
@@ -47,11 +50,12 @@ const handleImport = async () => {
   try {
     const result = await sortiesX3Service.importExcelFiles(mouvementFile.value, encoursFile.value);
     unmatchedCount.value = result.unmatchedCount;
+    mouvements.value = result.consommations;
+    total.value = result.consommations.length;
     toast.success(
       `${result.successCount} consommation(s) par OF générée(s)` +
         (result.unmatchedCount ? `, ${result.unmatchedCount} mouvement(s) sans correspondance.` : '.')
     );
-    await loadMouvements();
   } catch (error) {
     console.error(error);
     toast.error(error instanceof Error ? error.message : 'Le rapprochement des deux fichiers a échoué.');
@@ -64,7 +68,7 @@ const handleRefresh = async () => {
   isRefreshing.value = true;
   try {
     await loadMouvements();
-    toast.success(`${mouvements.value.length} consommation(s) disponible(s).`);
+    toast.success(`${total.value} consommation(s) disponible(s).`);
   } finally {
     isRefreshing.value = false;
   }
@@ -186,7 +190,7 @@ onMounted(loadMouvements);
           <p class="mt-1 text-[11px] text-slate-500">Résultat consolidé issu des deux fichiers Excel.</p>
         </div>
         <div class="flex items-center gap-3">
-          <span class="font-mono text-xs text-slate-500">{{ mouvements.length }} ligne(s)</span>
+          <span class="font-mono text-xs text-slate-500">{{ total }} ligne(s)</span>
           <button
             class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             :disabled="isRefreshing"
@@ -206,24 +210,30 @@ onMounted(loadMouvements);
               <th class="p-3">Date</th>
               <th class="p-3">OF</th>
               <th class="p-3">Article</th>
-              <th class="p-3">Désignation</th>
-              <th class="p-3">Type matière</th>
-              <th class="p-3 text-right">Sortie MP</th>
+              <th class="p-3">Désignation article</th>
+              <th class="p-3">Code composant</th>
+              <th class="p-3">Désignation composant</th>
+              <th class="p-3">Unité</th>
+              <th class="p-3 text-right">Quantité signée</th>
+              <th class="p-3 text-right">Consommation</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr v-for="move in mouvements" :key="move.id" class="hover:bg-slate-50/50">
-              <td class="p-3 font-mono text-slate-600">{{ formatDate(move.dateMouvement) }}</td>
+              <td class="p-3 font-mono text-slate-600">{{ formatDate(move.dateImputation) }}</td>
               <td class="p-3 font-mono font-bold text-slate-900">{{ move.numeroOF }}</td>
-              <td class="p-3 font-mono text-blue-900">{{ move.codeArticle }}</td>
-              <td class="p-3 text-slate-600">{{ move.designationArticle || '—' }}</td>
-              <td class="p-3 font-mono font-bold text-emerald-700">{{ move.codeTypeMatiere || '—' }}</td>
+              <td class="p-3 font-mono text-blue-900">{{ move.articlePrincipal }}</td>
+              <td class="p-3 text-slate-600">{{ move.designationPrincipale || '—' }}</td>
+              <td class="p-3 font-mono font-bold text-emerald-700">{{ move.codeComposant || '—' }}</td>
+              <td class="p-3 text-slate-600">{{ move.designationComposant || '—' }}</td>
+              <td class="p-3 font-mono">{{ move.unite }}</td>
+              <td class="p-3 text-right font-mono">{{ formatNumber(move.sommeQuantiteX3Signee, 2) }}</td>
               <td class="p-3 text-right font-mono font-black text-blue-900">
-                {{ formatNumber(move.sortieMP, 2) }}
+                {{ formatNumber(move.consommation, 2) }}
               </td>
             </tr>
             <tr v-if="!mouvements.length">
-              <td colspan="6" class="p-8 text-center text-slate-500">
+              <td colspan="9" class="p-8 text-center text-slate-500">
                 Importez les deux fichiers Excel pour générer les consommations.
               </td>
             </tr>
