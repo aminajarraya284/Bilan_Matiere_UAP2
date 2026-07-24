@@ -168,6 +168,50 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.ToTable("DechetsFonderie", (string)null);
                 });
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CreeParNom")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("CreeParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("DateCreationUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateFinUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("HashFichierSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ProfilImport")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Statut")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TypeImport")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HashFichierSha256");
+
+                    b.HasIndex("ProfilImport");
+
+                    b.HasIndex("TypeImport");
+
+                    b.ToTable("ImportBatches", (string)null);
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.ImportX3Anomaly", b =>
                 {
                     b.Property<Guid>("Id")
@@ -311,6 +355,142 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.HasIndex("ImportBatchId");
 
                     b.ToTable("ImportX3Files", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefGammeFabrication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AlternativeGamme")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("CleMetier")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CodeArticle")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CodePoste")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NumeroOperation")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("SourceUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CleMetier")
+                        .IsUnique();
+
+                    b.HasIndex("CodeArticle");
+
+                    b.HasIndex("ImportBatchId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("NumeroOperation");
+
+                    b.ToTable("RefGammesFabrication", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefNomenclature", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AlternativeNomenclature")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("CleMetier")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CodeArticleParent")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CodeComposant")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CodeParentNiveau")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Niveau")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Sequence")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("SourceUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CleMetier")
+                        .IsUnique();
+
+                    b.HasIndex("CodeArticleParent");
+
+                    b.HasIndex("CodeComposant");
+
+                    b.HasIndex("ImportBatchId");
+
+                    b.HasIndex("IsActive");
+
+                    b.ToTable("RefNomenclatures", (string)null);
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.TypeMatiere", b =>
@@ -547,6 +727,24 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ImportBatch");
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefGammeFabrication", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.ImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefNomenclature", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.ImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.X3OperationOF", b =>

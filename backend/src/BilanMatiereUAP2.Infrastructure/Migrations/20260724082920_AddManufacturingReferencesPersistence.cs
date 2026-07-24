@@ -1,12 +1,14 @@
-using System;
+﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace BilanMatiereUAP2.Infrastructure.Migrations
 {
+    /// <inheritdoc />
     public partial class AddManufacturingReferencesPersistence : Migration
     {
+        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -15,11 +17,11 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     HashFichierSha256 = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    TypeImport = table.Column<string>(type: "nvarchar(30)", maxLength: 30, nullable: false),
+                    TypeImport = table.Column<int>(type: "int", nullable: false),
                     ProfilImport = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    Statut = table.Column<string>(type: "nvarchar(30)", maxLength: 30, nullable: false),
+                    Statut = table.Column<int>(type: "int", nullable: false),
                     CreeParUtilisateurId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    CreeParNom = table.Column<string>(type: "nvarchar(150)", maxLength: 150, nullable: true),
+                    CreeParNom = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     DateCreationUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
                     DateFinUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
@@ -90,14 +92,14 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                 column: "HashFichierSha256");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ImportBatches_TypeImport",
-                table: "ImportBatches",
-                column: "TypeImport");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ImportBatches_ProfilImport",
                 table: "ImportBatches",
                 column: "ProfilImport");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ImportBatches_TypeImport",
+                table: "ImportBatches",
+                column: "TypeImport");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefGammesFabrication_CleMetier",
@@ -111,9 +113,9 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                 column: "CodeArticle");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RefGammesFabrication_NumeroOperation",
+                name: "IX_RefGammesFabrication_ImportBatchId",
                 table: "RefGammesFabrication",
-                column: "NumeroOperation");
+                column: "ImportBatchId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefGammesFabrication_IsActive",
@@ -121,9 +123,9 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                 column: "IsActive");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RefGammesFabrication_ImportBatchId",
+                name: "IX_RefGammesFabrication_NumeroOperation",
                 table: "RefGammesFabrication",
-                column: "ImportBatchId");
+                column: "NumeroOperation");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefNomenclatures_CleMetier",
@@ -142,21 +144,27 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                 column: "CodeComposant");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RefNomenclatures_IsActive",
-                table: "RefNomenclatures",
-                column: "IsActive");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_RefNomenclatures_ImportBatchId",
                 table: "RefNomenclatures",
                 column: "ImportBatchId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RefNomenclatures_IsActive",
+                table: "RefNomenclatures",
+                column: "IsActive");
         }
 
+        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "RefGammesFabrication");
-            migrationBuilder.DropTable(name: "RefNomenclatures");
-            migrationBuilder.DropTable(name: "ImportBatches");
+            migrationBuilder.DropTable(
+                name: "RefGammesFabrication");
+
+            migrationBuilder.DropTable(
+                name: "RefNomenclatures");
+
+            migrationBuilder.DropTable(
+                name: "ImportBatches");
         }
     }
 }

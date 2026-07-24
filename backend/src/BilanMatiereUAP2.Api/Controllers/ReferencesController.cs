@@ -19,7 +19,8 @@ public sealed class ReferencesController : ControllerBase
 
     [HttpPost("/api/v1/references/gammes/import")]
     [Authorize(Policy = AuthorizationPolicies.ManageReferences)]
-    public async Task<IActionResult> ImportGammes([FromForm] IFormFile file, [FromQuery] string? profilImport, [FromQuery] string? sourceSystem, [FromQuery] bool isCompleteExport = false)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ImportGammes(IFormFile file, [FromQuery] string? profilImport, [FromQuery] string? sourceSystem, [FromQuery] bool isCompleteExport = false)
     {
         if (file is null) return BadRequest("File is required.");
         using var stream = file.OpenReadStream();
@@ -29,7 +30,8 @@ public sealed class ReferencesController : ControllerBase
 
     [HttpPost("/api/v1/references/nomenclatures/import")]
     [Authorize(Policy = AuthorizationPolicies.ManageReferences)]
-    public async Task<IActionResult> ImportNomenclatures([FromForm] IFormFile file, [FromQuery] string? profilImport, [FromQuery] string? sourceSystem, [FromQuery] bool isCompleteExport = false)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ImportNomenclatures(IFormFile file, [FromQuery] string? profilImport, [FromQuery] string? sourceSystem, [FromQuery] bool isCompleteExport = false)
     {
         if (file is null) return BadRequest("File is required.");
         using var stream = file.OpenReadStream();
