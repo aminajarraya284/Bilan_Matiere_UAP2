@@ -1,5 +1,17 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+// Imports "?raw" (geres par Vite) plutot que node:fs : en environnement jsdom,
+// node:fs est externalise comme un stub navigateur sans implementation, et cet
+// environnement doit rester jsdom pour que testDataRepository (localStorage) fonctionne.
+import datasetSourceRaw from '@/mocks/sopalTestDataset.ts?raw';
+import calculationSourceRaw from './bilanCalculation.service.ts?raw';
+import testDataSourceRaw from '@/data/testData.ts?raw';
+import receptionsServiceSourceRaw from '@/features/receptions-usinage2/receptions.service.ts?raw';
+import receptionsUsinage2ViewSourceRaw from '@/features/receptions-usinage2/ReceptionsUsinage2View.vue?raw';
+import alertesViewSourceRaw from '@/features/alertes/AlertesView.vue?raw';
+import exporterSourceRaw from '@/features/rapports/exporter.ts?raw';
+import x3ImporterSourceRaw from '@/features/imports/X3Importer.vue?raw';
+import dashboardViewSourceRaw from '@/features/dashboard/DashboardView.vue?raw';
+import bilanMatiereViewSourceRaw from '@/features/bilan-matiere/BilanMatiereView.vue?raw';
 import { sopalTestDataset, type SopalTestDataset } from '@/mocks/sopalTestDataset';
 import {
   buildReceptionDefaults,
@@ -15,8 +27,8 @@ import {
 } from './bilanCalculation.service';
 import { testDataRepository } from './testDataRepository.service';
 
-const datasetSource = readFileSync('src/mocks/sopalTestDataset.ts', 'utf-8');
-const calculationSource = readFileSync('src/services/bilanCalculation.service.ts', 'utf-8');
+const datasetSource = datasetSourceRaw;
+const calculationSource = calculationSourceRaw;
 
 const existingOF = new Set(sopalTestDataset.x3OrdresFabrication.map((item) => item.numeroOF));
 const existingArticles = new Set(sopalTestDataset.x3OrdresFabrication.map((item) => item.codeArticleParent));
@@ -251,12 +263,12 @@ describe('SOPAL coherent test dataset calculations', () => {
   it('uses numeroOF everywhere in mock-facing code, not legacy numOf or numeroOf', () => {
     const mockFacingSources = [
       datasetSource,
-      readFileSync('src/data/testData.ts', 'utf-8'),
-      readFileSync('src/features/receptions-usinage2/receptions.service.ts', 'utf-8'),
-      readFileSync('src/features/receptions-usinage2/ReceptionsUsinage2View.vue', 'utf-8'),
-      readFileSync('src/features/alertes/AlertesView.vue', 'utf-8'),
-      readFileSync('src/features/rapports/exporter.ts', 'utf-8'),
-      readFileSync('src/features/imports/X3Importer.vue', 'utf-8')
+      testDataSourceRaw,
+      receptionsServiceSourceRaw,
+      receptionsUsinage2ViewSourceRaw,
+      alertesViewSourceRaw,
+      exporterSourceRaw,
+      x3ImporterSourceRaw
     ].join('\n');
 
     expect(mockFacingSources).not.toContain('numOf');
@@ -264,9 +276,9 @@ describe('SOPAL coherent test dataset calculations', () => {
   });
 
   it('does not hard-code important mock KPI values directly inside Vue views', () => {
-    const dashboardView = readFileSync('src/features/dashboard/DashboardView.vue', 'utf-8');
-    const bilanView = readFileSync('src/features/bilan-matiere/BilanMatiereView.vue', 'utf-8');
-    const receptionsView = readFileSync('src/features/receptions-usinage2/ReceptionsUsinage2View.vue', 'utf-8');
+    const dashboardView = dashboardViewSourceRaw;
+    const bilanView = bilanMatiereViewSourceRaw;
+    const receptionsView = receptionsUsinage2ViewSourceRaw;
     const viewSource = `${dashboardView}\n${bilanView}\n${receptionsView}`;
 
     ['1455', '1560', 'MVTSTOCKSVCR_REEL'].forEach((literal) => {
