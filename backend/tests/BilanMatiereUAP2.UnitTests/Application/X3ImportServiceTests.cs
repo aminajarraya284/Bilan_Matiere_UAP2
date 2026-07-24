@@ -5,6 +5,7 @@ using BilanMatiereUAP2.Contracts.ImportsX3;
 using BilanMatiereUAP2.Domain.Entities;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.Extensions.Options;
 
 namespace BilanMatiereUAP2.UnitTests.Application;
 
@@ -187,7 +188,8 @@ public sealed class X3ImportServiceTests
             repository,
             currentUser,
             dateTimeProvider,
-            validator);
+            validator,
+            Options.Create(new ImportX3Options()));
 
         var command = new ImportSortiesMatiereX3Command(
             new X3ImportFileContent("Encours.xlsx", 100, [1, 2, 3]),

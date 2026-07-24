@@ -280,7 +280,7 @@ internal static class ExcelWorkbook
         {
             throw;
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException or ExcelDataReader.Exceptions.HeaderException)
         {
             throw new ImportFileException("Le classeur Excel est illisible.");
         }

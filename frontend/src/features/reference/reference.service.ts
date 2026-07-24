@@ -50,6 +50,72 @@ export type ReferenceImportResult<T> = {
 type RawRow = unknown[];
 type ColumnAliases = Record<string, string[]>;
 
+// Contrats renvoyes par l'API reelle (voir backend ReferencesController + PagedResponse<T>).
+type PagedResponse<T> = { items: T[]; total: number };
+
+type GammeApiResponse = {
+  codeArticle: string;
+  alternativeGamme: string | null;
+  numeroOperation: string;
+  codePoste: string;
+  cleMetier: string;
+  isActive: boolean;
+};
+
+type NomenclatureApiResponse = {
+  codeArticleParent: string;
+  alternativeNomenclature: string | null;
+  codeParentNiveau: string;
+  codeComposant: string;
+  niveau: string;
+  sequence: string;
+  cleMetier: string;
+  isActive: boolean;
+};
+
+const useRealApi = (): boolean => import.meta.env.VITE_USE_REAL_API === 'true';
+
+// Nombre de lignes recuperees en une passe quand l'API reelle est active
+// (la vue pagine ensuite cote client par tranches de 100).
+const API_FETCH_PAGE_SIZE = 1000;
+
+const toGammeReferenceFromApi = (gamme: GammeApiResponse, index: number): GammeReference => ({
+  id: index + 1,
+  codeArticle: gamme.codeArticle,
+  designationArticle: '',
+  atelier: gamme.codePoste,
+  poste: gamme.codePoste,
+  groupePosteCharge: '',
+  numeroOperation: gamme.numeroOperation,
+  designationOperation: '',
+  alternative: gamme.alternativeGamme ?? '',
+  dateFinValidite: '',
+  source: 'API',
+  statut: gamme.isActive ? 'Actif' : 'Brouillon'
+});
+
+const toNomenclatureReferenceFromApi = (
+  nomenclature: NomenclatureApiResponse,
+  index: number
+): NomenclatureReference => ({
+  id: index + 1,
+  articleParent: nomenclature.codeArticleParent,
+  designationArticleParent: '',
+  composant: nomenclature.codeComposant,
+  designationComposant: '',
+  niveau: nomenclature.niveau,
+  sequence: nomenclature.sequence,
+  quantiteLien: '',
+  quantiteLienCumulee: '',
+  unite: '',
+  categorie: '',
+  typeLien: '',
+  pourcentageRebut: '',
+  alternative: nomenclature.alternativeNomenclature ?? '',
+  source: 'API',
+  statut: nomenclature.isActive ? 'Actif' : 'Brouillon'
+});
+
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const MATERIAL_CODES = new Set<TypeMatiereCode>(['M3000L0', 'M3010L0', 'M3060L0']);
 
@@ -380,16 +446,28 @@ export const parseNomenclatureRows = (
 };
 
 export const referenceService = {
-  getGammes(): GammeReference[] {
+  async getGammes(): Promise<GammeReference[]> {
+    if (useRealApi()) {
+      const { data } = await api.get<PagedResponse<GammeApiResponse>>('/references/gammes', {
+        params: { page: 1, pageSize: API_FETCH_PAGE_SIZE }
+      });
+      return data.items.map(toGammeReferenceFromApi);
+    }
     return testDataRepository.getDataset().refGammeFabrication.map(toGammeReference);
   },
 
-  getNomenclatures(): NomenclatureReference[] {
+  async getNomenclatures(): Promise<NomenclatureReference[]> {
+    if (useRealApi()) {
+      const { data } = await api.get<PagedResponse<NomenclatureApiResponse>>('/references/nomenclatures', {
+        params: { page: 1, pageSize: API_FETCH_PAGE_SIZE }
+      });
+      return data.items.map(toNomenclatureReferenceFromApi);
+    }
     return testDataRepository.getDataset().refNomenclature.map(toNomenclatureReference);
   },
 
   async importGammes(file: File): Promise<ReferenceImportResult<GammeReference>> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+    if (useRealApi()) {
       const form = new FormData();
       form.append('file', file);
       return (
@@ -421,7 +499,7 @@ export const referenceService = {
   },
 
   async importNomenclatures(file: File): Promise<ReferenceImportResult<NomenclatureReference>> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+    if (useRealApi()) {
       const form = new FormData();
       form.append('file', file);
       return (

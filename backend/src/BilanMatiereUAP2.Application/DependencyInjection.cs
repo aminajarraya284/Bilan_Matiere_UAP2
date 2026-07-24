@@ -1,6 +1,8 @@
 using BilanMatiereUAP2.Application.Features.DechetsFonderie;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Application.Features.TypesMatiere;
+using BilanMatiereUAP2.Application.Services;
+using BilanMatiereUAP2.Application.Abstractions;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<ITypeMatiereService, TypeMatiereService>();
         services.AddScoped<IDechetFonderieService, DechetFonderieService>();
         services.AddScoped<IX3ImportService, X3ImportService>();
+        services.AddScoped<IManufacturingReferencesService, ManufacturingReferencesService>();
         return services;
     }
 }

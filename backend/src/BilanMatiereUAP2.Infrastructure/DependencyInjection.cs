@@ -25,6 +25,9 @@ public static class DependencyInjection
         services.AddScoped<IX3ImportRepository, X3ImportRepository>();
         services.AddScoped<IEncoursProductReader, EncoursProductExcelReader>();
         services.AddScoped<IMouvementStockX3Reader, MouvementsStockX3ExcelReader>();
+        services.AddScoped<IManufacturingReferencesRepository, ManufacturingReferencesRepository>();
+        services.AddScoped<IGammeFabricationReader, GammeFabricationExcelReader>();
+        services.AddScoped<INomenclatureReader, NomenclatureExcelReader>();
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<BilanMatiereUAP2DbContext>());
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 

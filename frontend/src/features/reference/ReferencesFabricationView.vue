@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import { useAppDialog } from '@/composables/useAppDialog';
@@ -15,8 +15,9 @@ const authStore = useAuthStore();
 const dialog = useAppDialog();
 const isAdmin = computed(() => authStore.userRole === 'Admin');
 const activeTab = ref<ReferenceTabKey>('gamme');
-const gammeReferences = ref<GammeReference[]>(referenceService.getGammes());
-const nomenclatureReferences = ref<NomenclatureReference[]>(referenceService.getNomenclatures());
+const gammeReferences = ref<GammeReference[]>([]);
+const nomenclatureReferences = ref<NomenclatureReference[]>([]);
+const loading = ref(false);
 const gammeFileInput = ref<HTMLInputElement | null>(null);
 const nomenclatureFileInput = ref<HTMLInputElement | null>(null);
 const importing = ref<ReferenceTabKey | null>(null);
@@ -31,6 +32,29 @@ const paginatedGammes = computed(() =>
 const paginatedNomenclatures = computed(() =>
   nomenclatureReferences.value.slice((nomenclaturePage.value - 1) * PAGE_SIZE, nomenclaturePage.value * PAGE_SIZE)
 );
+
+const loadReferences = async () => {
+  loading.value = true;
+  try {
+    const [gammes, nomenclatures] = await Promise.all([
+      referenceService.getGammes(),
+      referenceService.getNomenclatures()
+    ]);
+    gammeReferences.value = gammes;
+    nomenclatureReferences.value = nomenclatures;
+    gammePage.value = 1;
+    nomenclaturePage.value = 1;
+  } catch (error) {
+    await dialog.alert(error instanceof Error ? error.message : 'Le chargement des références a échoué.', {
+      title: 'Références fabrication',
+      tone: 'danger'
+    });
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(loadReferences);
 
 const loadDataTestGamme = async () => {
   gammeReferences.value = referenceService.resetGammes();
@@ -194,7 +218,10 @@ const handleSync = async (target: ReferenceTabKey) => {
           </table>
         </div>
         <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-          <span>{{ gammeReferences.length }} référence(s) — 100 lignes maximum par page</span>
+          <span>
+            <template v-if="loading">Chargement…</template>
+            <template v-else>{{ gammeReferences.length }} référence(s) — 100 lignes maximum par page</template>
+          </span>
           <div class="flex items-center gap-2">
             <button
               class="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
@@ -302,7 +329,10 @@ const handleSync = async (target: ReferenceTabKey) => {
           </table>
         </div>
         <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-          <span>{{ nomenclatureReferences.length }} référence(s) — 100 lignes maximum par page</span>
+          <span>
+            <template v-if="loading">Chargement…</template>
+            <template v-else>{{ nomenclatureReferences.length }} référence(s) — 100 lignes maximum par page</template>
+          </span>
           <div class="flex items-center gap-2">
             <button
               class="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"

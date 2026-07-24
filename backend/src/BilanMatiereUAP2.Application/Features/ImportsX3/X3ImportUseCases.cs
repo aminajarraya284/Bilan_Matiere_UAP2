@@ -6,6 +6,7 @@ using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.Extensions.Options;
 
 namespace BilanMatiereUAP2.Application.Features.ImportsX3;
 
@@ -52,8 +53,15 @@ public sealed class X3ImportService(
     IX3ImportRepository repository,
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
-    IValidator<ImportSortiesMatiereX3Command> importValidator) : IX3ImportService
+    IValidator<ImportSortiesMatiereX3Command> importValidator,
+    IOptions<ImportX3Options> importOptions) : IX3ImportService
 {
+    // Regles de rapprochement externalisees en configuration (section "ImportX3").
+    private readonly HashSet<string> _typesMatiereAutorises =
+        new(importOptions.Value.TypesMatiereAutorises, StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _unitesConservees =
+        new(importOptions.Value.UnitesConservees, StringComparer.OrdinalIgnoreCase);
+
     public async Task<ImportX3Response> ImportAsync(
         ImportSortiesMatiereX3Command command,
         CancellationToken cancellationToken)
@@ -418,22 +426,16 @@ public sealed class X3ImportService(
                X3ImportParsing.EstNumeroOF(row.PieceOrigine);
     }
 
-    private static bool EstUniteConservee(string? unite)
+    private bool EstUniteConservee(string? unite)
     {
-        return X3ImportParsing.NormaliserCode(unite) is "UN" or "KG" or "BA" or "M" or "LI";
+        var normalized = X3ImportParsing.NormaliserCode(unite);
+        return !string.IsNullOrEmpty(normalized) && _unitesConservees.Contains(normalized);
     }
 
-    private static readonly HashSet<string> TypesMatiereAutorises = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "M3000L0",
-        "M3010L0",
-        "M3060L0"
-    };
-
-    private static bool EstTypeMatiereAutorise(string? code)
+    private bool EstTypeMatiereAutorise(string? code)
     {
         var normalized = X3ImportParsing.NormaliserCode(code);
-        return !string.IsNullOrEmpty(normalized) && TypesMatiereAutorises.Contains(normalized);
+        return !string.IsNullOrEmpty(normalized) && _typesMatiereAutorises.Contains(normalized);
     }
 
     private static ImportX3Response ToImportResponse(

@@ -5,6 +5,7 @@ using BilanMatiereUAP2.Api.Health;
 using BilanMatiereUAP2.Api.Middleware;
 using BilanMatiereUAP2.Api.Services;
 using BilanMatiereUAP2.Application;
+using BilanMatiereUAP2.Application.Options;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Infrastructure;
@@ -24,6 +25,7 @@ builder.Host.UseSerilog((_, loggerConfiguration) =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<ImportX3Options>(builder.Configuration.GetSection(ImportX3Options.SectionName));
+builder.Services.Configure<ManufacturingReferencesOptions>(builder.Configuration.GetSection(ManufacturingReferencesOptions.SectionName));
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
@@ -46,6 +48,12 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
     options.AddPolicy(AuthorizationPolicies.ManageImportsX3, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
+    options.AddPolicy(AuthorizationPolicies.ManageReferences, policy =>
+        policy.RequireRole("Admin"));
+    options.AddPolicy(AuthorizationPolicies.ReadReferences, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
+    options.AddPolicy(AuthorizationPolicies.ReadReceptionsUsinage2, policy =>
+        policy.RequireRole("Admin", "ResponsableUsinage2"));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

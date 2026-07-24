@@ -12,6 +12,9 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<ImportX3Batch> ImportX3Batches => Set<ImportX3Batch>();
     public DbSet<ImportX3File> ImportX3Files => Set<ImportX3File>();
     public DbSet<ImportX3Anomaly> ImportX3Anomalies => Set<ImportX3Anomaly>();
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+    public DbSet<RefGammeFabrication> RefGammesFabrication => Set<RefGammeFabrication>();
+    public DbSet<RefNomenclature> RefNomenclatures => Set<RefNomenclature>();
     public DbSet<X3OrdreFabrication> OrdresFabrication => Set<X3OrdreFabrication>();
     public DbSet<X3OperationOF> OperationsOF => Set<X3OperationOF>();
     public DbSet<ConsommationComposant> ConsommationsComposants => Set<ConsommationComposant>();
