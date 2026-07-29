@@ -12,6 +12,7 @@ import type {
   InventaireFonderieConteneur,
   InventaireFonderieFour
 } from '@/mocks/sopalTestDataset';
+import { isApiSource } from '@/config/dataSources';
 
 const normalizeCategorie = (item: InventaireCategorie): InventaireCategorie => ({
   ...item,
@@ -113,13 +114,13 @@ const toCentralCategorie = (
 
 export const inventaireService = {
   async getConteneurs(): Promise<InventaireConteneur[]> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return (await api.get<InventaireConteneur[]>('/inventaires/conteneurs')).data;
     return testDataRepository.getDataset().inventaireConteneurs.map(toConteneur);
   },
 
   async createConteneur(data: Omit<InventaireConteneur, 'id' | 'statut'>): Promise<InventaireConteneur> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return (await api.post<InventaireConteneur>('/inventaires/conteneurs', data)).data;
     const current = testDataRepository.getDataset().inventaireConteneurs;
     const item = toCentralConteneur(data, Math.max(0, ...current.map((row) => row.id)) + 1);
@@ -128,7 +129,7 @@ export const inventaireService = {
   },
 
   async updateConteneur(id: number, data: Partial<InventaireConteneur>): Promise<InventaireConteneur> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return (await api.put<InventaireConteneur>(`/inventaires/conteneurs/${id}`, data)).data;
     const dataset = testDataRepository.getDataset();
     const current = dataset.inventaireConteneurs;
@@ -151,7 +152,7 @@ export const inventaireService = {
   },
 
   async deleteConteneur(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+    if (isApiSource('inventaire')) {
       await api.delete(`/inventaires/conteneurs/${id}`);
       return;
     }
@@ -165,13 +166,13 @@ export const inventaireService = {
   },
 
   async getCategories(): Promise<InventaireCategorie[]> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return (await api.get<InventaireCategorie[]>('/inventaires/categories')).data.map(normalizeCategorie);
     return testDataRepository.getDataset().inventaireCategories.map(toCategorie);
   },
 
   async createCategorie(data: Omit<InventaireCategorie, 'id' | 'statut'>): Promise<InventaireCategorie> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return normalizeCategorie((await api.post<InventaireCategorie>('/inventaires/categories', data)).data);
     const current = testDataRepository.getDataset().inventaireCategories;
     const item = toCentralCategorie(data, Math.max(100, ...current.map((row) => row.id)) + 1);
@@ -180,7 +181,7 @@ export const inventaireService = {
   },
 
   async updateCategorie(id: number, data: Partial<InventaireCategorie>): Promise<InventaireCategorie> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return normalizeCategorie((await api.put<InventaireCategorie>(`/inventaires/categories/${id}`, data)).data);
     const current = testDataRepository.getDataset().inventaireCategories;
     const index = current.findIndex((row) => row.id === id);
@@ -197,7 +198,7 @@ export const inventaireService = {
   },
 
   async deleteCategorie(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+    if (isApiSource('inventaire')) {
       await api.delete(`/inventaires/categories/${id}`);
       return;
     }
@@ -211,7 +212,7 @@ export const inventaireService = {
   },
 
   async getFours(): Promise<InventaireFour[]> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return (await api.get<InventaireFour[]>('/inventaires/fours')).data.map(normalizeFour);
     return testDataRepository.getDataset().inventaireFours.map(toFour);
   },
@@ -219,7 +220,7 @@ export const inventaireService = {
   async createFour(
     data: Omit<InventaireFour, 'id' | 'inclusDansBilanFonderie' | 'visibleDansRapportInventaire'>
   ): Promise<InventaireFour> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return normalizeFour((await api.post<InventaireFour>('/inventaires/fours', data)).data);
     const current = testDataRepository.getDataset().inventaireFours;
     const item: InventaireFonderieFour = {
@@ -237,7 +238,7 @@ export const inventaireService = {
   },
 
   async updateFour(id: number, data: Partial<InventaireFour>): Promise<InventaireFour> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return normalizeFour((await api.put<InventaireFour>(`/inventaires/fours/${id}`, data)).data);
     const current = testDataRepository.getDataset().inventaireFours;
     const index = current.findIndex((row) => row.id === id);
@@ -258,7 +259,7 @@ export const inventaireService = {
   },
 
   async deleteFour(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+    if (isApiSource('inventaire')) {
       await api.delete(`/inventaires/fours/${id}`);
       return;
     }
@@ -272,7 +273,7 @@ export const inventaireService = {
   },
 
   async getTotauxConsolides(): Promise<InventaireTotalParMatiere[]> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true')
+    if (isApiSource('inventaire'))
       return (await api.get<InventaireTotalParMatiere[]>('/inventaires/totaux')).data;
     return calculateInventorySummary(testDataRepository.getDataset()).map((row) => ({
       ...row,

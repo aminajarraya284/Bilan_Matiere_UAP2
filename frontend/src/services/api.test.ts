@@ -63,6 +63,39 @@ describe('API authentication interceptor', () => {
     });
   });
 
+  it('keeps the session intact on a 403 response (insufficient role, not expired)', async () => {
+    localStorage.setItem('sopal_auth_token', 'valid-token');
+    localStorage.setItem('sopal_auth_user', JSON.stringify(activeAdmin));
+    const authStore = useAuthStore();
+
+    await expect(
+      api.get('/forbidden-resource', {
+        adapter: async (config) =>
+          Promise.reject({ config, response: { status: 403 }, isAxiosError: true })
+      })
+    ).rejects.toMatchObject({ response: { status: 403 } });
+
+    // Un 403 signifie « role insuffisant », pas « session invalide » : on ne deconnecte pas.
+    expect(authStore.isAuthenticated).toBe(true);
+    expect(authStore.token).toBe('valid-token');
+    expect(localStorage.getItem('sopal_auth_token')).toBe('valid-token');
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it('does not expire the session when the login request itself returns 401', async () => {
+    const authStore = useAuthStore();
+
+    await expect(
+      api.post('/auth/login', { username: 'admin', password: 'faux' }, {
+        adapter: async (config) =>
+          Promise.reject({ config, response: { status: 401 }, isAxiosError: true })
+      })
+    ).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(authStore.isAuthenticated).toBe(false);
+  });
+
   it('redirects only once when several requests receive 401 concurrently', async () => {
     localStorage.setItem('sopal_auth_token', 'expired-token');
     localStorage.setItem('sopal_auth_user', JSON.stringify(activeAdmin));

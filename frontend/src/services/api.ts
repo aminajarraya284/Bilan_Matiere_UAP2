@@ -47,14 +47,23 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Handle 401 Unauthorized errors
+// Response Interceptor: 401 et 403 sont traites separement.
+//  - 401 : le token est absent, invalide ou expire -> la session n'est plus exploitable,
+//          on la purge et on renvoie vers /login.
+//  - 403 : le token est valide mais le role est insuffisant -> la session reste valide.
+//          On ne deconnecte pas l'utilisateur ; l'appelant decide de l'affichage.
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    const status = error.response?.status;
     const isLoginRequest = error.config?.url?.includes('/auth/login') === true;
-    if (error.response?.status === 401 && !isLoginRequest) {
+
+    if (status === 401 && !isLoginRequest) {
       await expireSessionAndRedirectToLogin();
+    } else if (status === 403) {
+      console.warn(`Accès refusé (403) sur ${error.config?.url ?? 'une ressource'} : permissions insuffisantes.`);
     }
+
     return Promise.reject(error);
   }
 );

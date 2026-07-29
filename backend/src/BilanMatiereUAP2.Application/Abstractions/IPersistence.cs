@@ -22,6 +22,21 @@ public interface IDechetFonderieRepository
     Task AddAsync(DechetFonderie dechet, CancellationToken cancellationToken);
 }
 
+public interface IControlePoidsFonderieRepository
+{
+    Task<ControlePoidsFonderie?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<PagedResult<ControlePoidsFonderie>> GetPagedAsync(
+        ControlesPoidsFonderieFilter filter,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<ControlePoidsFonderie>> FindCandidatesAsync(
+        string codeArticle,
+        Guid typeMatiereId,
+        string? numeroOF,
+        DateOnly dateReception,
+        CancellationToken cancellationToken);
+    Task AddAsync(ControlePoidsFonderie controle, CancellationToken cancellationToken);
+}
+
 public interface IUnitOfWork
 {
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
@@ -34,6 +49,15 @@ public sealed record DechetsFonderieFilter(
     DateOnly DateFinExclusive,
     Guid? TypeMatiereId,
     TypeDechet? TypeDechet,
+    int Page,
+    int PageSize);
+
+public sealed record ControlesPoidsFonderieFilter(
+    DateOnly? DateControle,
+    string? NumeroOF,
+    string? CodeArticle,
+    Guid? TypeMatiereId,
+    StatutControlePoidsFonderie? Statut,
     int Page,
     int PageSize);
 

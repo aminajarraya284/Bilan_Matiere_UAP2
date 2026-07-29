@@ -7,6 +7,7 @@ import {
   getActiveAlerts
 } from '@/services/bilanCalculation.service';
 import { readControlesPoidsFonderie } from '@/features/controle-poids-fonderie/controlePoidsFonderie.storage';
+import { assertMockSource } from '@/config/dataSources';
 
 const buildControlePoidsAlerts = (periode: string): AlertesWeightAlert[] => {
   const dataset = testDataRepository.getDataset();
@@ -65,6 +66,7 @@ const buildControlePoidsAlerts = (periode: string): AlertesWeightAlert[] => {
 
 export const alertesService = {
   async getWeightAlerts(_tolerance: number): Promise<AlertesWeightAlert[]> {
+    assertMockSource('alertes');
     const dataset = testDataRepository.getDataset();
     const { weightAlerts } = getActiveAlerts(dataset, BUSINESS_RULES.periodeParDefaut);
     return [...weightAlerts, ...buildControlePoidsAlerts(BUSINESS_RULES.periodeParDefaut)].sort(
@@ -73,11 +75,13 @@ export const alertesService = {
   },
 
   async getBilanAlerts(): Promise<AlertesBilanAlert[]> {
+    assertMockSource('alertes');
     const { bilanAlerts } = getActiveAlerts(testDataRepository.getDataset(), BUSINESS_RULES.periodeParDefaut);
     return bilanAlerts.sort((a, b) => Math.abs(b.tauxEcart) - Math.abs(a.tauxEcart));
   },
 
   async getSummary(tolerance: number): Promise<AlertesSummary> {
+    assertMockSource('alertes');
     const dataset = testDataRepository.getDataset();
     const weightAlerts = await this.getWeightAlerts(tolerance);
     const totalLostKg = dataset.dechetsFonderie.reduce((sum, dechet) => sum + dechet.poidsDechetKg, 0);

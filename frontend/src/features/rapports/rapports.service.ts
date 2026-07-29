@@ -7,6 +7,7 @@ import {
 } from '@/services/bilanCalculation.service';
 import { testDataRepository } from '@/services/testDataRepository.service';
 import { RapportsListType } from './rapports.types';
+import { isMockSource } from '@/config/dataSources';
 
 const REPORT_DEFINITIONS: Omit<RapportsListType, 'dateGeneration'>[] = [
   {
@@ -48,7 +49,7 @@ const REPORT_DEFINITIONS: Omit<RapportsListType, 'dateGeneration'>[] = [
 
 export const rapportsService = {
   async getRapports(periode = '2026-06', dateDebut?: string, dateFin?: string): Promise<RapportsListType[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('rapports')) {
       const dataset = testDataRepository.getDataset();
       // Execute the same calculation services used by the dashboard and the bilans
       // before exposing the report catalogue. This keeps report data derived from the repository.

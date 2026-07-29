@@ -6,6 +6,7 @@ import { RapportsListType } from './rapports.types';
 import { reportExporter } from './exporter';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import { BUSINESS_RULES } from '@/config/businessRules';
 
 const rapports = ref<RapportsListType[]>([]);
@@ -86,6 +87,7 @@ onMounted(() => {
   <div class="space-y-6">
     <!-- Page Header -->
     <PageHeader title="Rapports" description="Consulter et exporter les rapports d’exploitation du bilan matière." />
+    <DataSourceBadge vertical="rapports" />
 
     <!-- Notifications -->
     <div

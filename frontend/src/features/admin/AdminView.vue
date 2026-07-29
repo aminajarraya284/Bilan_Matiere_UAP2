@@ -6,6 +6,7 @@ import { AdminUser, AdminArticle, AdminSettings } from './admin.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import { useAppDialog } from '@/composables/useAppDialog';
 
 const activeTab = ref<'users' | 'articles' | 'types' | 'settings'>('users');
@@ -150,6 +151,7 @@ onMounted(() => {
       title="Administration"
       description="Gérer les utilisateurs, les seuils de contrôle et les articles de référence."
     />
+    <DataSourceBadge vertical="administration" />
 
     <!-- Notice -->
     <div

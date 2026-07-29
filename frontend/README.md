@@ -156,7 +156,7 @@ Les services doivent consommer la data locale au lieu des anciennes references X
 - `src/features/rapports/exporter.ts` : generation des exports PDF texte et CSV
 - `src/utils/storage.ts` : persistance mock dans `localStorage`
 
-Les Types matiere et les Dechets Fonderie selectionnent explicitement leur source avec `VITE_TYPES_MATIERE_SOURCE` et `VITE_DECHETS_SOURCE`. Les autres services continuent d'utiliser `VITE_USE_REAL_API`. En mode mock local, ils restent autonomes avec `testData.ts` et `localStorage`.
+Chaque verticale sélectionne sa source dans `src/config/dataSources.ts` avec une variable `VITE_*_SOURCE`. Les services métier ne lisent jamais directement les variables Vite. `VITE_USE_REAL_API` reste uniquement un repli temporaire et déprécié dans ce module central.
 
 ### Inventaire ESR
 
@@ -244,7 +244,7 @@ Cette operation recharge les donnees de test propres depuis `src/data/testData.t
 
 ### Mode mock local
 
-Le projet supporte un mode mock local. Pour les Types matiere et les Dechets Fonderie, il est selectionne avec `VITE_TYPES_MATIERE_SOURCE=mock` et `VITE_DECHETS_SOURCE=mock`. Les autres modules restent pilotes par `VITE_USE_REAL_API` :
+Le projet supporte un mode hybride par verticale. Les modules sans endpoint backend (`Dashboard`, `Bilan Fonderie`, `Bilan UAP2`, `Inventaire`, `Rapports`, `Audit`, `Administration` et `Alertes`) sont explicitement configurés sur `mock` :
 
 - les donnees initiales proviennent de `src/data/testData.ts`
 - `src/utils/storage.ts` persiste les donnees dans `localStorage`
@@ -254,7 +254,7 @@ Le projet supporte un mode mock local. Pour les Types matiere et les Dechets Fon
 ### Mode API réelle
 
 - configure `VITE_API_URL` pour pointer vers le backend réel
-- configure `VITE_TYPES_MATIERE_SOURCE=api` et `VITE_DECHETS_SOURCE=api` pour activer la verticale connectee
+- configure la variable `VITE_*_SOURCE=api` de la verticale connectée
 - les endpoints de cette verticale sont exposes sous `/api/v1`
 - le client Axios ajoute automatiquement le token Bearer
 - les erreurs `401` redirigent vers la page de login
@@ -278,9 +278,9 @@ npm run lint
 ### Variables d'environnement
 
 - `VITE_API_URL` : URL du backend API
-- `VITE_USE_REAL_API` : `true` pour utiliser l'API réelle, `false` pour utiliser les données mock
-- `VITE_TYPES_MATIERE_SOURCE` : `api` ou `mock` pour le referentiel Types matiere
-- `VITE_DECHETS_SOURCE` : `api` ou `mock` pour les Dechets Fonderie
+- `VITE_*_SOURCE` : `api`, `mock` ou `disabled` pour chaque verticale
+- `VITE_USE_REAL_API` : repli global temporaire déprécié, à ne plus utiliser dans une nouvelle configuration
+- la liste complète et les valeurs recommandées figurent dans `.env.example`
 
 ## Notes de développement
 

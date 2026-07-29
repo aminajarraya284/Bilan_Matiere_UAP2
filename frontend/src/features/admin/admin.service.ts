@@ -1,6 +1,7 @@
 import api from '@/services/api';
 import { BUSINESS_RULES } from '@/config/businessRules';
 import { AdminUser, AdminArticle, AdminSettings } from './admin.types';
+import { isMockSource } from '@/config/dataSources';
 
 const mockUsers: AdminUser[] = [
   { id: 1, fullName: 'Amina Jarraya', role: 'Admin', email: 'amina.jarraya@sopal.com', actif: true },
@@ -38,13 +39,13 @@ let mockSettings: AdminSettings = {
 export const adminService = {
   // --- USERS ---
   async getUsers(): Promise<AdminUser[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') return [...mockUsers];
+    if (isMockSource('administration')) return [...mockUsers];
     const res = await api.get<AdminUser[]>('/users');
     return res.data;
   },
 
   async createUser(data: Omit<AdminUser, 'id'>): Promise<AdminUser> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('administration')) {
       const newId = Math.max(...mockUsers.map((u) => u.id), 0) + 1;
       const newUser = { ...data, id: newId };
       mockUsers.push(newUser);
@@ -55,7 +56,7 @@ export const adminService = {
   },
 
   async toggleUserStatus(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('administration')) {
       const u = mockUsers.find((user) => user.id === id);
       if (u) u.actif = !u.actif;
       return;
@@ -65,13 +66,13 @@ export const adminService = {
 
   // --- ARTICLES ---
   async getArticles(): Promise<AdminArticle[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') return [...mockArticles];
+    if (isMockSource('administration')) return [...mockArticles];
     const res = await api.get<AdminArticle[]>('/articles');
     return res.data;
   },
 
   async createArticle(data: Omit<AdminArticle, 'id'>): Promise<AdminArticle> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('administration')) {
       const newId = Math.max(...mockArticles.map((a) => a.id), 0) + 1;
       const newArt = { ...data, id: newId };
       mockArticles.push(newArt);
@@ -82,7 +83,7 @@ export const adminService = {
   },
 
   async toggleArticleStatus(id: number): Promise<void> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('administration')) {
       const a = mockArticles.find((art) => art.id === id);
       if (a) a.actif = !a.actif;
       return;
@@ -92,13 +93,13 @@ export const adminService = {
 
   // --- SETTINGS ---
   async getSettings(): Promise<AdminSettings> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') return { ...mockSettings };
+    if (isMockSource('administration')) return { ...mockSettings };
     const res = await api.get<AdminSettings>('/settings');
     return res.data;
   },
 
   async updateSettings(data: AdminSettings): Promise<AdminSettings> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('administration')) {
       mockSettings = { ...data };
       return mockSettings;
     }

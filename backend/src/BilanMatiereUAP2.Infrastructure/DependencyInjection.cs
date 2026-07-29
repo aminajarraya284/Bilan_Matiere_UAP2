@@ -19,15 +19,24 @@ public static class DependencyInjection
                 "La chaine de connexion 'DefaultConnection' est absente.");
 
         services.AddDbContext<BilanMatiereUAP2DbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options.UseSqlServer(connectionString, sqlOptions => sqlOptions.CommandTimeout(180)));
         services.AddScoped<ITypeMatiereRepository, TypeMatiereRepository>();
         services.AddScoped<IDechetFonderieRepository, DechetFonderieRepository>();
+        services.AddScoped<IControlePoidsFonderieRepository, ControlePoidsFonderieRepository>();
+        services.AddScoped<IRebutUsinage2Repository, RebutUsinage2Repository>();
         services.AddScoped<IX3ImportRepository, X3ImportRepository>();
         services.AddScoped<IEncoursProductReader, EncoursProductExcelReader>();
         services.AddScoped<IMouvementStockX3Reader, MouvementsStockX3ExcelReader>();
         services.AddScoped<IManufacturingReferencesRepository, ManufacturingReferencesRepository>();
         services.AddScoped<IGammeFabricationReader, GammeFabricationExcelReader>();
         services.AddScoped<INomenclatureReader, NomenclatureExcelReader>();
+        services.AddScoped<ISortieMpMaterialRepository, SortieMpMaterialRepository>();
+        services.AddScoped<IReportMachineRepository, ReportMachineRepository>();
+        services.AddScoped<IReportMachineReader, RapportMachineExcelReader>();
+        services.AddScoped<IImportSourceFileRepository, ImportSourceFileRepository>();
+        services.AddScoped<IReceptionUsinage2Repository, ReceptionUsinage2Repository>();
+        services.AddScoped<IEntreeOfRepository, EntreeOfRepository>();
+        services.AddSingleton<IImportFileStorage, LocalImportFileStorage>();
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<BilanMatiereUAP2DbContext>());
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 

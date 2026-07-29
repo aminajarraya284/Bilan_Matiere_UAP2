@@ -6,6 +6,7 @@ import { alertesService } from './alertes.service';
 import { AlertesWeightAlert, AlertesBilanAlert, AlertesSummary } from './alertes.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
 import { formatNumber } from '@/utils/formatters';
 import { BUSINESS_RULES } from '@/config/businessRules';
@@ -52,6 +53,7 @@ onMounted(() => {
       title="Alertes"
       description="Suivre les anomalies de poids et les écarts de bilan nécessitant une attention."
     />
+    <DataSourceBadge vertical="alertes" />
 
     <div v-if="!isAdmin" class="bg-rose-50 border border-rose-100 rounded-xl p-6 text-rose-900 font-semibold text-sm">
       <div class="font-black">Accès refusé</div>

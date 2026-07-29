@@ -13,6 +13,7 @@ import PageHeader from '@/components/ui/PageHeader.vue';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
 import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import { formatNumber } from '@/utils/formatters';
 import { useAppDialog } from '@/composables/useAppDialog';
 import { BUSINESS_RULES } from '@/config/businessRules';
@@ -240,6 +241,7 @@ onMounted(() => {
       title="Inventaire Fonderie"
       description="Saisir et contrôler les stocks physiques de fin de mois de la fonderie."
     />
+    <DataSourceBadge vertical="inventaire" />
 
     <div v-if="isLoading">
       <LoadingState />

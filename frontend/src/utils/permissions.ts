@@ -11,6 +11,7 @@ export const routePermissions: Record<string, UserRole[]> = {
   DechetsFonderie: ['Admin', 'ResponsableFonderie'],
   ReceptionsUsinage2: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Rapports: ['Admin'],
+  ImportsHistorique: ['Admin'],
   Alertes: ['Admin'],
   Admin: ['Admin'],
   Audit: ['Admin']

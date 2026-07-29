@@ -13,6 +13,7 @@ import {
   Wrench
 } from 'lucide-vue-next';
 import AppButton from '@/components/ui/AppButton.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { useAppToast } from '@/composables/useAppToast';
 import { BUSINESS_RULES } from '@/config/businessRules';
@@ -32,6 +33,7 @@ import DashboardHeader from './components/DashboardHeader.vue';
 import DashboardSection from './components/DashboardSection.vue';
 import DashboardTable from './components/DashboardTable.vue';
 import KpiCard from './components/KpiCard.vue';
+import { isMockSource } from '@/config/dataSources';
 
 const formatDateInput = (date: Date): string => {
   const year = date.getFullYear();
@@ -41,7 +43,7 @@ const formatDateInput = (date: Date): string => {
 };
 
 const getCurrentDashboardPeriod = () => {
-  if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+  if (isMockSource('dashboard')) {
     return {
       mois: BUSINESS_RULES.periodeParDefaut,
       dateDebut: BUSINESS_RULES.dateDebutParDefaut,
@@ -326,6 +328,7 @@ onUnmounted(() => {
       :loading="isLoading"
       @refresh="refreshDashboard"
     />
+    <DataSourceBadge vertical="dashboard" />
 
     <DashboardFilters
       v-model:month="draftMonth"

@@ -1,6 +1,7 @@
 import api from '@/services/api';
 import { calculateDashboard } from '@/services/bilanCalculation.service';
 import { testDataRepository } from '@/services/testDataRepository.service';
+import { isApiSource } from '@/config/dataSources';
 import type {
   DashboardAlert,
   DashboardBilanRow,
@@ -19,7 +20,7 @@ export type DashboardData = {
 
 export const dashboardService = {
   async getDashboardData(periode: string, dateDebut?: string, dateFin?: string): Promise<DashboardData> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
+    if (isApiSource('dashboard')) {
       const [stats, alerts, rows] = await Promise.all([
         api.get<DashboardStats>('/dashboard/summary', { params: { periode, dateDebut, dateFin } }),
         api.get<DashboardAlert[]>('/dashboard/alerts', { params: { periode, dateDebut, dateFin } }),

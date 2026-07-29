@@ -5,6 +5,7 @@ import { auditService } from './audit.service';
 import { AuditLogEntry } from './audit.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 
 const logs = ref<AuditLogEntry[]>([]);
 const isLoading = ref(true);
@@ -45,6 +46,7 @@ onMounted(() => {
       title="Journal d’audit"
       description="Consulter la traçabilité des actions et des opérations réalisées dans l’application."
     />
+    <DataSourceBadge vertical="audit" />
 
     <!-- Filter/Search Bar -->
     <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm flex items-center gap-3">

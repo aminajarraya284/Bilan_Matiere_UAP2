@@ -117,6 +117,15 @@ const routes: Array<RouteRecordRaw> = [
     title: 'Rapports',
     subtitle: 'Résultats et exports'
   }),
+  appRoute(
+    '/imports-historique',
+    'ImportsHistorique',
+    () => import('@/features/imports-historique/ImportsHistoriqueView.vue'),
+    {
+      title: 'Historique des imports',
+      subtitle: 'Fichiers sources et téléchargement'
+    }
+  ),
   appRoute('/admin', 'Admin', () => import('@/features/admin/AdminView.vue'), {
     title: 'Administration',
     subtitle: 'Utilisateurs et paramètres'

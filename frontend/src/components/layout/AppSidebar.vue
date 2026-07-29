@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
 import logoUrl from '@/assets/sopal-logo-mark-hd.png?url';
+import { getGlobalMode, GLOBAL_MODE_LABELS } from '@/config/dataSources';
 import {
   LayoutDashboard,
   Scale,
@@ -15,11 +16,13 @@ import {
   Shield,
   History,
   AlertTriangle,
-  Gauge
+  Gauge,
+  FileArchive
 } from 'lucide-vue-next';
 
 const authStore = useAuthStore();
 const role = computed(() => authStore.userRole);
+const environmentLabel = computed(() => GLOBAL_MODE_LABELS[getGlobalMode()]);
 
 const menuItems = [
   { group: 'Pilotage', name: 'Tableau de bord', path: '/dashboard', icon: LayoutDashboard, roles: ['Admin'] },
@@ -57,6 +60,13 @@ const menuItems = [
     roles: ['Admin']
   },
   { group: 'Pilotage', name: 'Rapports', path: '/rapports', icon: FileText, roles: ['Admin'] },
+  {
+    group: 'Administration',
+    name: 'Historique des imports',
+    path: '/imports-historique',
+    icon: FileArchive,
+    roles: ['Admin']
+  },
   { group: 'Administration', name: 'Utilisateurs et paramètres', path: '/admin', icon: Shield, roles: ['Admin'] },
   { group: 'Administration', name: 'Journal d’audit', path: '/audit', icon: History, roles: ['Admin'] }
 ];
@@ -117,7 +127,7 @@ const groupedMenu = computed(() => {
     <div class="sidebar-footer border-t p-4">
       <div class="sidebar-environment flex items-center gap-2.5 rounded-lg border px-3 py-2.5">
         <span class="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
-        <span class="sidebar-footer-label text-xs font-medium text-primary-100/75">Environnement de test</span>
+        <span class="sidebar-footer-label text-xs font-medium text-primary-100/75">{{ environmentLabel }}</span>
       </div>
     </div>
   </aside>

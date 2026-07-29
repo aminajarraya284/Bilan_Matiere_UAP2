@@ -1,6 +1,7 @@
 import api from '@/services/api';
 import { AuditLogEntry } from './audit.types';
 import { storage } from '@/utils/storage';
+import { isMockSource } from '@/config/dataSources';
 
 const mockLogs: AuditLogEntry[] = [
   {
@@ -57,7 +58,7 @@ const mockLogs: AuditLogEntry[] = [
 
 export const auditService = {
   async getLogs(): Promise<AuditLogEntry[]> {
-    if (import.meta.env.VITE_USE_REAL_API !== 'true') {
+    if (isMockSource('audit')) {
       return [...storage.getAuditLogs(), ...mockLogs].sort((a, b) => b.dateHeure.localeCompare(a.dateHeure));
     }
     const res = await api.get<AuditLogEntry[]>('/audit');
