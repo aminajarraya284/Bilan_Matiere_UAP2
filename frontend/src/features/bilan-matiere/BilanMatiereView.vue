@@ -9,30 +9,31 @@ import {
   Printer,
   Wrench,
   BarChart3,
-  MessageSquare,
-  Plus
+  MessageSquare
 } from 'lucide-vue-next';
+import { RouterLink } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { bilanService } from './bilan.service';
-import { BilanMatiereReport, BilanUsinage2ParPiece, BilanUap2ParOF } from './bilan.types';
+import { BilanMatiereReport, BilanUsinage2Api, BilanUap2ParOF } from './bilan.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
-import FormField from '@/components/ui/FormField.vue';
+import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import { formatNumber } from '@/utils/formatters';
 import { useAppDialog } from '@/composables/useAppDialog';
 import { BUSINESS_RULES } from '@/config/businessRules';
+import type { DataVertical } from '@/config/dataSources';
 
 const authStore = useAuthStore();
 const dialog = useAppDialog();
 const isAdmin = computed(() => authStore.userRole === 'Admin');
-const canEnterRebutUsinage = computed(
-  () => authStore.userRole === 'Admin' || authStore.userRole === 'ResponsableUsinage2'
-);
 
 // Tab state
 type TabId = 'fonderie' | 'usinage2' | 'uap2';
 const activeTab = ref<TabId>('fonderie');
+const activeBilanVertical = computed<DataVertical>(() =>
+  activeTab.value === 'fonderie' ? 'bilanFonderie' : activeTab.value === 'uap2' ? 'bilanUap2' : 'bilanU2'
+);
 
 const tabs: { id: TabId; label: string; icon: Component }[] = [
   { id: 'fonderie', label: 'Bilan Fonderie', icon: Scale },
@@ -47,11 +48,42 @@ const isCalculating = ref(false);
 const successMessage = ref('');
 
 // Usinage state
-const bilansUsinage = ref<BilanUsinage2ParPiece[]>([]);
+const bilanUsinage = ref<BilanUsinage2Api | null>(null);
+const bilansUsinage = computed(() => bilanUsinage.value?.lignes ?? []);
 const isLoadingUsinage = ref(true);
-const rebutUsinageForm = ref({
-  numeroOF: '',
-  nombrePiecesRebut: 0
+const usinageError = ref('');
+const totalRebutUsinage2Pieces = computed(() =>
+  bilansUsinage.value.reduce((total, ligne) => total + ligne.rebutUsinage2Pieces, 0)
+);
+const totalEntreeOfPieces = computed(() =>
+  bilansUsinage.value.reduce((total, ligne) => total + (ligne.entreeOfPieces ?? 0), 0)
+);
+const totalBilanUsinage2Pieces = computed(() =>
+  bilansUsinage.value.reduce((total, ligne) => total + (ligne.bilanUsinage2Pieces ?? 0), 0)
+);
+const nombreAnomaliesUsinage2 = computed(() =>
+  bilansUsinage.value.reduce((total, ligne) => total + ligne.anomalies.length, 0)
+);
+
+const getBilanUsinageStatus = (ligne: BilanUsinage2Api['lignes'][number]): string => {
+  if (ligne.bilanUsinage2Pieces === null) return 'DonneesManquantes';
+  return ligne.anomalies.length > 0 ? 'Anomalie' : 'OK';
+};
+
+/**
+ * Etat vide explicite : plutot qu'un simple zero, on nomme la dependance manquante.
+ * Les anomalies remontees par le backend permettent de distinguer les causes.
+ */
+const usinageEmptyMessage = computed(() => {
+  if (!bilanUsinage.value) return 'Aucun bilan Usinage 2 chargé pour cette période.';
+  const anomalies = bilanUsinage.value.lignes.flatMap((ligne) => ligne.anomalies);
+  if (anomalies.includes('AUCUNE_RECEPTION_U2_VALIDEE')) {
+    return 'Aucune réception U2 validée pour cette période.';
+  }
+  if (anomalies.length > 0) {
+    return 'Les données nécessaires au calcul sont incomplètes.';
+  }
+  return 'Aucune donnée ne correspond à la période sélectionnée.';
 });
 
 // UAP2 state
@@ -177,126 +209,24 @@ const totalReport = computed(() => {
 // ===== USINAGE 2 =====
 const loadBilansUsinage = async () => {
   isLoadingUsinage.value = true;
+  usinageError.value = '';
   try {
-    bilansUsinage.value = await bilanService.getBilansUsinage(
+    bilanUsinage.value = await bilanService.getBilansUsinage(
       filterMois.value,
       filterDateDebut.value,
       filterDateFin.value
     );
-    if (!bilansUsinage.value.some((item) => item.numeroOF === rebutUsinageForm.value.numeroOF)) {
-      rebutUsinageForm.value.numeroOF = bilansUsinage.value[0]?.numeroOF ?? '';
-    }
   } catch (err) {
     console.error(err);
+    bilanUsinage.value = null;
+    usinageError.value = "Le Bilan Usinage 2 n'a pas pu être chargé depuis l'API. Aucun résultat de secours n'est affiché.";
   } finally {
     isLoadingUsinage.value = false;
   }
 };
 
-type BilanUsinage2Display = BilanUsinage2ParPiece & Partial<Record<string, number>>;
-
-const readUsinageNumber = (item: BilanUsinage2ParPiece, primaryKey: string, legacyKey?: string): number => {
-  const displayItem = item as BilanUsinage2Display;
-  const value = displayItem[primaryKey] ?? (legacyKey ? displayItem[legacyKey] : undefined);
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-};
-
-const getUsinageEmrPieces = (item: BilanUsinage2ParPiece): number =>
-  readUsinageNumber(item, 'quantiteEmrPieces', 'quantiteEmrX3');
-
-const getUsinageRebutEmrX3Pieces = (item: BilanUsinage2ParPiece): number =>
-  readUsinageNumber(item, 'quantiteRebutEmrX3Pieces');
-
-const getUsinageEmrNetteX3Pieces = (item: BilanUsinage2ParPiece): number => {
-  const displayItem = item as BilanUsinage2Display;
-  if (typeof displayItem.quantiteEmrNetteX3Pieces === 'number') {
-    return displayItem.quantiteEmrNetteX3Pieces;
-  }
-
-  return getUsinageEmrPieces(item) - getUsinageRebutEmrX3Pieces(item);
-};
-
-const getUsinageReceptionneePieces = (item: BilanUsinage2ParPiece): number =>
-  readUsinageNumber(item, 'quantiteReceptionneeU2Pieces', 'quantiteReceptionneeU2');
-
-const getUsinageRebutUsinage2Pieces = (item: BilanUsinage2ParPiece): number =>
-  readUsinageNumber(item, 'rebutUsinage2Pieces', 'rebutUsinage2Kg');
-
-const getUsinageEntreeOfPieces = (item: BilanUsinage2ParPiece): number =>
-  readUsinageNumber(item, 'entreeOfPieces', 'entreeOFParPiece');
-
-const getUsinageResultatEcartPieces = (item: BilanUsinage2ParPiece): number => {
-  const displayItem = item as BilanUsinage2Display;
-  const savedValue = displayItem.resultatEcartPieces ?? displayItem.ecartUsinage2Pieces ?? displayItem.ecartPieces;
-
-  if (typeof savedValue === 'number' && Number.isFinite(savedValue)) {
-    return savedValue;
-  }
-
-  return getUsinageEntreeOfPieces(item) - getUsinageReceptionneePieces(item) - getUsinageRebutUsinage2Pieces(item);
-};
-
-const getUsinageNonReceptionneePieces = (item: BilanUsinage2ParPiece): number =>
-  readUsinageNumber(item, 'quantiteNonReceptionneePieces', 'quantiteNonReceptionnee');
-
-const totalUsinage = computed(() => {
-  const items = bilansUsinage.value;
-  const totalEmr = items.reduce((s, i) => s + getUsinageEmrPieces(i), 0);
-  const totalRebutEmrX3 = items.reduce((s, i) => s + getUsinageRebutEmrX3Pieces(i), 0);
-  const totalEmrNetX3 = items.reduce((s, i) => s + getUsinageEmrNetteX3Pieces(i), 0);
-  const totalRecep = items.reduce((s, i) => s + getUsinageReceptionneePieces(i), 0);
-  const totalNonRecep = items.reduce((s, i) => s + getUsinageNonReceptionneePieces(i), 0);
-  const totalPieces = items.reduce((s, i) => s + getUsinageEmrPieces(i), 0);
-  const totalRebutUsinage2 = items.reduce((s, i) => s + getUsinageRebutUsinage2Pieces(i), 0);
-  const ecartMoyen = totalPieces > 0 ? totalNonRecep / totalPieces : 0;
-  const allOk = items.every((i) => i.statutControle === 'OK');
-  return {
-    totalEmr,
-    totalRebutEmrX3,
-    totalEmrNetX3,
-    totalRecep,
-    totalNonRecep,
-    totalPieces,
-    totalRebutUsinage2,
-    ecartMoyen,
-    statutGlobal: allOk ? 'OK' : 'AVerifier'
-  };
-});
-
-const selectedRebutUsinageBilan = computed(() =>
-  bilansUsinage.value.find((item) => item.numeroOF === rebutUsinageForm.value.numeroOF)
-);
-
-const handleAddRebutUsinage2 = async () => {
-  const bilan = selectedRebutUsinageBilan.value;
-  if (!bilan || rebutUsinageForm.value.nombrePiecesRebut <= 0) {
-    await dialog.alert('Sélectionnez un OF et saisissez un nombre de pièces rebut supérieur à 0.', {
-      title: 'Saisie incomplète',
-      tone: 'warning'
-    });
-    return;
-  }
-
-  try {
-    await bilanService.createRebutUsinage2({
-      numeroOF: bilan.numeroOF,
-      codeArticle: bilan.codeArticle,
-      codeTypeMatiere: bilan.codeTypeMatiere as Parameters<
-        typeof bilanService.createRebutUsinage2
-      >[0]['codeTypeMatiere'],
-      dateDeclaration: filterDateFin.value,
-      nombrePiecesRebut: Math.trunc(rebutUsinageForm.value.nombrePiecesRebut),
-      poidsRebutKg: 0,
-      observation: 'Saisie depuis le bilan Usinage 2'
-    });
-    rebutUsinageForm.value.nombrePiecesRebut = 0;
-    successMessage.value = 'Rebut Usinage 2 enregistré et intégré au bilan.';
-    await Promise.all([loadBilansUsinage(), loadBilansUap2()]);
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
-  }
-};
+const formatNullable = (value: number | null, decimals = 0): string =>
+  value === null ? '—' : formatNumber(value, decimals);
 
 // ===== UAP2 =====
 const loadBilansUap2 = async () => {
@@ -397,6 +327,7 @@ onMounted(() => {
       title="Bilan matière"
       description="Calculer, contrôler et valider les écarts de production de l’UAP2."
     />
+    <DataSourceBadge :vertical="activeBilanVertical" />
 
     <!-- Success notice -->
     <div
@@ -616,107 +547,62 @@ onMounted(() => {
 
     <!-- ===================== ONGLET USINAGE 2 ===================== -->
     <template v-if="activeTab === 'usinage2'">
-      <div v-if="canEnterRebutUsinage" class="bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-4">
-        <div class="flex items-center gap-2 border-b border-slate-50 pb-3">
-          <Wrench class="w-4 h-4 text-blue-900" />
-          <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">Saisie Rebut Usinage 2</h3>
-        </div>
-
-        <form
-          @submit.prevent="handleAddRebutUsinage2"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50/50 border border-slate-100 p-4 rounded-xl"
+      <div v-if="usinageError" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+        <p class="font-semibold">{{ usinageError }}</p>
+        <button
+          type="button"
+          class="mt-3 rounded-lg bg-rose-700 px-4 py-2 text-xs font-bold uppercase text-white hover:bg-rose-800"
+          @click="loadBilansUsinage"
         >
-          <FormField id="rebut-u2-of" label="OF" hint="Le rebut sera rattaché à cet OF." required>
-            <select
-              v-model="rebutUsinageForm.numeroOF"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full cursor-pointer"
-              required
-            >
-              <option value="" disabled>Sélectionner un OF</option>
-              <option v-for="item in bilansUsinage" :key="item.bilanKey" :value="item.numeroOF">
-                {{ item.numeroOF }}
-              </option>
-            </select>
-          </FormField>
-
-          <FormField id="rebut-u2-article" label="Article" hint="Article lié à l’OF sélectionné.">
-            <input
-              :value="selectedRebutUsinageBilan?.codeArticle || ''"
-              type="text"
-              readonly
-              placeholder="Article"
-              class="bg-slate-100 border border-slate-200 rounded-lg p-2 text-xs font-bold font-mono text-slate-700 w-full"
-            />
-          </FormField>
-
-          <FormField
-            id="rebut-u2-pieces"
-            label="Rebut Usinage 2 (pièces)"
-            hint="Nombre de pièces rebut utilisé dans le bilan."
-            required
-          >
-            <input
-              v-model.number="rebutUsinageForm.nombrePiecesRebut"
-              type="number"
-              min="1"
-              step="1"
-              placeholder="0"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold font-mono w-full"
-              required
-            />
-          </FormField>
-
-          <div class="flex items-end">
-            <button
-              type="submit"
-              class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-            >
-              <Plus class="w-4 h-4" />
-              Enregistrer le rebut
-            </button>
-          </div>
-        </form>
+          Réessayer
+        </button>
       </div>
 
-      <!-- Summary cards Usinage -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div v-if="bilanUsinage" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
         <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total pièces réceptionnées U2</p>
-          <p class="mt-2 text-xl font-black text-blue-800">{{ formatNumber(totalUsinage.totalRecep, 0) }}</p>
-          <p class="text-[10px] text-slate-400">pièces</p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nombre de pièces</p>
-          <p class="mt-2 text-xl font-black text-slate-900">{{ formatNumber(totalUsinage.totalPieces, 0) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rebut Usinage 2</p>
-          <p class="mt-2 text-xl font-black text-rose-600">
-            {{ formatNumber(totalUsinage.totalRebutUsinage2, 0) }}
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quantité totale réceptionnée U2</p>
+          <p class="mt-2 text-xl font-black text-blue-800">
+            {{ formatNumber(bilanUsinage.quantiteTotaleReceptionneePieces, 0) }}
           </p>
           <p class="text-[10px] text-slate-400">pièces</p>
         </div>
         <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Écart par pièce</p>
-          <p class="mt-2 text-xl font-black text-rose-600">{{ formatNumber(totalUsinage.ecartMoyen, 4) }}</p>
-          <p class="text-[10px] text-slate-400">kg / pièce</p>
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Rebut U2</p>
+          <p class="mt-2 text-xl font-black text-rose-700">{{ formatNumber(totalRebutUsinage2Pieces, 0) }}</p>
+          <p class="text-[10px] text-slate-400">pièces</p>
         </div>
         <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Statut contrôle</p>
-          <div class="mt-2">
-            <BadgeStatus :status="totalUsinage.statutGlobal" />
-          </div>
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Entrée OF</p>
+          <p class="mt-2 text-xl font-black text-slate-900">{{ formatNumber(totalEntreeOfPieces, 0) }}</p>
+          <p class="text-[10px] text-slate-400">pièces signées</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Écart total Bilan U2</p>
+          <p class="mt-2 text-xl font-black text-blue-900">{{ formatNumber(totalBilanUsinage2Pieces, 0) }}</p>
+          <p class="text-[10px] text-slate-400">pièces</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nombre de lignes</p>
+          <p class="mt-2 text-xl font-black text-slate-900">{{ bilanUsinage.nombreLignes }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nombre d’anomalies</p>
+          <p class="mt-2 text-xl font-black text-amber-700">{{ nombreAnomaliesUsinage2 }}</p>
         </div>
       </div>
 
-      <!-- Table Usinage -->
       <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
-          <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <Wrench class="w-4 h-4 text-blue-900" />
-            Tableau Bilan Usinage 2 par pièce
-          </h3>
-          <div class="flex gap-2">
+          <div>
+            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Wrench class="w-4 h-4 text-blue-900" />
+              Bilan Usinage 2
+            </h3>
+            <p class="mt-1 text-[10px] font-semibold text-slate-500">
+              Réception U2 - Rebut U2 - Entrée OF
+            </p>
+          </div>
+          <div v-if="bilansUsinage.length > 0" class="flex gap-2">
             <button
               @click="handlePrint"
               class="bg-slate-700 hover:bg-slate-800 text-white font-bold text-[10px] uppercase py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
@@ -729,7 +615,7 @@ onMounted(() => {
               class="bg-blue-900 hover:bg-blue-800 text-white font-bold text-[10px] uppercase py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw class="w-3.5 h-3.5" />
-              Recalculer Usinage
+              Recharger
             </button>
           </div>
         </div>
@@ -738,45 +624,63 @@ onMounted(() => {
           <LoadingState />
         </div>
 
-        <div v-else class="overflow-x-auto">
+        <div v-else-if="!usinageError" class="overflow-x-auto">
           <table class="w-full text-left border-collapse">
             <thead>
               <tr
                 class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider"
               >
-                <th class="p-3">OF</th>
-                <th class="p-3">Article</th>
-                <th class="p-3">Désignation article</th>
-                <th class="p-3 text-right text-blue-900 font-bold">Total nombre de pièces réceptionnées</th>
-                <th class="p-3 text-right text-rose-800">Total rebut Usinage 2</th>
-                <th class="p-3 text-right text-slate-800 font-bold">Total entrée OF par pièce</th>
-                <th class="p-3 text-right text-slate-900 font-bold">Résultat : écart</th>
+                <th class="p-3">Numéro OF</th>
+                <th class="p-3">Code article</th>
+                <th class="p-3">Désignation</th>
+                <th class="p-3">Atelier</th>
+                <th class="p-3">Type matière</th>
+                <th class="p-3 text-right">Quantité réceptionnée U2 (pièces)</th>
+                <th class="p-3 text-right">Rebut U2 (pièces)</th>
+                <th class="p-3 text-right">Entrée OF signée (pièces)</th>
+                <th class="p-3 text-right">Résultat Bilan U2 (pièces)</th>
+                <th class="p-3">Statut</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 text-xs font-medium">
-              <tr v-for="item in bilansUsinage" :key="item.id" class="hover:bg-slate-50/30 transition-colors">
+              <tr
+                v-for="item in bilansUsinage"
+                :key="`pieces-${item.numeroOF}-${item.codeArticle}-${item.typeMatiere ?? ''}`"
+                class="hover:bg-slate-50/30 transition-colors"
+              >
                 <td class="p-3 font-black text-blue-900 font-mono whitespace-nowrap">{{ item.numeroOF }}</td>
                 <td class="p-3 font-bold text-slate-800 font-mono">{{ item.codeArticle }}</td>
-                <td class="p-3 text-slate-600 max-w-[180px] truncate">{{ item.designationArticle }}</td>
-                <td class="p-3 text-right font-bold font-mono text-blue-700">
-                  {{ formatNumber(getUsinageReceptionneePieces(item), 0) }}
+                <td class="p-3 text-slate-600 max-w-[180px] truncate">{{ item.designationArticle ?? '—' }}</td>
+                <td class="p-3">{{ item.atelierOrigine ?? '—' }}</td>
+                <td class="p-3">{{ item.typeMatiere ?? '—' }}</td>
+                <td class="p-3 text-right font-mono text-blue-700 font-bold">
+                  {{ formatNumber(item.quantiteReceptionneePieces, 0) }}
                 </td>
-                <td class="p-3 text-right font-bold font-mono text-rose-600">
-                  {{ formatNumber(getUsinageRebutUsinage2Pieces(item), 0) }}
+                <td class="p-3 text-right font-mono">{{ formatNumber(item.rebutUsinage2Pieces, 0) }}</td>
+                <td class="p-3 text-right font-mono">{{ formatNullable(item.entreeOfPieces) }}</td>
+                <td class="p-3 text-right font-mono font-black text-blue-900">
+                  {{ formatNullable(item.bilanUsinage2Pieces) }}
                 </td>
-                <td class="p-3 text-right font-bold font-mono text-slate-700">
-                  {{ formatNumber(getUsinageEntreeOfPieces(item), 0) }}
-                </td>
-                <td
-                  class="p-3 text-right font-black font-mono"
-                  :class="getUsinageResultatEcartPieces(item) === 0 ? 'text-emerald-700' : 'text-rose-700'"
-                >
-                  {{ formatNumber(getUsinageResultatEcartPieces(item), 0) }}
-                </td>
+                <td class="p-3"><BadgeStatus :status="getBilanUsinageStatus(item)" /></td>
               </tr>
               <tr v-if="!bilansUsinage.length">
-                <td colspan="7" class="p-6 text-center text-slate-400 font-bold uppercase tracking-wider">
-                  Aucun bilan usinage disponible pour cette sélection
+                <td colspan="10" class="p-6 text-center text-slate-400">
+                  <p class="font-bold uppercase tracking-wider">{{ usinageEmptyMessage }}</p>
+                  <div class="mt-3 flex flex-wrap justify-center gap-2">
+                    <RouterLink
+                      class="rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-slate-800"
+                      to="/receptions-usinage-2"
+                    >
+                      Créer une réception
+                    </RouterLink>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50"
+                      @click="loadBilansUsinage"
+                    >
+                      Recharger
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>

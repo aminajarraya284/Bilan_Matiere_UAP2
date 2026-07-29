@@ -1,89 +1,93 @@
-using System.Globalization;
 using BilanMatiereUAP2.Api.Authorization;
 using BilanMatiereUAP2.Application.Abstractions;
-using BilanMatiereUAP2.Application.Options;
+using BilanMatiereUAP2.Application.Features.ReceptionsUsinage2;
+using BilanMatiereUAP2.Contracts.ReceptionsUsinage2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 namespace BilanMatiereUAP2.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/receptions-usinage2")]
 [Authorize(Policy = AuthorizationPolicies.ReadReceptionsUsinage2)]
-public sealed class ReceptionsUsinage2Controller : ControllerBase
+public sealed class ReceptionsUsinage2Controller(
+    IReceptionUsinage2ContextService contextService,
+    IReceptionUsinage2Service service,
+    IAlerteNonReceptionService alerteService) : ControllerBase
 {
-    private readonly IX3ImportRepository _x3Repository;
-    private readonly IManufacturingReferencesRepository _refsRepository;
-    private readonly ManufacturingReferencesOptions _options;
+    /// <summary>
+    /// Alerte journaliere des pieces non receptionnees, une ligne par Numero OF.
+    /// L'univers des OF vient des Sorties MP imputees a la date demandee.
+    /// </summary>
+    [HttpGet("non-receptionnees")]
+    [ProducesResponseType<AlerteNonReceptionResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetNonReceptionnees(
+        [FromQuery] DateOnly date,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+        => Ok(await alerteService.GetAsync(date, page, pageSize, cancellationToken));
 
-    public ReceptionsUsinage2Controller(
-        IX3ImportRepository x3Repository,
-        IManufacturingReferencesRepository refsRepository,
-        IOptions<ManufacturingReferencesOptions> options)
+    [HttpGet("contexte/{numeroOF}")]
+    public async Task<IActionResult> GetContexte(
+        string numeroOF,
+        [FromQuery] DateOnly? dateReception,
+        CancellationToken cancellationToken)
     {
-        _x3Repository = x3Repository;
-        _refsRepository = refsRepository;
-        _options = options.Value;
+        var context = await contextService.GetAsync(
+            numeroOF,
+            dateReception ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            cancellationToken);
+        return context is null
+            ? NotFound(new { message = "OF introuvable" })
+            : Ok(context);
     }
 
-    [HttpGet("/api/v1/receptions-usinage2/contexte/{numeroOF}")]
-    public async Task<IActionResult> GetContexte(string numeroOF, [FromQuery] string? codeTypeMatiere, CancellationToken cancellationToken)
+    [HttpGet]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] DateOnly? periodeDebut,
+        [FromQuery] DateOnly? periodeFin,
+        [FromQuery] string? numeroOF,
+        [FromQuery] string? codeArticle,
+        [FromQuery] string? codeTypeMatiere,
+        [FromQuery] string? atelier,
+        [FromQuery] string? statut,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await service.GetAllAsync(
+            new GetReceptionsUsinage2Query(periodeDebut, periodeFin, numeroOF, codeArticle, codeTypeMatiere, atelier, statut, page, pageSize),
+            cancellationToken));
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+        => Ok(await service.GetByIdAsync(new GetReceptionUsinage2ByIdQuery(id), cancellationToken));
+
+    [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.ManageReceptionsUsinage2)]
+    public async Task<IActionResult> Create(CreateReceptionUsinage2Request request, CancellationToken cancellationToken)
     {
-        var ordre = await _x3Repository.GetOrdreContexteAsync(numeroOF, cancellationToken);
-        if (ordre is null) return NotFound(new { message = "OF introuvable" });
-
-        var article = ordre.ArticlePrincipal;
-        if (string.IsNullOrWhiteSpace(article)) return BadRequest(new { message = "Article introuvable pour l'OF" });
-
-        // Operation d'origine Usinage 2 (configurable via ManufacturingReferences:NumeroOperationOrigineUsinage2).
-        var numeroOperation = _options.NumeroOperationOrigineUsinage2.ToString(CultureInfo.InvariantCulture);
-        var gammes = await _refsRepository.GetGammesActivesByArticleAsync(article, numeroOperation, cancellationToken);
-        var nombreNomenclatures = await _refsRepository.CountNomenclaturesActivesByParentAsync(article, cancellationToken);
-
-        // Ateliers distincts (CodePoste) disponibles : on ne choisit jamais arbitrairement en cas d'ambiguite.
-        var ateliers = gammes
-            .Select(g => g.CodePoste)
-            .Where(codePoste => !string.IsNullOrWhiteSpace(codePoste))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var warnings = new List<string>();
-        string? atelier = null;
-        var ambiguite = false;
-
-        switch (ateliers.Length)
-        {
-            case 0:
-                warnings.Add($"Aucune gamme active (operation {numeroOperation}) pour l'article {article}.");
-                break;
-            case 1:
-                atelier = ateliers[0];
-                break;
-            default:
-                ambiguite = true;
-                warnings.Add($"Plusieurs ateliers possibles pour l'article {article} : {string.Join(", ", ateliers)}. Selection requise.");
-                break;
-        }
-
-        if (nombreNomenclatures == 0)
-        {
-            warnings.Add($"Aucune nomenclature active pour l'article {article}.");
-        }
-
-        var response = new
-        {
-            numeroOF = ordre.NumeroOF,
-            article,
-            gammeTrouvee = gammes.Count > 0,
-            nomenclatureTrouvee = nombreNomenclatures > 0,
-            atelier,
-            ateliersDisponibles = ateliers,
-            ambiguiteAtelier = ambiguite,
-            requiresMaterialSelection = ambiguite,
-            warnings = warnings.ToArray()
-        };
-
-        return Ok(response);
+        var response = await service.CreateAsync(new CreateReceptionUsinage2Command(request), cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = response.Id }, response);
     }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManageReceptionsUsinage2)]
+    public async Task<IActionResult> Update(Guid id, UpdateReceptionUsinage2Request request, CancellationToken cancellationToken)
+        => Ok(await service.UpdateAsync(new UpdateReceptionUsinage2Command(id, request), cancellationToken));
+
+    [HttpPost("{id:guid}/valider")]
+    [Authorize(Policy = AuthorizationPolicies.ManageReceptionsUsinage2)]
+    public async Task<IActionResult> Valider(Guid id, ValiderReceptionUsinage2Request request, CancellationToken cancellationToken)
+        => Ok(await service.ValiderAsync(new ValiderReceptionUsinage2Command(id, request), cancellationToken));
+
+    [HttpPost("{id:guid}/annuler")]
+    [Authorize(Policy = AuthorizationPolicies.ManageReceptionsUsinage2)]
+    public async Task<IActionResult> Annuler(Guid id, CancellationToken cancellationToken)
+        => Ok(await service.AnnulerAsync(new AnnulerReceptionUsinage2Command(id), cancellationToken));
+
+    [HttpPost("{id:guid}/recalculer-contexte")]
+    [Authorize(Policy = AuthorizationPolicies.ManageReceptionsUsinage2)]
+    public async Task<IActionResult> RecalculerContexte(Guid id, CancellationToken cancellationToken)
+        => Ok(await service.RecalculerContexteAsync(new RecalculerContexteReceptionUsinage2Command(id), cancellationToken));
 }
