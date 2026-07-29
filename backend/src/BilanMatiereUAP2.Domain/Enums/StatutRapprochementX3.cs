@@ -9,5 +9,7 @@ public enum StatutRapprochementX3
     ComposantIntrouvable = 5,
     PlusieursComposants = 6,
     MouvementInvalide = 7,
-    ImportPartiel = 8
+    ImportPartiel = 8,
+    ValeurInvalide = 9,
+    PosteProcessusNonMappe = 10
 }

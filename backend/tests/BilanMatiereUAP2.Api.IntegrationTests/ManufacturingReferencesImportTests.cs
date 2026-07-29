@@ -36,7 +36,7 @@ public sealed class ManufacturingReferencesImportTests : IClassFixture<ApiWebApp
         var provider = scope.ServiceProvider;
         var service = provider.GetRequiredService<IManufacturingReferencesService>();
 
-        var result = await service.ImportGammesAsync(new MemoryStream(bytes), "profile", "SYS", isCompleteExport: false);
+        var result = await service.ImportGammesAsync(new MemoryStream(bytes), "profile", "SYS", "test.xlsx", isCompleteExport: false);
 
         Assert.False(result.Duplicate);
         Assert.True(result.Inserted > 0 || result.Updated >= 0);
@@ -66,14 +66,14 @@ public sealed class ManufacturingReferencesImportTests : IClassFixture<ApiWebApp
         using (var scope = clientFactory.Services.CreateScope())
         {
             var service = scope.ServiceProvider.GetRequiredService<IManufacturingReferencesService>();
-            var first = await service.ImportGammesAsync(new MemoryStream(bytes), "profile", "SYS", isCompleteExport: false);
+            var first = await service.ImportGammesAsync(new MemoryStream(bytes), "profile", "SYS", "test.xlsx", isCompleteExport: false);
             Assert.False(first.Duplicate);
         }
 
         using (var scope = clientFactory.Services.CreateScope())
         {
             var service = scope.ServiceProvider.GetRequiredService<IManufacturingReferencesService>();
-            var second = await service.ImportGammesAsync(new MemoryStream(bytes), "profile", "SYS", isCompleteExport: false);
+            var second = await service.ImportGammesAsync(new MemoryStream(bytes), "profile", "SYS", "test.xlsx", isCompleteExport: false);
             Assert.True(second.Duplicate);
         }
     }

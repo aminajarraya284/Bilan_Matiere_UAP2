@@ -1,6 +1,7 @@
 using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Contracts.ImportsX3;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
@@ -54,7 +55,8 @@ public sealed class X3ImportService(
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
     IValidator<ImportSortiesMatiereX3Command> importValidator,
-    IOptions<ImportX3Options> importOptions) : IX3ImportService
+    IOptions<ImportX3Options> importOptions,
+    IImportArchiveService archiveService) : IX3ImportService
 {
     // Regles de rapprochement externalisees en configuration (section "ImportX3").
     private readonly HashSet<string> _typesMatiereAutorises =
@@ -158,7 +160,8 @@ public sealed class X3ImportService(
                 contextRow.DateObjectifOF,
                 contextRow.Statut,
                 batch.Id,
-                now);
+                now,
+                articleStatus.ToString());
 
             foreach (var row in rows)
             {
@@ -303,6 +306,18 @@ public sealed class X3ImportService(
             await repository.AddConsommationsAsync(newConsommations, cancellationToken);
         }
         await repository.SaveChangesAsync(cancellationToken);
+
+        // Best-effort : l'archivage des deux fichiers sources ne doit jamais faire echouer un
+        // import metier deja reussi (donnees deja persistees).
+        try
+        {
+            await archiveService.ArchiveAsync(batch.Id, TypeImport.SortiesMatiereX3, "ENCOURSPRODUCT_V1", encoursFile.FileName, encoursFile.Content, currentUser.UserId, currentUser.UserName, cancellationToken);
+            await archiveService.ArchiveAsync(batch.Id, TypeImport.SortiesMatiereX3, "MOUVEMENTSSTOCK_V1", mouvementsFile.FileName, mouvementsFile.Content, currentUser.UserId, currentUser.UserName, cancellationToken);
+        }
+        catch
+        {
+            // best-effort : ne pas masquer le succes de l'import metier
+        }
 
         return ToImportResponse(batch, false, allConsommationsForBatch);
     }

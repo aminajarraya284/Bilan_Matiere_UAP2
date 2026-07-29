@@ -28,6 +28,17 @@ public sealed class ImportBatch
     public string? CreeParNom { get; private set; }
     public DateTime DateCreationUtc { get; private set; }
     public DateTime? DateFinUtc { get; private set; }
+    public int NombreLignesLues { get; private set; }
+    public int NombreLignesValides { get; private set; }
+    public int NombreLignesImportees { get; private set; }
+    public int NombreAnomalies { get; private set; }
+    public int ReadCount { get; private set; }
+    public int ValidCount { get; private set; }
+    public int InsertedCount { get; private set; }
+    public int UpdatedCount { get; private set; }
+    public int UnchangedCount { get; private set; }
+    public int RejectedCount { get; private set; }
+    public string? ArchiveErrorMessage { get; private set; }
 
     public static ImportBatch Demarrer(string hashFichierSha256, TypeImport typeImport, string profilImport, Guid? creeParUtilisateurId, string? creeParNom, DateTime dateCreationUtc, Guid? id = null)
     {
@@ -39,6 +50,76 @@ public sealed class ImportBatch
         if (dateFinUtc < DateCreationUtc) throw new DomainValidationException("La date de fin d'import est invalide.");
         Statut = statut;
         DateFinUtc = dateFinUtc;
+    }
+
+    public void Terminer(
+        StatutImport statut,
+        DateTime dateFinUtc,
+        int nombreLignesLues,
+        int nombreLignesValides,
+        int nombreLignesImportees,
+        int nombreAnomalies)
+    {
+        Terminer(statut, dateFinUtc);
+        NombreLignesLues = nombreLignesLues;
+        NombreLignesValides = nombreLignesValides;
+        NombreLignesImportees = nombreLignesImportees;
+        NombreAnomalies = nombreAnomalies;
+        ReadCount = nombreLignesLues;
+        ValidCount = nombreLignesValides;
+        InsertedCount = Math.Min(nombreLignesImportees, nombreLignesValides);
+        UpdatedCount = 0;
+        UnchangedCount = Math.Max(0, nombreLignesValides - InsertedCount);
+        RejectedCount = Math.Max(0, nombreLignesLues - nombreLignesValides);
+    }
+
+    public void TerminerImport(
+        StatutImport statut,
+        DateTime dateFinUtc,
+        int readCount,
+        int validCount,
+        int insertedCount,
+        int updatedCount,
+        int unchangedCount,
+        int rejectedCount,
+        int nombreAnomalies)
+    {
+        if (readCount < 0 || validCount < 0 || insertedCount < 0 || updatedCount < 0 ||
+            unchangedCount < 0 || rejectedCount < 0 || nombreAnomalies < 0)
+        {
+            throw new DomainValidationException("Les compteurs d'import ne peuvent pas etre negatifs.");
+        }
+
+        if (readCount != validCount + rejectedCount)
+        {
+            throw new DomainValidationException("ReadCount doit etre egal a ValidCount + RejectedCount.");
+        }
+
+        if (validCount != insertedCount + updatedCount + unchangedCount)
+        {
+            throw new DomainValidationException("ValidCount doit etre egal a InsertedCount + UpdatedCount + UnchangedCount.");
+        }
+
+        Terminer(statut, dateFinUtc);
+        ReadCount = readCount;
+        ValidCount = validCount;
+        InsertedCount = insertedCount;
+        UpdatedCount = updatedCount;
+        UnchangedCount = unchangedCount;
+        RejectedCount = rejectedCount;
+        NombreLignesLues = readCount;
+        NombreLignesValides = validCount;
+        NombreLignesImportees = insertedCount + updatedCount;
+        NombreAnomalies = nombreAnomalies;
+    }
+
+    public void SignalerErreurArchive(string message)
+    {
+        ArchiveErrorMessage = NormaliserTexte(message, 2000);
+        if (Statut != StatutImport.Duplicate)
+        {
+            Statut = StatutImport.TermineAvecAvertissementArchive;
+        }
     }
 
     internal static string ValiderHash(string value)

@@ -1,91 +1,123 @@
 using BilanMatiereUAP2.Application.Abstractions;
+using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Domain.Entities;
-using ExcelDataReader;
 
 namespace BilanMatiereUAP2.Infrastructure.Services;
 
 public sealed class NomenclatureExcelReader : INomenclatureReader
 {
-    // Positional columns A..L => indices 0..11
-    private const int ColCodeArticleParent = 0; // A
-    private const int ColAlternativeNomenclature = 1; // B
-    private const int ColCodeParentNiveau = 2; // C
-    private const int ColCodeComposant = 3; // D
-    private const int ColNiveau = 4; // E
-    private const int ColSequence = 5; // F
-
-    public Task<IEnumerable<RefNomenclature>> ReadAsync(Stream excelStream, string sourceSystem, Guid importBatchId, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<RefNomenclature>> ReadAsync(
+        Stream excelStream,
+        string sourceSystem,
+        Guid importBatchId,
+        CancellationToken cancellationToken = default)
     {
         var content = ReadAllBytes(excelStream);
-        var file = new X3ImportFileContent(FileName: "upload.xlsx", Length: content.Length, Content: content);
-        var sheets = ExcelWorkbook.Read(file, cancellationToken);
+        var file = new X3ImportFileContent("BOMARTPARENT.xls", content.Length, content);
         var result = new List<RefNomenclature>();
 
-        foreach (var sheet in sheets)
+        foreach (var sheet in ExcelWorkbook.Read(file, cancellationToken))
         {
-            string? currentParentArticle = null;
-            string? currentDesignationParent = null;
-            string? currentAlternative = null;
-            string? currentUniteGestion = null;
-
-            for (var i = 0; i < sheet.Rows.Count; i++)
+            foreach (var row in sheet.Rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var row = sheet.Rows[i];
-                if (!ExcelWorkbook.HasData(row)) continue;
-
-                var codeArticleParent = ExcelWorkbook.Text(GetAt(row, ColCodeArticleParent));
-                var alternative = ExcelWorkbook.Text(GetAt(row, ColAlternativeNomenclature));
-                var codeParentNiveau = ExcelWorkbook.Text(GetAt(row, ColCodeParentNiveau));
-                var codeComposant = ExcelWorkbook.Text(GetAt(row, ColCodeComposant));
-                var niveau = ExcelWorkbook.Text(GetAt(row, ColNiveau));
-                var sequence = ExcelWorkbook.Text(GetAt(row, ColSequence));
-
-                // Propagate parent info when cells are empty
-                if (!string.IsNullOrWhiteSpace(codeArticleParent))
-                {
-                    currentParentArticle = Normalize(codeArticleParent);
-                    currentAlternative = NormalizeOptional(alternative);
-                }
-
-                if (string.IsNullOrWhiteSpace(codeComposant))
-                {
-                    // skip titles or technical lines
-                    continue;
-                }
-
-                var finalParent = currentParentArticle;
-                if (string.IsNullOrWhiteSpace(finalParent))
-                {
-                    // cannot resolve parent, skip
-                    continue;
-                }
-
-                // normalize
-                var codeParentNiveauNorm = Normalize(codeParentNiveau);
-                var codeComposantNorm = Normalize(codeComposant);
-                var niveauNorm = Normalize(niveau);
-                var sequenceNorm = Normalize(sequence);
-
-                var cle = RefNomenclature.GenererCleMetier(finalParent!, currentAlternative, codeParentNiveauNorm, codeComposantNorm, niveauNorm, sequenceNorm);
-                var entity = RefNomenclature.Creer(finalParent!, currentAlternative, codeParentNiveauNorm, codeComposantNorm, niveauNorm, sequenceNorm, sourceSystem, importBatchId, DateTime.UtcNow);
-                result.Add(entity);
+                var nomenclature = TryParseRow(row, sourceSystem, importBatchId);
+                if (nomenclature is not null) result.Add(nomenclature);
             }
         }
 
         return Task.FromResult<IEnumerable<RefNomenclature>>(result);
     }
 
+    // Extrait pour etre testable directement avec un object?[] construit a la main,
+    // sans dependre d'un fichier Excel binaire reel.
+    internal static RefNomenclature? TryParseRow(object?[] row, string sourceSystem, Guid importBatchId)
+    {
+        if (!ExcelWorkbook.HasData(row)) return null;
+        if (IsTitleOrHeaderRow(row)) return null;
+
+        var codeParentNiveau = NormalizeCode(ExcelWorkbook.Text(GetAt(row, 0)));
+        var codeComposant = NormalizeCode(ExcelWorkbook.Text(GetAt(row, 1)));
+        var codeArticleParent = NormalizeCode(ExcelWorkbook.Text(GetAt(row, 2)));
+        var niveau = NormalizeCode(ExcelWorkbook.Text(GetAt(row, 3)));
+        var designationComposant = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 4)));
+        var sequence = NormalizeCode(ExcelWorkbook.Text(GetAt(row, 5)));
+
+        if (string.IsNullOrWhiteSpace(codeParentNiveau) ||
+            string.IsNullOrWhiteSpace(codeComposant) ||
+            string.IsNullOrWhiteSpace(codeArticleParent) ||
+            string.IsNullOrWhiteSpace(niveau) ||
+            string.IsNullOrWhiteSpace(sequence))
+        {
+            return null;
+        }
+
+        // Dans le rapport X3 reel, les lignes de niveau 1 (liens directs sous l'article racine)
+        // laissent la colonne 6 vide (pas de QuantiteLien propre a ce niveau) : les champs
+        // quantite/unite/categorie/type lien/%rebut sont alors decales d'une position (7 a 12).
+        // Les niveaux 2+ remplissent la colonne 6 normalement (mapping "sur le papier", 6 a 11).
+        // Detection ligne par ligne car ce decalage n'est pas constant sur tout le fichier.
+        var col6IsBlank = string.IsNullOrWhiteSpace(ExcelWorkbook.Text(GetAt(row, 6)));
+        var offset = col6IsBlank ? 7 : 6;
+
+        var quantiteLien = ReadDecimal(GetAt(row, offset));
+        var quantiteLienCumulee = ReadDecimal(GetAt(row, offset + 1));
+        var uniteQuantite = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, offset + 2)));
+        var categorieComposant = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, offset + 3)));
+        var typeLien = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, offset + 4)));
+        var pourcentageRebut = ReadDecimal(GetAt(row, offset + 5));
+
+        return RefNomenclature.Creer(
+            codeArticleParent,
+            null,
+            codeParentNiveau,
+            codeComposant,
+            niveau,
+            sequence,
+            designationComposant,
+            quantiteLien,
+            quantiteLienCumulee,
+            uniteQuantite,
+            categorieComposant,
+            typeLien,
+            pourcentageRebut,
+            sourceSystem,
+            importBatchId,
+            DateTime.UtcNow);
+    }
+
+    // Le fichier reel repete un bloc "titre" (Nomenclature produit / Article parent :) puis une ligne
+    // d'en-tete (Typ.Alt / Parent / Enfant / ...) pour chaque article racine. Les deux doivent etre ignores.
+    private static bool IsTitleOrHeaderRow(object?[] row)
+    {
+        var col0 = X3ImportParsing.NormaliserEntete(GetAt(row, 0));
+        if (col0.Contains("nomenclature") || col0 == "articleparent" || col0 == "typalt")
+        {
+            return true;
+        }
+
+        var col1 = X3ImportParsing.NormaliserEntete(GetAt(row, 1));
+        var col2 = X3ImportParsing.NormaliserEntete(GetAt(row, 2));
+        return col1 == "parent" && col2 == "enfant";
+    }
+
     private static object? GetAt(object?[] row, int index) => index < row.Length ? row[index] : null;
 
-    private static string Normalize(string value) => value?.Trim().ToUpperInvariant() ?? string.Empty;
+    private static string NormalizeCode(string? value) => value?.Trim().ToUpperInvariant() ?? string.Empty;
 
-    private static string? NormalizeOptional(string? optional) => string.IsNullOrWhiteSpace(optional) ? null : optional.Trim().ToUpperInvariant();
+    private static string? NormalizeOptionalText(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static decimal? ReadDecimal(object? value)
+        => string.IsNullOrWhiteSpace(ExcelWorkbook.Text(value))
+            ? null
+            : X3ImportParsing.TryParseDecimal(value, out var parsed) ? parsed : null;
 
     private static byte[] ReadAllBytes(Stream stream)
     {
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ms.ToArray();
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
     }
 }

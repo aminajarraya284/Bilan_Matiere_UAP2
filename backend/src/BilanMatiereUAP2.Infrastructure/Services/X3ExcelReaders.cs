@@ -5,6 +5,9 @@ using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Domain.Enums;
 using ExcelDataReader;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("BilanMatiereUAP2.Api.IntegrationTests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("BilanMatiereUAP2.UnitTests")]
+
 namespace BilanMatiereUAP2.Infrastructure.Services;
 
 public sealed class EncoursProductExcelReader : IEncoursProductReader

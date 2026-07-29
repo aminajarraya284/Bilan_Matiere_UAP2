@@ -15,7 +15,19 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
     }
 
     public Task<ImportBatch?> GetBatchByHashAsync(string hashSha256, CancellationToken cancellationToken = default)
-        => _dbContext.ImportBatches.AsNoTracking().SingleOrDefaultAsync(b => b.HashFichierSha256 == hashSha256, cancellationToken);
+        => _dbContext.ImportBatches.AsNoTracking()
+            .Where(b => b.HashFichierSha256 == hashSha256)
+            .OrderByDescending(b => b.DateCreationUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<ImportBatch?> GetBatchByHashAsync(string hashSha256, TypeImport typeImport, string? profilImport, CancellationToken cancellationToken = default)
+        => _dbContext.ImportBatches.AsNoTracking()
+            .Where(b => b.HashFichierSha256 == hashSha256 &&
+                        b.TypeImport == typeImport &&
+                        b.Statut == StatutImport.Termine &&
+                        b.ProfilImport == (profilImport ?? string.Empty).Trim())
+            .OrderByDescending(b => b.DateCreationUtc)
+            .FirstOrDefaultAsync(cancellationToken);
 
     public Task<RefGammeFabrication?> GetGammeByCleMetierAsync(string cleMetier, CancellationToken cancellationToken = default)
         => _dbContext.RefGammesFabrication.AsNoTracking().SingleOrDefaultAsync(g => g.CleMetier == cleMetier, cancellationToken);
@@ -40,6 +52,13 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
     public Task<int> CountNomenclaturesActivesByParentAsync(string codeArticleParent, CancellationToken cancellationToken = default)
         => _dbContext.RefNomenclatures.AsNoTracking()
             .CountAsync(n => n.IsActive && n.CodeArticleParent == codeArticleParent, cancellationToken);
+
+    public async Task<IReadOnlyList<RefNomenclature>> GetNomenclaturesByArticleAndComponentAsync(string codeArticleParent, string codeComposant, CancellationToken cancellationToken = default)
+        => await _dbContext.RefNomenclatures.AsNoTracking()
+            .Where(n => n.IsActive && n.CodeArticleParent == codeArticleParent && n.CodeComposant == codeComposant)
+            .OrderBy(n => n.Niveau)
+            .ThenBy(n => n.Sequence)
+            .ToListAsync(cancellationToken);
 
     // Chargement suivi par lot (tracked) : les entites retournees sont attachees au contexte,
     // de sorte que les appels a MettreAJour sont bien persistes lors du SaveChanges.
@@ -142,6 +161,14 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.IsActive, r => false), cancellationToken);
     }
 
+    public Task<int> DisableMissingGammesAsync(string sourceSystem, IEnumerable<string> existingCleMetiers, CancellationToken cancellationToken = default)
+    {
+        var list = existingCleMetiers.Distinct().ToList();
+        return _dbContext.RefGammesFabrication
+            .Where(r => r.IsActive && r.SourceSystem == sourceSystem && !list.Contains(r.CleMetier))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.IsActive, false), cancellationToken);
+    }
+
     public Task<int> DisableMissingNomenclaturesAsync(Guid importBatchId, IEnumerable<string> existingCleMetiers, CancellationToken cancellationToken = default)
     {
         var list = existingCleMetiers.ToList();
@@ -150,21 +177,46 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.IsActive, r => false), cancellationToken);
     }
 
+    public Task<int> DisableMissingNomenclaturesAsync(string sourceSystem, IEnumerable<string> existingCleMetiers, CancellationToken cancellationToken = default)
+    {
+        var list = existingCleMetiers.Distinct().ToList();
+        return _dbContext.RefNomenclatures
+            .Where(r => r.IsActive && r.SourceSystem == sourceSystem && !list.Contains(r.CleMetier))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.IsActive, false), cancellationToken);
+    }
+
     public Task<IReadOnlyList<RefGammeFabrication>> QueryGammesAsync(string? codeArticle = null, string? atelier = null, string? numeroOperation = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
+        => QueryGammesPagedAsync(codeArticle, atelier, numeroOperation, null, page, pageSize, cancellationToken)
+            .ContinueWith(task => task.Result.Items, cancellationToken);
+
+    public Task<IReadOnlyList<RefNomenclature>> QueryNomenclaturesAsync(string? codeArticleParent = null, string? codeComposant = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
+        => QueryNomenclaturesPagedAsync(codeArticleParent, codeComposant, null, null, page, pageSize, cancellationToken)
+            .ContinueWith(task => task.Result.Items, cancellationToken);
+
+    public async Task<PagedResult<RefGammeFabrication>> QueryGammesPagedAsync(string? codeArticle = null, string? atelier = null, string? numeroOperation = null, bool? actif = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.RefGammesFabrication.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(codeArticle)) query = query.Where(r => r.CodeArticle == codeArticle);
-        if (!string.IsNullOrWhiteSpace(atelier)) query = query.Where(r => r.SourceSystem == atelier || r.CodePoste == atelier || r.CodePoste == atelier);
+        if (!string.IsNullOrWhiteSpace(atelier)) query = query.Where(r => r.CodeAtelier == atelier);
         if (!string.IsNullOrWhiteSpace(numeroOperation)) query = query.Where(r => r.NumeroOperation == numeroOperation);
-        return query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken).ContinueWith(t => (IReadOnlyList<RefGammeFabrication>)t.Result, cancellationToken);
+        if (actif is not null) query = query.Where(r => r.IsActive == actif.Value);
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query.OrderBy(r => r.CodeArticle).ThenBy(r => r.NumeroOperation).ThenBy(r => r.CodeAtelier).ThenBy(r => r.CodePoste)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return new PagedResult<RefGammeFabrication>(items, total);
     }
 
-    public Task<IReadOnlyList<RefNomenclature>> QueryNomenclaturesAsync(string? codeArticleParent = null, string? codeComposant = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<RefNomenclature>> QueryNomenclaturesPagedAsync(string? codeArticleParent = null, string? codeComposant = null, string? niveau = null, bool? actif = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.RefNomenclatures.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(codeArticleParent)) query = query.Where(r => r.CodeArticleParent == codeArticleParent);
         if (!string.IsNullOrWhiteSpace(codeComposant)) query = query.Where(r => r.CodeComposant == codeComposant);
-        return query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken).ContinueWith(t => (IReadOnlyList<RefNomenclature>)t.Result, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(niveau)) query = query.Where(r => r.Niveau == niveau);
+        if (actif is not null) query = query.Where(r => r.IsActive == actif.Value);
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query.OrderBy(r => r.CodeArticleParent).ThenBy(r => r.CodeComposant).ThenBy(r => r.Niveau).ThenBy(r => r.Sequence)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return new PagedResult<RefNomenclature>(items, total);
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default)

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using BilanMatiereUAP2.Application.Abstractions;
+using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Contracts;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
@@ -11,23 +12,26 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
     private readonly IManufacturingReferencesRepository _repository;
     private readonly IGammeFabricationReader _gammeReader;
     private readonly INomenclatureReader _nomenclatureReader;
+    private readonly IImportArchiveService _archiveService;
 
     public ManufacturingReferencesService(
         IManufacturingReferencesRepository repository,
         IGammeFabricationReader gammeReader,
-        INomenclatureReader nomenclatureReader)
+        INomenclatureReader nomenclatureReader,
+        IImportArchiveService archiveService)
     {
         _repository = repository;
         _gammeReader = gammeReader;
         _nomenclatureReader = nomenclatureReader;
+        _archiveService = archiveService;
     }
 
-    public async Task<ImportReferenceResponse> ImportGammesAsync(Stream fileStream, string profilImport, string sourceSystem, bool isCompleteExport = false, CancellationToken cancellationToken = default)
+    public async Task<ImportReferenceResponse> ImportGammesAsync(Stream fileStream, string profilImport, string sourceSystem, string nomFichierOriginal, bool isCompleteExport = false, CancellationToken cancellationToken = default)
     {
         var bytes = await ReadAllBytesAsync(fileStream, cancellationToken);
         var hash = ComputeSha256(bytes);
-        var existing = await _repository.GetBatchByHashAsync(hash, cancellationToken);
-        if (existing is not null && existing.Statut == StatutImport.Termine)
+        var existing = await _repository.GetBatchByHashAsync(hash, TypeImport.GammeFabrication, profilImport, cancellationToken);
+        if (existing is not null)
         {
             return new ImportReferenceResponse(true, 0, 0);
         }
@@ -62,7 +66,31 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
             {
                 if (existingByKey.TryGetValue(g.CleMetier, out var ex))
                 {
-                    ex.MettreAJour(g.AlternativeGamme, g.NumeroOperation, g.CodePoste, g.SourceUpdatedAt);
+                    ex.MettreAJour(
+                        g.DesignationArticle,
+                        g.DateFinValidite,
+                        g.EtapeSuivi,
+                        g.AlternativeGamme,
+                        g.NumeroOperation,
+                        g.CodeAtelier,
+                        g.CodePoste,
+                        g.NombrePostes,
+                        g.GroupePosteCharge,
+                        g.DesignationOperation,
+                        g.UniteOperation,
+                        g.CoefficientOperationStock,
+                        g.TempsCycle,
+                        g.Trs,
+                        g.TempsAttente,
+                        g.Jalon,
+                        g.Quantite,
+                        g.Cadence,
+                        g.DateModificationX3,
+                        g.TempsReglage,
+                        g.CoefficientCcpt,
+                        sourceSystem,
+                        batch.Id,
+                        DateTime.UtcNow);
                     ex.Reactiver();
                     updated++;
                 }
@@ -79,14 +107,15 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
             // Desactivation logique des lignes absentes UNIQUEMENT sur un export complet.
             if (isCompleteExport)
             {
-                await _repository.DisableMissingGammesAsync(batch.Id, keys, cancellationToken);
+                await _repository.DisableMissingGammesAsync(sourceSystem, keys, cancellationToken);
             }
 
-            batch.Terminer(StatutImport.Termine, DateTime.UtcNow);
+            batch.Terminer(StatutImport.Termine, DateTime.UtcNow, gammes.Count, gammes.Count, inserted + updated, 0);
             await _repository.UpdateBatchAsync(batch, cancellationToken);
             await _repository.SaveChangesAsync(cancellationToken);
             await _repository.CommitTransactionAsync(tx, cancellationToken);
             tx = null;
+            await ArchiverSansEchouerAsync(batch.Id, TypeImport.GammeFabrication, profilImport, nomFichierOriginal, bytes, cancellationToken);
             return new ImportReferenceResponse(false, inserted, updated);
         }
         catch
@@ -96,12 +125,12 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
         }
     }
 
-    public async Task<ImportReferenceResponse> ImportNomenclaturesAsync(Stream fileStream, string profilImport, string sourceSystem, bool isCompleteExport = false, CancellationToken cancellationToken = default)
+    public async Task<ImportReferenceResponse> ImportNomenclaturesAsync(Stream fileStream, string profilImport, string sourceSystem, string nomFichierOriginal, bool isCompleteExport = false, CancellationToken cancellationToken = default)
     {
         var bytes = await ReadAllBytesAsync(fileStream, cancellationToken);
         var hash = ComputeSha256(bytes);
-        var existing = await _repository.GetBatchByHashAsync(hash, cancellationToken);
-        if (existing is not null && existing.Statut == StatutImport.Termine)
+        var existing = await _repository.GetBatchByHashAsync(hash, TypeImport.Nomenclature, profilImport, cancellationToken);
+        if (existing is not null)
         {
             return new ImportReferenceResponse(true, 0, 0);
         }
@@ -132,7 +161,22 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
             {
                 if (existingByKey.TryGetValue(n.CleMetier, out var ex))
                 {
-                    ex.MettreAJour(n.AlternativeNomenclature, n.CodeParentNiveau, n.CodeComposant, n.Niveau, n.Sequence, n.SourceUpdatedAt);
+                    ex.MettreAJour(
+                        n.AlternativeNomenclature,
+                        n.CodeParentNiveau,
+                        n.CodeComposant,
+                        n.Niveau,
+                        n.Sequence,
+                        n.DesignationComposant,
+                        n.QuantiteLien,
+                        n.QuantiteLienCumulee,
+                        n.UniteQuantite,
+                        n.CategorieComposant,
+                        n.TypeLien,
+                        n.PourcentageRebut,
+                        sourceSystem,
+                        batch.Id,
+                        DateTime.UtcNow);
                     ex.Reactiver();
                     updated++;
                 }
@@ -148,20 +192,35 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
 
             if (isCompleteExport)
             {
-                await _repository.DisableMissingNomenclaturesAsync(batch.Id, keys, cancellationToken);
+                await _repository.DisableMissingNomenclaturesAsync(sourceSystem, keys, cancellationToken);
             }
 
-            batch.Terminer(StatutImport.Termine, DateTime.UtcNow);
+            batch.Terminer(StatutImport.Termine, DateTime.UtcNow, nomenclatures.Count, nomenclatures.Count, inserted + updated, 0);
             await _repository.UpdateBatchAsync(batch, cancellationToken);
             await _repository.SaveChangesAsync(cancellationToken);
             await _repository.CommitTransactionAsync(tx, cancellationToken);
             tx = null;
+            await ArchiverSansEchouerAsync(batch.Id, TypeImport.Nomenclature, profilImport, nomFichierOriginal, bytes, cancellationToken);
             return new ImportReferenceResponse(false, inserted, updated);
         }
         catch
         {
             await MarquerEchecAsync(tx, batch.Id, cancellationToken);
             throw;
+        }
+    }
+
+    // Best-effort : l'archivage du fichier source ne doit jamais faire echouer un import metier
+    // deja reussi (donnees deja persistees). Une erreur d'archivage est absorbee ici.
+    private async Task ArchiverSansEchouerAsync(Guid batchId, TypeImport typeImport, string profilImport, string nomFichierOriginal, byte[] content, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _archiveService.ArchiveAsync(batchId, typeImport, profilImport, nomFichierOriginal, content, null, null, cancellationToken);
+        }
+        catch
+        {
+            // best-effort : ne pas masquer le succes de l'import metier
         }
     }
 

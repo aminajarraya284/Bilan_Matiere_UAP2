@@ -21,6 +21,7 @@ public sealed class X3OrdreFabricationConfiguration : IEntityTypeConfiguration<X
         builder.Property(e => e.SituationOF).HasMaxLength(80);
         builder.Property(e => e.Atelier).HasMaxLength(30);
         builder.Property(e => e.StatutX3).HasMaxLength(80);
+        builder.Property(e => e.StatutArticle).HasMaxLength(50).IsRequired();
 
         builder.Property(e => e.DateCreationUtc).HasColumnType("datetime2").IsRequired();
         builder.Property(e => e.DateModificationUtc).HasColumnType("datetime2");

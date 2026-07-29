@@ -1,23 +1,21 @@
 using BilanMatiereUAP2.Application.Abstractions;
-using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Application.Common;
-using ExcelDataReader;
+using BilanMatiereUAP2.Application.Features.ImportsX3;
+using BilanMatiereUAP2.Domain.Entities;
 
 namespace BilanMatiereUAP2.Infrastructure.Services;
 
 public sealed class GammeFabricationExcelReader : IGammeFabricationReader
 {
-    // Positional columns A..V => indices 0..21
-    private const int ColCodeArticle = 0; // A
-    private const int ColAlternativeGamme = 1; // B
-    private const int ColNumeroOperation = 2; // C
-    private const int ColCodePoste = 3; // D
-    private const int ColCodeAtelier = 4; // E
-
-    public Task<IEnumerable<RefGammeFabrication>> ReadAsync(Stream excelStream, string sourceSystem, Guid importBatchId, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<RefGammeFabrication>> ReadAsync(
+        Stream excelStream,
+        string sourceSystem,
+        Guid importBatchId,
+        CancellationToken cancellationToken = default)
     {
         var content = ReadAllBytes(excelStream);
-        var file = new X3ImportFileContent(FileName: "upload.xlsx", Length: content.Length, Content: content);
+        var file = new X3ImportFileContent("GAMMEFAB.xls", content.Length, content);
+        var result = new List<RefGammeFabrication>();
         IReadOnlyList<ExcelWorkbook.Sheet> sheets;
         try
         {
@@ -25,43 +23,79 @@ public sealed class GammeFabricationExcelReader : IGammeFabricationReader
         }
         catch (ImportFileException)
         {
-            // If the uploaded content is not a readable Excel file, return empty result instead of throwing
-            return Task.FromResult<IEnumerable<RefGammeFabrication>>(Array.Empty<RefGammeFabrication>());
+            return Task.FromResult<IEnumerable<RefGammeFabrication>>(result);
         }
-        var result = new List<RefGammeFabrication>();
 
         foreach (var sheet in sheets)
         {
-            for (var i = 0; i < sheet.Rows.Count; i++)
+            foreach (var row in sheet.Rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var row = sheet.Rows[i];
                 if (!ExcelWorkbook.HasData(row)) continue;
 
-                var codeArticle = ExcelWorkbook.Text(GetAt(row, ColCodeArticle));
-                var numeroOperation = ExcelWorkbook.Text(GetAt(row, ColNumeroOperation));
-                var codeAtelier = ExcelWorkbook.Text(GetAt(row, ColCodeAtelier));
+                var codeArticle = NormalizeText(ExcelWorkbook.Text(GetAt(row, 0)));
+                var numeroOperationRaw = ExcelWorkbook.Text(GetAt(row, 4));
+                var numeroOperation = NormalizeText(numeroOperationRaw);
 
-                // minimal validation
-                if (string.IsNullOrWhiteSpace(codeArticle) || string.IsNullOrWhiteSpace(numeroOperation) || string.IsNullOrWhiteSpace(codeAtelier))
+                // Les en-têtes GAMMEFAB sont des libellés multi-lignes qui ne correspondent pas
+                // systematiquement au contenu reel (cf. spec) : on ne peut donc pas filtrer les
+                // titres/en-tetes par comparaison de texte. Le NumeroOperation (colonne E) est en
+                // revanche toujours numerique sur une vraie ligne metier ; on l'utilise comme
+                // discriminant fiable, en plus du filtre "ligne vide" deja applique par HasData.
+                if (string.IsNullOrWhiteSpace(codeArticle) ||
+                    string.IsNullOrWhiteSpace(numeroOperation) ||
+                    !X3ImportParsing.TryParseDecimal(numeroOperationRaw, out _))
                 {
-                    // produce anomaly by skipping here; import process will record anomalies
                     continue;
                 }
 
-                var alternative = ExcelWorkbook.Text(GetAt(row, ColAlternativeGamme));
-                var codePoste = ExcelWorkbook.Text(GetAt(row, ColCodePoste));
+                var designationArticle = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 1)));
+                var dateFinValidite = ReadDate(GetAt(row, 2));
+                var etapeSuivi = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 3)));
+                var codeAtelier = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 5)));
+                var codePoste = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 6)));
+                var nombrePostes = ReadDecimal(GetAt(row, 7));
+                var groupePosteCharge = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 8)));
+                var designationOperation = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 9)));
+                var alternativeGamme = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 10)));
+                var uniteOperation = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 11)));
+                var coefficientOperationStock = ReadDecimal(GetAt(row, 12));
+                var tempsCycle = ReadDecimal(GetAt(row, 13));
+                var trs = ReadDecimal(GetAt(row, 14));
+                var tempsAttente = ReadDecimal(GetAt(row, 15));
+                var jalon = NormalizeOptionalText(ExcelWorkbook.Text(GetAt(row, 16)));
+                var quantite = ReadDecimal(GetAt(row, 17));
+                var cadence = ReadDecimal(GetAt(row, 18));
+                var dateModificationX3 = ReadDateTime(GetAt(row, 19));
+                var tempsReglage = ReadDecimal(GetAt(row, 20));
+                var coefficientCcpt = ReadDecimal(GetAt(row, 21));
 
-                // normalize
-                codeArticle = Normalize(codeArticle);
-                numeroOperation = Normalize(numeroOperation);
-                codeAtelier = Normalize(codeAtelier);
-                alternative = NormalizeOptional(alternative);
-                codePoste = NormalizeOptional(codePoste);
-
-                var cle = RefGammeFabrication.GenererCleMetier(codeArticle, alternative, numeroOperation, codePoste);
-                var entity = RefGammeFabrication.Creer(codeArticle, alternative, numeroOperation, codePoste, sourceSystem, importBatchId, DateTime.UtcNow);
-                result.Add(entity);
+                result.Add(RefGammeFabrication.Creer(
+                    codeArticle,
+                    designationArticle,
+                    dateFinValidite,
+                    etapeSuivi,
+                    alternativeGamme,
+                    numeroOperation,
+                    codeAtelier,
+                    codePoste,
+                    nombrePostes,
+                    groupePosteCharge,
+                    designationOperation,
+                    uniteOperation,
+                    coefficientOperationStock,
+                    tempsCycle,
+                    trs,
+                    tempsAttente,
+                    jalon,
+                    quantite,
+                    cadence,
+                    dateModificationX3,
+                    tempsReglage,
+                    coefficientCcpt,
+                    sourceSystem,
+                    importBatchId,
+                    DateTime.UtcNow));
             }
         }
 
@@ -70,14 +104,32 @@ public sealed class GammeFabricationExcelReader : IGammeFabricationReader
 
     private static object? GetAt(object?[] row, int index) => index < row.Length ? row[index] : null;
 
-    private static string Normalize(string value) => value?.Trim().ToUpperInvariant() ?? string.Empty;
+    private static string NormalizeText(string? value) => value?.Trim().ToUpperInvariant() ?? string.Empty;
 
-    private static string? NormalizeOptional(string? optional) => string.IsNullOrWhiteSpace(optional) ? null : optional.Trim().ToUpperInvariant();
+    private static string? NormalizeOptionalText(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static decimal? ReadDecimal(object? value)
+        => string.IsNullOrWhiteSpace(ExcelWorkbook.Text(value))
+            ? null
+            : X3ImportParsing.TryParseDecimal(value, out var parsed) ? parsed : null;
+
+    private static DateOnly? ReadDate(object? value)
+        => string.IsNullOrWhiteSpace(ExcelWorkbook.Text(value))
+            ? null
+            : X3ImportParsing.TryParseDate(value, out var parsed) ? parsed : null;
+
+    private static DateTime? ReadDateTime(object? value)
+    {
+        if (value is DateTime dateTime) return dateTime;
+        if (value is DateOnly dateOnly) return dateOnly.ToDateTime(TimeOnly.MinValue);
+        return ReadDate(value)?.ToDateTime(TimeOnly.MinValue);
+    }
 
     private static byte[] ReadAllBytes(Stream stream)
     {
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ms.ToArray();
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
     }
 }

@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, RefreshCw, Upload } from 'lucide-vue-next';
+import { computed, onMounted, ref } from 'vue';
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, History, Info, RefreshCw, Upload } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import { useAppToast } from '@/composables/useAppToast';
 import {
   x3ExcelImportService,
-  type X3BilanType,
+  type X3ClassificationResult,
   type X3ExcelFileType,
   type X3ImportedSourceStatus
 } from '@/services/x3ExcelImportService';
+import {
+  AUCUNE_ENTREE_OF_MESSAGE,
+  FORMULES,
+  USAGE_BLOCK,
+  X3_CARDS
+} from './etatsX3.content';
 
 const toast = useAppToast();
 
-const emptyX3Status = (bilanType: X3BilanType, fileType: X3ExcelFileType): X3ImportedSourceStatus => ({
-  bilanType,
+const emptyX3Status = (fileType: X3ExcelFileType): X3ImportedSourceStatus => ({
+  bilanType: 'USINAGE_2',
   fileType,
   fileName: '',
   importedAt: '',
@@ -21,45 +27,21 @@ const emptyX3Status = (bilanType: X3BilanType, fileType: X3ExcelFileType): X3Imp
   status: 'Non importé'
 });
 
-const bilanTypes: { id: X3BilanType; label: string }[] = [
-  { id: 'USINAGE_2', label: 'Bilan Usinage 2' },
-  { id: 'UAP2', label: 'Bilan UAP2' }
-];
+const sourceCards = X3_CARDS;
 
-const sourceCards: { fileType: X3ExcelFileType; title: string; subtitle: string; description: string }[] = [
-  {
-    fileType: 'MVTSTOTRSVCR',
-    title: 'MVTSTOTRSVCR',
-    subtitle: 'Mouvements stock X3',
-    description: 'État X3 utilisé pour les mouvements de stock et les entrées OF.'
-  },
-  {
-    fileType: 'YRJMCH',
-    title: 'YRJMCH',
-    subtitle: 'Rapport machine / OF X3',
-    description: 'État X3 utilisé pour les quantités EMR, rebuts EMR et informations OF.'
-  }
-];
-
-const x3ExcelStatuses = ref<Record<X3BilanType, Record<X3ExcelFileType, X3ImportedSourceStatus>>>({
-  USINAGE_2: {
-    MVTSTOTRSVCR: emptyX3Status('USINAGE_2', 'MVTSTOTRSVCR'),
-    YRJMCH: emptyX3Status('USINAGE_2', 'YRJMCH')
-  },
-  UAP2: {
-    MVTSTOTRSVCR: emptyX3Status('UAP2', 'MVTSTOTRSVCR'),
-    YRJMCH: emptyX3Status('UAP2', 'YRJMCH')
-  }
+const sourceStatuses = ref<Record<X3ExcelFileType, X3ImportedSourceStatus>>({
+  MVTSTOTRSVCR: emptyX3Status('MVTSTOTRSVCR'),
+  YRJMCH: emptyX3Status('YRJMCH')
 });
 
-const isSyncingAll = ref(false);
-const syncingFileType = ref<X3ExcelFileType | null>(null);
+const importingFileType = ref<X3ExcelFileType | null>(null);
+const recalculatingClassification = ref(false);
+const classificationResult = ref<X3ClassificationResult | null>(null);
 
-const refreshX3ExcelStatuses = () => {
-  bilanTypes.forEach(({ id: bilanType }) => {
-    sourceCards.forEach(({ fileType }) => {
-      x3ExcelStatuses.value[bilanType][fileType] = x3ExcelImportService.getStatus(bilanType, fileType);
-    });
+const refreshX3ExcelStatuses = async () => {
+  await x3ExcelImportService.refreshStatuses();
+  sourceCards.forEach(({ fileType }) => {
+    sourceStatuses.value[fileType] = x3ExcelImportService.getStatus('USINAGE_2', fileType);
   });
 };
 
@@ -76,75 +58,78 @@ const getX3ExcelStatusClass = (status: string): string => {
 
 const formatX3ImportDate = (value: string): string => {
   if (!value) return '—';
-  return new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'short',
-    timeStyle: 'short'
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 };
 
 const handleImportX3Excel = async (event: Event, fileType: X3ExcelFileType) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
+  if (importingFileType.value) {
+    input.value = '';
+    return;
+  }
 
+  importingFileType.value = fileType;
   try {
-    await Promise.all(
-      bilanTypes.map(({ id: bilanType }) =>
-        fileType === 'MVTSTOTRSVCR'
-          ? x3ExcelImportService.importMVTSTOTRSVCR(file, bilanType)
-          : x3ExcelImportService.importYRJMCH(file, bilanType)
-      )
-    );
-    refreshX3ExcelStatuses();
+    if (fileType === 'MVTSTOTRSVCR') {
+      await x3ExcelImportService.importMVTSTOTRSVCR(file, 'USINAGE_2');
+    } else {
+      await x3ExcelImportService.importYRJMCH(file, 'USINAGE_2');
+    }
+    await refreshX3ExcelStatuses();
     toast.success(`${fileType} importé pour les états X3 Usinage 2 et UAP2.`);
   } catch (error) {
-    refreshX3ExcelStatuses();
+    await refreshX3ExcelStatuses();
     toast.error(error instanceof Error ? error.message : 'Import Excel X3 invalide.');
   } finally {
+    importingFileType.value = null;
     input.value = '';
   }
 };
 
-const handleSyncX3ExcelSource = async (fileType: X3ExcelFileType) => {
-  const isImportedForBothBilans = bilanTypes.every(
-    ({ id: bilanType }) => x3ExcelStatuses.value[bilanType][fileType].status === 'Importé'
-  );
+const formatOptionalCount = (value: number | undefined): string =>
+  typeof value === 'number' ? value.toLocaleString('fr-FR') : '—';
 
-  if (!isImportedForBothBilans) {
-    toast.error(`Importez d'abord le fichier ${fileType} pour les états X3 Usinage 2 et UAP2.`);
-    return;
-  }
+const hasImportedSource = (fileType: X3ExcelFileType): boolean =>
+  sourceStatuses.value[fileType].status === 'Importé';
 
-  syncingFileType.value = fileType;
+const getImportButtonLabel = (fileType: X3ExcelFileType): string => {
+  if (importingFileType.value === fileType) return 'Import en cours';
+  return hasImportedSource(fileType) ? 'Réimporter une nouvelle version' : 'Importer Excel';
+};
+
+const handleDownloadArchive = async (status: X3ImportedSourceStatus) => {
+  await x3ExcelImportService.downloadArchivedFile(status);
+};
+
+const handleRecalculerClassification = async () => {
+  if (recalculatingClassification.value) return;
+  recalculatingClassification.value = true;
   try {
-    refreshX3ExcelStatuses();
-    toast.success(`${fileType} synchronisé localement pour les bilans Usinage 2 et UAP2.`);
+    classificationResult.value = await x3ExcelImportService.recalculerClassificationYRJMCH();
+    toast.success(
+      `Classification recalculée : ${classificationResult.value.lignesModifiees.toLocaleString('fr-FR')} ligne(s) modifiée(s).`
+    );
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Le recalcul de la classification a échoué.');
   } finally {
-    syncingFileType.value = null;
+    recalculatingClassification.value = false;
   }
 };
 
-const handleSyncBothX3ExcelSources = async () => {
-  const hasSourcesForBothBilans = bilanTypes.every(({ id: bilanType }) =>
-    x3ExcelImportService.hasBothSources(bilanType)
-  );
+/**
+ * Un import MVT qui a lu des lignes sans en retenir aucune signale, en pratique,
+ * un export ne contenant pas de transaction « Entrée OF ».
+ */
+const mvtSansEntreeOf = computed(() => {
+  const status = sourceStatuses.value.MVTSTOTRSVCR;
+  return status.status === 'Importé' && (status.rowsRead ?? 0) > 0 && status.rowCount === 0;
+});
 
-  if (!hasSourcesForBothBilans) {
-    refreshX3ExcelStatuses();
-    toast.error('Importez MVTSTOTRSVCR et YRJMCH avant de synchroniser les états X3.');
-    return;
-  }
-
-  isSyncingAll.value = true;
-  try {
-    refreshX3ExcelStatuses();
-    toast.success('Synchronisation locale des états X3 terminée pour Usinage 2 et UAP2.');
-  } finally {
-    isSyncingAll.value = false;
-  }
-};
-
-onMounted(refreshX3ExcelStatuses);
+onMounted(() => {
+  void refreshX3ExcelStatuses();
+});
 </script>
 
 <template>
@@ -155,28 +140,21 @@ onMounted(refreshX3ExcelStatuses);
     />
 
     <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div class="flex items-start gap-3">
-          <div class="rounded-xl bg-blue-50 p-3 text-blue-900">
-            <FileSpreadsheet class="h-6 w-6" />
-          </div>
-          <div>
-            <h2 class="text-sm font-black uppercase tracking-wider text-slate-900">Sources X3 communes</h2>
-            <p class="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-500">
-              Cette page centralise les imports X3. Les bilans ne contiennent plus ces cartes pour garder uniquement les
-              calculs et résultats.
-            </p>
-          </div>
+      <div class="flex items-start gap-3">
+        <div class="rounded-xl bg-blue-50 p-3 text-blue-900">
+          <FileSpreadsheet class="h-6 w-6" />
         </div>
-
-        <button
-          class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-blue-800 disabled:opacity-50"
-          :disabled="isSyncingAll"
-          @click="handleSyncBothX3ExcelSources"
-        >
-          <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isSyncingAll }" />
-          Synchroniser les 2 fichiers X3
-        </button>
+        <div>
+          <h2 class="text-sm font-black uppercase tracking-wider text-slate-900">Sources X3 communes</h2>
+          <p class="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-500">
+            Cette page centralise les sources X3 utilisées dans les bilans matière. Les fichiers peuvent être
+            réimportés à chaque nouvelle version et leur historique est conservé dans SQL Server.
+          </p>
+          <p class="mt-2 max-w-3xl rounded-lg bg-blue-50/70 px-3 py-2 text-xs font-bold leading-5 text-blue-900">
+            Pour YRJMCH, le processus est déterminé automatiquement par les trois premiers caractères du poste de la
+            colonne B : SCI, EMR ou TRN. Les calculs sont ensuite regroupés par Numéro OF et Code article.
+          </p>
+        </div>
       </div>
     </div>
 
@@ -187,87 +165,225 @@ onMounted(refreshX3ExcelStatuses);
         class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
       >
         <div class="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div class="min-w-0">
             <h3 class="text-base font-black text-slate-950">{{ card.title }}</h3>
             <p class="text-xs font-bold text-blue-900">{{ card.subtitle }}</p>
             <p class="mt-2 text-xs font-medium leading-5 text-slate-500">{{ card.description }}</p>
+            <p class="mt-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Utilisé par</p>
+            <ul class="mt-1 space-y-0.5 text-xs font-semibold text-slate-600">
+              <li v-for="usage in card.usedBy" :key="usage">• {{ usage }}</li>
+            </ul>
           </div>
 
           <div class="flex flex-wrap gap-2">
             <label
-              class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-blue-900 hover:bg-slate-50"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-blue-900 hover:bg-slate-50"
+              :class="{
+                'cursor-not-allowed opacity-50': importingFileType !== null,
+                'cursor-pointer': importingFileType === null
+              }"
             >
-              <Upload class="h-3.5 w-3.5" />
-              Importer Excel
+              <Upload class="h-3.5 w-3.5" :class="{ 'animate-pulse': importingFileType === card.fileType }" />
+              {{ getImportButtonLabel(card.fileType) }}
               <input
                 class="hidden"
                 type="file"
                 accept=".xlsx,.xls"
+                :disabled="importingFileType !== null"
                 @change="handleImportX3Excel($event, card.fileType)"
               />
             </label>
-            <button
-              class="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-slate-800 disabled:opacity-50"
-              :disabled="syncingFileType === card.fileType"
-              @click="handleSyncX3ExcelSource(card.fileType)"
+            <RouterLink
+              class="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-slate-800"
+              to="/imports-historique"
             >
-              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': syncingFileType === card.fileType }" />
-              Synchroniser
+              <History class="h-3.5 w-3.5" />
+              Consulter l'historique
+            </RouterLink>
+            <button
+              v-if="card.fileType === 'YRJMCH'"
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-blue-900 px-3 py-2 text-[10px] font-black uppercase text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="recalculatingClassification"
+              @click="handleRecalculerClassification"
+            >
+              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': recalculatingClassification }" />
+              Recalculer la classification
             </button>
           </div>
         </div>
 
-        <div class="mt-4 grid grid-cols-1 gap-3">
-          <div
-            v-for="bilan in bilanTypes"
-            :key="`${card.fileType}-${bilan.id}`"
-            class="rounded-xl border border-slate-100 bg-slate-50/70 p-4"
-          >
+        <!-- Fonctionnement : enchaînement exact du traitement, sans interprétation. -->
+        <div class="mt-4 rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+          <h4 class="text-xs font-black uppercase tracking-wider text-slate-800">Fonctionnement</h4>
+          <ul class="mt-2 space-y-1">
+            <li
+              v-for="etape in card.flow"
+              :key="etape"
+              class="font-mono text-[11px] font-semibold leading-5 text-slate-600"
+            >
+              {{ etape }}
+            </li>
+          </ul>
+        </div>
+
+        <div
+          class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-blue-900"
+        >
+          <span class="flex items-start gap-2 text-xs font-semibold leading-5">
+            <Info class="mt-0.5 h-4 w-4 shrink-0" />
+            {{ card.notice.text }}
+          </span>
+        </div>
+
+        <div
+          v-if="card.fileType === 'YRJMCH' && classificationResult"
+          class="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[10px] font-bold text-emerald-900 sm:grid-cols-4"
+        >
+          <span>Total : {{ classificationResult.lignesAnalysees.toLocaleString('fr-FR') }}</span>
+          <span>Modifiées : {{ classificationResult.lignesModifiees.toLocaleString('fr-FR') }}</span>
+          <span>Inchangées : {{ classificationResult.lignesInchangees.toLocaleString('fr-FR') }}</span>
+          <span>SCI : {{ classificationResult.lignesSci.toLocaleString('fr-FR') }}</span>
+          <span>EMR : {{ classificationResult.lignesEmr.toLocaleString('fr-FR') }}</span>
+          <span>TRN : {{ classificationResult.lignesTrn.toLocaleString('fr-FR') }}</span>
+          <span>Inconnues : {{ classificationResult.lignesInconnues.toLocaleString('fr-FR') }}</span>
+        </div>
+
+        <div
+          v-if="card.fileType === 'MVTSTOTRSVCR' && mvtSansEntreeOf"
+          class="mt-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-800"
+        >
+          <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+          {{ AUCUNE_ENTREE_OF_MESSAGE }}
+        </div>
+
+        <div class="mt-4">
+          <div class="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <h4 class="text-xs font-black uppercase tracking-wider text-slate-800">{{ bilan.label }}</h4>
+              <h4 class="text-xs font-black uppercase tracking-wider text-slate-800">Dernier import</h4>
               <span
                 class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black"
-                :class="getX3ExcelStatusClass(x3ExcelStatuses[bilan.id][card.fileType].status)"
+                :class="getX3ExcelStatusClass(sourceStatuses[card.fileType].status)"
               >
-                <CheckCircle2
-                  v-if="x3ExcelStatuses[bilan.id][card.fileType].status === 'Importé'"
-                  class="h-3.5 w-3.5"
-                />
-                <AlertTriangle
-                  v-else-if="x3ExcelStatuses[bilan.id][card.fileType].status === 'Erreur'"
-                  class="h-3.5 w-3.5"
-                />
-                {{ x3ExcelStatuses[bilan.id][card.fileType].status }}
+                <CheckCircle2 v-if="sourceStatuses[card.fileType].status === 'Importé'" class="h-3.5 w-3.5" />
+                <AlertTriangle v-else-if="sourceStatuses[card.fileType].status === 'Erreur'" class="h-3.5 w-3.5" />
+                {{ sourceStatuses[card.fileType].status }}
               </span>
             </div>
 
             <div class="mt-3 grid grid-cols-1 gap-2 text-[10px] font-bold text-slate-500 sm:grid-cols-3">
               <div class="rounded-lg border border-slate-100 bg-white p-2">
                 <span class="block uppercase text-slate-400">Fichier</span>
-                <span class="break-words text-slate-800">
-                  {{ x3ExcelStatuses[bilan.id][card.fileType].fileName || '—' }}
-                </span>
+                <span class="break-words text-slate-800">{{ sourceStatuses[card.fileType].fileName || '—' }}</span>
               </div>
               <div class="rounded-lg border border-slate-100 bg-white p-2">
                 <span class="block uppercase text-slate-400">Dernier import</span>
-                <span class="text-slate-800">
-                  {{ formatX3ImportDate(x3ExcelStatuses[bilan.id][card.fileType].importedAt) }}
-                </span>
+                <span class="text-slate-800">{{ formatX3ImportDate(sourceStatuses[card.fileType].importedAt) }}</span>
               </div>
               <div class="rounded-lg border border-slate-100 bg-white p-2">
-                <span class="block uppercase text-slate-400">Lignes</span>
-                <span class="text-slate-800">{{ x3ExcelStatuses[bilan.id][card.fileType].rowCount }}</span>
+                <span class="block uppercase text-slate-400">Profil</span>
+                <span class="text-slate-800">{{ sourceStatuses[card.fileType].profile || '—' }}</span>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Lignes lues</span>
+                <span class="text-slate-800">{{ formatOptionalCount(sourceStatuses[card.fileType].rowsRead) }}</span>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Lignes valides</span>
+                <span class="text-slate-800">{{ formatOptionalCount(sourceStatuses[card.fileType].rowCount) }}</span>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Erreurs de lecture</span>
+                <span class="text-slate-800">{{ formatOptionalCount(sourceStatuses[card.fileType].rowsRejected) }}</span>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Insérées</span>
+                <span class="text-slate-800">{{ formatOptionalCount(sourceStatuses[card.fileType].rowsInserted) }}</span>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Mises à jour</span>
+                <span class="text-slate-800">{{ formatOptionalCount(sourceStatuses[card.fileType].rowsUpdated) }}</span>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Inchangées</span>
+                <span class="text-slate-800">{{ formatOptionalCount(sourceStatuses[card.fileType].rowsIgnored) }}</span>
+              </div>
+
+              <div class="rounded-lg border border-slate-100 bg-white p-2">
+                <span class="block uppercase text-slate-400">Archive</span>
+                <button
+                  v-if="sourceStatuses[card.fileType].hasArchivedFile"
+                  class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900"
+                  type="button"
+                  @click="handleDownloadArchive(sourceStatuses[card.fileType])"
+                >
+                  <Download class="h-3.5 w-3.5" />
+                  Télécharger
+                </button>
+                <span v-else class="text-slate-800">Aucun fichier archivé pour cet ancien import</span>
               </div>
               <div
-                v-if="x3ExcelStatuses[bilan.id][card.fileType].error"
+                v-if="sourceStatuses[card.fileType].error"
                 class="rounded-lg border border-rose-100 bg-rose-50 p-2 text-rose-700 sm:col-span-3"
               >
-                {{ x3ExcelStatuses[bilan.id][card.fileType].error }}
+                {{ sourceStatuses[card.fileType].error }}
               </div>
             </div>
           </div>
         </div>
       </article>
+    </div>
+
+    <!-- Rapprochement des deux sources. -->
+    <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <h2 class="text-sm font-black uppercase tracking-wider text-slate-900">{{ USAGE_BLOCK.title }}</h2>
+
+      <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div class="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+          <h3 class="text-xs font-black uppercase tracking-wider text-blue-900">{{ USAGE_BLOCK.yrjmch.title }}</h3>
+          <ul class="mt-2 space-y-1">
+            <li
+              v-for="item in USAGE_BLOCK.yrjmch.items"
+              :key="item"
+              class="text-xs font-semibold leading-5 text-slate-600"
+            >
+              • {{ item }}
+            </li>
+          </ul>
+        </div>
+        <div class="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+          <h3 class="text-xs font-black uppercase tracking-wider text-blue-900">{{ USAGE_BLOCK.mvt.title }}</h3>
+          <ul class="mt-2 space-y-1">
+            <li v-for="item in USAGE_BLOCK.mvt.items" :key="item" class="text-xs font-semibold leading-5 text-slate-600">
+              • {{ item }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="mt-4 rounded-lg bg-blue-50/70 px-3 py-2 text-xs font-bold text-blue-900">
+        Clé de rapprochement : <span class="font-mono">{{ USAGE_BLOCK.cle }}</span>
+      </p>
+
+      <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div v-for="formule in FORMULES" :key="formule.bilan" class="rounded-xl border border-slate-100 p-4">
+          <h3 class="text-xs font-black uppercase tracking-wider text-slate-800">{{ formule.bilan }}</h3>
+          <ul class="mt-2 space-y-1">
+            <li
+              v-for="ligne in formule.lignes"
+              :key="ligne"
+              class="font-mono text-[11px] font-semibold leading-5 text-slate-600"
+            >
+              {{ ligne }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="mt-3 text-[10px] font-semibold text-slate-400">
+        Ces formules sont affichées à titre explicatif. Les valeurs correspondantes sont calculées par le backend et
+        ne sont jamais recalculées par cet écran.
+      </p>
     </div>
   </div>
 </template>

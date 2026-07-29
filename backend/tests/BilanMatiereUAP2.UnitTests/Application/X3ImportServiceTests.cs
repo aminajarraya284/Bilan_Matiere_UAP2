@@ -1,8 +1,11 @@
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
+using BilanMatiereUAP2.Contracts.Imports;
 using BilanMatiereUAP2.Contracts.ImportsX3;
 using BilanMatiereUAP2.Domain.Entities;
+using BilanMatiereUAP2.Domain.Enums;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Extensions.Options;
@@ -189,7 +192,8 @@ public sealed class X3ImportServiceTests
             currentUser,
             dateTimeProvider,
             validator,
-            Options.Create(new ImportX3Options()));
+            Options.Create(new ImportX3Options()),
+            new NoopImportArchiveService());
 
         var command = new ImportSortiesMatiereX3Command(
             new X3ImportFileContent("Encours.xlsx", 100, [1, 2, 3]),
@@ -252,5 +256,15 @@ public sealed class X3ImportServiceTests
         public Task<ValidationResult> ValidateAsync(IValidationContext context, CancellationToken cancellation = default) => Task.FromResult(new ValidationResult());
         public IValidatorDescriptor CreateDescriptor() => throw new NotImplementedException();
         public bool CanValidateInstancesOfType(Type type) => true;
+    }
+
+    private sealed class NoopImportArchiveService : IImportArchiveService
+    {
+        public Task ArchiveAsync(Guid importBatchId, TypeImport typeImport, string? profilImport, string nomFichierOriginal, byte[] content, Guid? uploadeParUtilisateurId, string? uploadeParNom, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task<IReadOnlyList<ImportSourceFileResponse>> GetFilesAsync(Guid importBatchId, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<ImportSourceFileResponse>)Array.Empty<ImportSourceFileResponse>());
+        public Task<StoredFileContent> DownloadAsync(Guid importBatchId, Guid fileId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 }

@@ -1,8 +1,8 @@
 import * as XLSX from 'xlsx';
 import api from '@/services/api';
 import { testDataRepository } from '@/services/testDataRepository.service';
-import { sopalTestDataset } from '@/mocks/sopalTestDataset';
 import type { ImportBatchTest, RefGammeFabrication, RefNomenclature, TypeMatiereCode } from '@/mocks/sopalTestDataset';
+import { isApiSource } from '@/config/dataSources';
 
 export type ReferenceTabKey = 'gamme' | 'nomenclature';
 
@@ -55,9 +55,15 @@ type PagedResponse<T> = { items: T[]; total: number };
 
 type GammeApiResponse = {
   codeArticle: string;
+  designationArticle: string | null;
+  dateFinValidite: string | null;
+  etapeSuivi: string | null;
   alternativeGamme: string | null;
   numeroOperation: string;
+  codeAtelier: string;
   codePoste: string;
+  groupePosteCharge: string | null;
+  designationOperation: string | null;
   cleMetier: string;
   isActive: boolean;
 };
@@ -69,27 +75,104 @@ type NomenclatureApiResponse = {
   codeComposant: string;
   niveau: string;
   sequence: string;
+  designationComposant: string | null;
+  quantiteLien: number | null;
+  quantiteLienCumulee: number | null;
+  uniteQuantite: string | null;
+  categorieComposant: string | null;
+  typeLien: string | null;
+  pourcentageRebut: number | null;
   cleMetier: string;
   isActive: boolean;
 };
 
-const useRealApi = (): boolean => import.meta.env.VITE_USE_REAL_API === 'true';
+type ImportReferenceApiResponse = { duplicate: boolean; inserted: number; updated: number };
 
-// Nombre de lignes recuperees en une passe quand l'API reelle est active
-// (la vue pagine ensuite cote client par tranches de 100).
-const API_FETCH_PAGE_SIZE = 1000;
+const useRealApi = (): boolean => isApiSource('referencesFabrication');
+
+/**
+ * Tailles de page proposees a l'utilisateur. Volontairement bornees : le referentiel
+ * complet depasse 260 000 lignes, il ne doit jamais etre rapatrie dans le navigateur.
+ */
+export const REFERENCE_PAGE_SIZES = [50, 100, 200] as const;
+export type ReferencePageSize = (typeof REFERENCE_PAGE_SIZES)[number];
+export const DEFAULT_REFERENCE_PAGE_SIZE: ReferencePageSize = 100;
+
+/** Page de resultats telle que rendue par l'ecran : uniquement les lignes visibles. */
+export interface ReferencePage<T> {
+  items: T[];
+  total: number;
+}
+
+interface BasePageQuery {
+  page: number;
+  pageSize: number;
+  /** Permet d'annuler la requete en cours lors d'une navigation rapide. */
+  signal?: AbortSignal;
+}
+
+export interface GammePageQuery extends BasePageQuery {
+  codeArticle?: string;
+  atelier?: string;
+  numeroOperation?: string;
+  actif?: boolean;
+}
+
+export interface NomenclaturePageQuery extends BasePageQuery {
+  codeArticleParent?: string;
+  codeComposant?: string;
+  niveau?: string;
+  actif?: boolean;
+}
+
+/** Retire les filtres vides pour ne pas envoyer de parametres inutiles. */
+const cleanParams = (params: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+
+/**
+ * Recupere UNE page depuis l'API. Remplace l'ancien `fetchAllPaged`, qui bouclait
+ * jusqu'a la derniere page (~268 requetes) pour repaginer ensuite cote client.
+ */
+const fetchPage = async <T>(
+  url: string,
+  params: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<PagedResponse<T>> => {
+  const { data } = await api.get<PagedResponse<T>>(url, { params: cleanParams(params), signal });
+  return { items: data.items ?? [], total: data.total ?? 0 };
+};
+
+/**
+ * Decalage d'index applique aux identifiants generes cote client : sans lui, deux
+ * pages differentes produiraient les memes `id` (1..n), ce qui casserait les cles
+ * de rendu Vue lors d'un changement de page.
+ */
+const offsetOf = (page: number, pageSize: number): number => Math.max(0, (page - 1) * pageSize);
+
+/** Filtrage et decoupage locaux, pour que le mode mock expose le meme contrat pagine. */
+const paginateLocally = <T>(rows: T[], page: number, pageSize: number): ReferencePage<T> => {
+  const start = offsetOf(page, pageSize);
+  return { items: rows.slice(start, start + pageSize), total: rows.length };
+};
+
+const matches = (value: string | number | null | undefined, needle?: string): boolean => {
+  if (!needle) return true;
+  return String(value ?? '').toUpperCase().includes(needle.trim().toUpperCase());
+};
 
 const toGammeReferenceFromApi = (gamme: GammeApiResponse, index: number): GammeReference => ({
   id: index + 1,
   codeArticle: gamme.codeArticle,
-  designationArticle: '',
-  atelier: gamme.codePoste,
+  designationArticle: gamme.designationArticle ?? '',
+  atelier: gamme.codeAtelier,
   poste: gamme.codePoste,
-  groupePosteCharge: '',
+  groupePosteCharge: gamme.groupePosteCharge ?? '',
   numeroOperation: gamme.numeroOperation,
-  designationOperation: '',
+  designationOperation: gamme.designationOperation ?? '',
   alternative: gamme.alternativeGamme ?? '',
-  dateFinValidite: '',
+  dateFinValidite: gamme.dateFinValidite ?? '',
   source: 'API',
   statut: gamme.isActive ? 'Actif' : 'Brouillon'
 });
@@ -102,15 +185,15 @@ const toNomenclatureReferenceFromApi = (
   articleParent: nomenclature.codeArticleParent,
   designationArticleParent: '',
   composant: nomenclature.codeComposant,
-  designationComposant: '',
+  designationComposant: nomenclature.designationComposant ?? '',
   niveau: nomenclature.niveau,
   sequence: nomenclature.sequence,
-  quantiteLien: '',
-  quantiteLienCumulee: '',
-  unite: '',
-  categorie: '',
-  typeLien: '',
-  pourcentageRebut: '',
+  quantiteLien: nomenclature.quantiteLien?.toString() ?? '',
+  quantiteLienCumulee: nomenclature.quantiteLienCumulee?.toString() ?? '',
+  unite: nomenclature.uniteQuantite ?? '',
+  categorie: nomenclature.categorieComposant ?? '',
+  typeLien: nomenclature.typeLien ?? '',
+  pourcentageRebut: nomenclature.pourcentageRebut?.toString() ?? '',
   alternative: nomenclature.alternativeNomenclature ?? '',
   source: 'API',
   statut: nomenclature.isActive ? 'Actif' : 'Brouillon'
@@ -446,35 +529,74 @@ export const parseNomenclatureRows = (
 };
 
 export const referenceService = {
-  async getGammes(): Promise<GammeReference[]> {
+  /**
+   * Une page de gammes. Les filtres sont appliques par le backend
+   * (`codeArticle`, `atelier`, `numeroOperation`, `actif`) : aucune ligne hors page
+   * n'est rapatriee.
+   */
+  async getGammes(query: GammePageQuery): Promise<ReferencePage<GammeReference>> {
+    const { page, pageSize, signal, ...filters } = query;
+
     if (useRealApi()) {
-      const { data } = await api.get<PagedResponse<GammeApiResponse>>('/references/gammes', {
-        params: { page: 1, pageSize: API_FETCH_PAGE_SIZE }
-      });
-      return data.items.map(toGammeReferenceFromApi);
+      const { items, total } = await fetchPage<GammeApiResponse>(
+        '/v1/references/gammes',
+        { ...filters, page, pageSize },
+        signal
+      );
+      const offset = offsetOf(page, pageSize);
+      return { items: items.map((item, index) => toGammeReferenceFromApi(item, offset + index)), total };
     }
-    return testDataRepository.getDataset().refGammeFabrication.map(toGammeReference);
+
+    const rows = testDataRepository
+      .getDataset()
+      .refGammeFabrication.filter(
+        (row) =>
+          matches(row.codeArticle, filters.codeArticle) &&
+          matches(row.codeAtelier, filters.atelier) &&
+          matches(row.numeroOperation, filters.numeroOperation)
+      )
+      .map(toGammeReference);
+    return paginateLocally(rows, page, pageSize);
   },
 
-  async getNomenclatures(): Promise<NomenclatureReference[]> {
+  /**
+   * Une page de nomenclatures. Le backend expose `codeArticleParent`, `codeComposant`
+   * et `niveau` ; l'ecran n'en propose pas encore la saisie, mais le service les
+   * transmet des qu'ils sont fournis.
+   */
+  async getNomenclatures(query: NomenclaturePageQuery): Promise<ReferencePage<NomenclatureReference>> {
+    const { page, pageSize, signal, ...filters } = query;
+
     if (useRealApi()) {
-      const { data } = await api.get<PagedResponse<NomenclatureApiResponse>>('/references/nomenclatures', {
-        params: { page: 1, pageSize: API_FETCH_PAGE_SIZE }
-      });
-      return data.items.map(toNomenclatureReferenceFromApi);
+      const { items, total } = await fetchPage<NomenclatureApiResponse>(
+        '/v1/references/nomenclatures',
+        { ...filters, page, pageSize },
+        signal
+      );
+      const offset = offsetOf(page, pageSize);
+      return { items: items.map((item, index) => toNomenclatureReferenceFromApi(item, offset + index)), total };
     }
-    return testDataRepository.getDataset().refNomenclature.map(toNomenclatureReference);
+
+    const rows = testDataRepository
+      .getDataset()
+      .refNomenclature.filter(
+        (row) =>
+          matches(row.codeArticleParent, filters.codeArticleParent) &&
+          matches(row.codeComposant, filters.codeComposant) &&
+          matches(row.niveau, filters.niveau)
+      )
+      .map(toNomenclatureReference);
+    return paginateLocally(rows, page, pageSize);
   },
 
   async importGammes(file: File): Promise<ReferenceImportResult<GammeReference>> {
     if (useRealApi()) {
       const form = new FormData();
       form.append('file', file);
-      return (
-        await api.post<ReferenceImportResult<GammeReference>>('/references/gammes/import', form, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-      ).data;
+      const { data } = await api.post<ImportReferenceApiResponse>('/v1/references/gammes/import', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return { items: [], importedCount: data.inserted + data.updated, ignoredCount: 0, fileName: file.name };
     }
 
     const startedAt = new Date().toISOString();
@@ -502,11 +624,10 @@ export const referenceService = {
     if (useRealApi()) {
       const form = new FormData();
       form.append('file', file);
-      return (
-        await api.post<ReferenceImportResult<NomenclatureReference>>('/references/nomenclatures/import', form, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-      ).data;
+      const { data } = await api.post<ImportReferenceApiResponse>('/v1/references/nomenclatures/import', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return { items: [], importedCount: data.inserted + data.updated, ignoredCount: 0, fileName: file.name };
     }
 
     const startedAt = new Date().toISOString();
@@ -528,19 +649,5 @@ export const referenceService = {
       ignoredCount: parsed.ignoredCount,
       fileName: file.name
     };
-  },
-
-  resetGammes(): GammeReference[] {
-    const dataset = testDataRepository.getDataset();
-    dataset.refGammeFabrication = sopalTestDataset.refGammeFabrication.map((item) => ({ ...item }));
-    testDataRepository.replaceDataset(dataset);
-    return dataset.refGammeFabrication.map(toGammeReference);
-  },
-
-  resetNomenclatures(): NomenclatureReference[] {
-    const dataset = testDataRepository.getDataset();
-    dataset.refNomenclature = sopalTestDataset.refNomenclature.map((item) => ({ ...item }));
-    testDataRepository.replaceDataset(dataset);
-    return dataset.refNomenclature.map(toNomenclatureReference);
   }
 };
