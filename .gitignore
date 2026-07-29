@@ -33,5 +33,10 @@ Thumbs.db
 .agents/
 .git_broken/
 
+# Artefacts locaux de compilation et de recette
+build-out/
+run-logs/
+recette-artifacts/
+
 # Installation locale SQL Server
 SQLEXPR_x64_FRA/
