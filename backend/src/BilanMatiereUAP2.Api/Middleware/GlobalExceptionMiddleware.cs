@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BilanMatiereUAP2.Application.Common;
 using BilanMatiereUAP2.Domain.Common;
 using FluentValidation;
@@ -58,6 +59,7 @@ public sealed class GlobalExceptionMiddleware(
             problem.Title = title;
             problem.Instance = context.Request.Path;
             problem.Detail = status < 500 || environment.IsDevelopment() ? exception.Message : null;
+            problem.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
 
             if (problem is ValidationProblemDetails validationProblem)
             {

@@ -9,7 +9,8 @@ using FluentValidation.Results;
 namespace BilanMatiereUAP2.Application.Features.ControlePoidsFonderie;
 
 public sealed record GetControlesPoidsFonderieQuery(
-    DateOnly? DateControle,
+    DateOnly? DateDebut,
+    DateOnly? DateFin,
     string? NumeroOF,
     string? CodeArticle,
     Guid? TypeMatiereId,
@@ -36,6 +37,8 @@ public interface IControlePoidsFonderieService
 public sealed class ControlePoidsFonderieService(
     IControlePoidsFonderieRepository repository,
     ITypeMatiereRepository typeMatiereRepository,
+    IReceptionUsinage2Repository receptionRepository,
+    IReceptionUsinage2ContextService receptionContextService,
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
@@ -49,7 +52,8 @@ public sealed class ControlePoidsFonderieService(
         ValidatePagination(query.Page, query.PageSize);
         var result = await repository.GetPagedAsync(
             new ControlesPoidsFonderieFilter(
-                query.DateControle,
+                query.DateDebut,
+                query.DateFin,
                 query.NumeroOF,
                 query.CodeArticle,
                 query.TypeMatiereId,
@@ -122,8 +126,42 @@ public sealed class ControlePoidsFonderieService(
         CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
-        entity.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        var validationDate = dateTimeProvider.UtcNow;
+        entity.Valider(currentUser.UserId, currentUser.UserName, validationDate);
+
+        // La resolution de contexte interroge la base : le controle doit donc etre
+        // persiste comme Valide avant de recalculer les receptions concernees.
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var receptions = await receptionRepository.GetConcernedByControlePoidsAsync(
+            entity.CodeArticle,
+            entity.TypeMatiere.Code,
+            entity.NumeroOF,
+            entity.DateControle,
+            cancellationToken);
+        foreach (var reception in receptions)
+        {
+            var context = await receptionContextService.GetAsync(
+                reception.NumeroOF,
+                reception.DateReception,
+                cancellationToken);
+            if (context is null)
+            {
+                continue;
+            }
+
+            reception.RafraichirContexteAutomatique(
+                ToSnapshot(context),
+                currentUser.UserId,
+                currentUser.UserName,
+                validationDate);
+        }
+
+        if (receptions.Count > 0)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         return ToResponse(entity);
     }
 
@@ -187,6 +225,34 @@ public sealed class ControlePoidsFonderieService(
     {
         return new ValidationException([new ValidationFailure(propertyName, message)]);
     }
+
+    private static ReceptionUsinage2.ContexteSnapshot ToSnapshot(Contracts.ReceptionU2ContextResponse context)
+        => new(
+            context.CodeArticle,
+            context.DesignationArticle,
+            context.SituationX3,
+            context.AtelierOrigine,
+            context.CodeTypeMatiere,
+            context.QuantiteLienUtilisee,
+            context.UniteQuantiteLien,
+            context.PoidsTheoriqueUnitaireKg,
+            context.PoidsPhysiqueUnitaireKg,
+            context.ControlePoidsFonderieId,
+            context.TotalCtrlSci,
+            context.TotalCtrlEmr,
+            context.TotalCtrlTrn,
+            context.TotalRebutSci,
+            context.TotalRebutEmr,
+            context.TotalRebutTrn,
+            context.StatutArticle,
+            context.StatutAtelier,
+            context.StatutTypeMatiere,
+            context.StatutNomenclature,
+            context.StatutPoidsPhysique,
+            context.StatutRapportMachine,
+            context.Avertissements,
+            context.SourceTypeMatiere,
+            context.EligibleAtelier16);
 
     private static ControlePoidsFonderieResponse ToResponse(
         Domain.Entities.ControlePoidsFonderie entity,

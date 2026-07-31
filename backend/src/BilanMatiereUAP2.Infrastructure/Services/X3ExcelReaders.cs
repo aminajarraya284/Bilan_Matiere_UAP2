@@ -32,7 +32,8 @@ public sealed class EncoursProductExcelReader : IEncoursProductReader
                 if (sheet.Rows.Any(ExcelWorkbook.HasData))
                 {
                     errors.Add(new X3ReadError(0, StatutRapprochementX3.MouvementInvalide,
-                        $"La feuille '{sheet.Name}' ne contient pas les colonnes EncoursProduct obligatoires.",
+                        $"La feuille '{sheet.Name}' ne contient pas les colonnes EncoursProduct obligatoires. " +
+                        ExcelWorkbook.DiagnosticEntete(sheet.Rows, RequiredHeaders),
                         NomFeuilleSource: sheet.Name));
                 }
 
@@ -130,9 +131,9 @@ public sealed class EncoursProductExcelReader : IEncoursProductReader
 
 public sealed class MouvementsStockX3ExcelReader : IMouvementStockX3Reader
 {
-    private static readonly string[] RequiredHeaders =
+    private static readonly string[] DetectionHeaders =
     [
-        "dateimput", "code", "designation", "quantite", "unite", "transaction", "typepce", "pieceorigine"
+        "dateimput", "code", "quantite", "transaction", "pieceorigine"
     ];
 
     public Task<X3ReadResult<MouvementStockX3Row>> ReadAsync(
@@ -147,7 +148,7 @@ public sealed class MouvementsStockX3ExcelReader : IMouvementStockX3Reader
 
         foreach (var sheet in ExcelWorkbook.Read(file, cancellationToken))
         {
-            var headerIndex = ExcelWorkbook.FindHeaderRow(sheet.Rows, RequiredHeaders);
+            var headerIndex = ExcelWorkbook.DetecterLigneEntete(sheet.Rows, DetectionHeaders, 4);
             IReadOnlyDictionary<string, int>? columns;
             var dataStart = 0;
             if (headerIndex >= 0)
@@ -167,12 +168,15 @@ public sealed class MouvementsStockX3ExcelReader : IMouvementStockX3Reader
             {
                 if (sheet.Rows.Any(ExcelWorkbook.HasData))
                 {
-                    errors.Add(new X3ReadError(0, StatutRapprochementX3.MouvementInvalide,
-                        $"La feuille '{sheet.Name}' ne possède pas d'en-tête MVTSTOTRSVCR exploitable.",
-                        NomFeuilleSource: sheet.Name));
+                    // Certains exports sont livrés sans ligne de titres : l'ordre X3 connu
+                    // constitue le dernier recours, sans supprimer la feuille.
+                    columns = CreatePositionalColumns();
+                    readableSheetFound = true;
                 }
-
-                continue;
+                else
+                {
+                    continue;
+                }
             }
 
             for (var index = dataStart; index < sheet.Rows.Count; index++)
@@ -241,6 +245,26 @@ public sealed class MouvementsStockX3ExcelReader : IMouvementStockX3Reader
 
         return Task.FromResult(new X3ReadResult<MouvementStockX3Row>(rows, errors, totalRows));
     }
+
+    private static Dictionary<string, int> CreatePositionalColumns()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dateimput"] = 0,
+            ["code"] = 1,
+            ["designation"] = 2,
+            ["datecrea"] = 3,
+            ["heurecrea"] = 4,
+            ["utilisateur"] = 5,
+            ["quantite"] = 6,
+            ["unite"] = 7,
+            ["transaction"] = 8,
+            ["typepce"] = 9,
+            ["lot"] = 10,
+            ["pieceorigine"] = 11,
+            ["designationmouvement"] = 12,
+            ["emplacement"] = 13,
+            ["statut"] = 14
+        };
 }
 
 internal static class ExcelWorkbook
@@ -290,11 +314,22 @@ internal static class ExcelWorkbook
     }
 
     public static int FindHeaderRow(IReadOnlyList<object?[]> rows, IReadOnlyCollection<string> requiredHeaders)
+        => DetecterLigneEntete(rows, requiredHeaders, requiredHeaders.Count);
+
+    public static int DetecterLigneEntete(
+        IReadOnlyList<object?[]> rows,
+        IReadOnlyCollection<string> signature,
+        int minCorrespondances)
     {
+        if (minCorrespondances < 1 || minCorrespondances > signature.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minCorrespondances));
+        }
+
         for (var index = 0; index < Math.Min(rows.Count, 30); index++)
         {
             var headers = CreateHeaderMap(rows[index]);
-            if (requiredHeaders.All(headers.ContainsKey))
+            if (signature.Count(header => headers.ContainsKey(header)) >= minCorrespondances)
             {
                 return index;
             }
@@ -303,12 +338,27 @@ internal static class ExcelWorkbook
         return -1;
     }
 
+    public static string DiagnosticEntete(IReadOnlyList<object?[]> rows, IReadOnlyCollection<string> signature)
+    {
+        var inspected = Math.Min(rows.Count, 30);
+        var found = rows.Take(inspected)
+            .SelectMany(row => CreateHeaderMap(row).Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
+        var foundValues = found.ToArray();
+        var missing = signature
+            .Where(header => !foundValues.Contains(header, StringComparer.OrdinalIgnoreCase))
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
+        return $"Lignes testées: 1-{inspected}. Colonnes trouvées: {string.Join(", ", foundValues)}. " +
+               $"Colonnes attendues absentes: {string.Join(", ", missing)}.";
+    }
+
     public static Dictionary<string, int> CreateHeaderMap(object?[] row)
     {
         var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < row.Length; index++)
         {
-            var header = X3ImportParsing.NormaliserEntete(row[index]);
+            var header = ExcelImportParsing.NormaliserEnteteColonne(row[index]);
             if (!string.IsNullOrWhiteSpace(header) && !result.ContainsKey(header))
             {
                 result.Add(header, index);

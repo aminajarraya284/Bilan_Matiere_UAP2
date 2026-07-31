@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Services;
+using BilanMatiereUAP2.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BilanMatiereUAP2.Api.IntegrationTests;
@@ -36,6 +38,15 @@ public sealed class RealFileImportTests : IClassFixture<ApiWebApplicationFactory
         // Verify import succeeded without throwing
         Assert.False(result.Duplicate);
         Assert.NotNull(result);
+
+        using var dbScope = _factory.Services.CreateScope();
+        var db = dbScope.ServiceProvider.GetRequiredService<BilanMatiereUAP2DbContext>();
+        var operation10 = await db.RefGammesFabrication
+            .AsNoTracking()
+            .FirstOrDefaultAsync(gamme => gamme.NumeroOperation == "10");
+        Assert.NotNull(operation10);
+        Assert.False(string.IsNullOrWhiteSpace(operation10.CodeArticle));
+        Assert.False(string.IsNullOrWhiteSpace(operation10.CodeAtelier));
     }
 
     [Fact]

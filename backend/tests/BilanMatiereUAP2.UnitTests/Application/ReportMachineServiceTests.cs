@@ -24,7 +24,8 @@ public sealed class ReportMachineServiceTests
             reader,
             archive,
             refresh,
-            new AnonymousCurrentUserService());
+            new AnonymousCurrentUserService(),
+            new TestImportHashCalculator());
 
         reader.Rows =
         [
@@ -51,6 +52,9 @@ public sealed class ReportMachineServiceTests
         Assert.Equal(second.RowsRead, second.RowsValid + second.Rejected);
         Assert.True(duplicate.Duplicate);
         Assert.Equal("Duplicate", duplicate.Statut);
+        Assert.Equal(0, duplicate.Inserted);
+        Assert.Equal(0, duplicate.Updated);
+        Assert.Equal(0, duplicate.Unchanged);
         Assert.Equal(3, repository.AddedBatches.Count);
         Assert.Equal(4, repository.Rows.Count);
         Assert.Equal(3, archive.ArchivedBatchIds.Count);
@@ -67,7 +71,8 @@ public sealed class ReportMachineServiceTests
             reader,
             new FailingArchiveService(),
             new NoopDependencyRefreshService(),
-            new AnonymousCurrentUserService());
+            new AnonymousCurrentUserService(),
+            new TestImportHashCalculator());
 
         var result = await service.ImportAsync(new MemoryStream([3]), "YRJMCH_V1", "X3", "YRJMCH.xls");
 
@@ -278,6 +283,21 @@ public sealed class ReportMachineServiceTests
         Assert.Equal(OrigineProcessus.Emr, rows[0].OrigineProcessus);
     }
 
+    [Fact]
+    public async Task RecalculerOrigineProcessusAsync_CompteCtrlCommeOrigineDistincte()
+    {
+        var rows = new[]
+        {
+            X3RapportMachine.Creer(new DateOnly(2026, 1, 5), "CTRL", OrigineProcessus.Inconnue, "5", "ART1", null, "OF1", "E1", 100m, 2m, "1", "X3", Guid.NewGuid(), Now)
+        };
+        var service = CreateService(new FakeReportMachineRepository(rows));
+
+        var result = await service.RecalculerOrigineProcessusAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.LignesCtrl);
+        Assert.Equal(OrigineProcessus.Ctrl, rows[0].OrigineProcessus);
+    }
+
     private sealed class ThrowingReader : IReportMachineReader
     {
         public Task<X3ReadResult<RapportMachineRow>> ReadAsync(X3ImportFileContent file, CancellationToken cancellationToken = default)
@@ -290,7 +310,8 @@ public sealed class ReportMachineServiceTests
             new ThrowingReader(),
             new ThrowingArchiveService(),
             new NoopDependencyRefreshService(),
-            new AnonymousCurrentUserService());
+            new AnonymousCurrentUserService(),
+            new TestImportHashCalculator());
 
     private sealed class NoopDependencyRefreshService : IImportDependencyRefreshService
     {
@@ -314,6 +335,12 @@ public sealed class ReportMachineServiceTests
             => throw new NotSupportedException("L'archivage n'est pas sollicité par ces tests.");
         public Task<StoredFileContent> DownloadAsync(Guid importBatchId, Guid fileId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException("L'archivage n'est pas sollicité par ces tests.");
+    }
+
+    private sealed class TestImportHashCalculator : IImportHashCalculator
+    {
+        public string CalculateSha256(byte[] content) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));
+        public string CalculateCoupleHash(string firstHash, string secondHash) => CalculateSha256(System.Text.Encoding.UTF8.GetBytes($"{firstHash}:{secondHash}"));
     }
 
 }

@@ -23,9 +23,14 @@ public sealed class ControlePoidsFonderieRepository(BilanMatiereUAP2DbContext db
             .Include(entity => entity.TypeMatiere)
             .AsQueryable();
 
-        if (filter.DateControle is not null)
+        if (filter.DateDebut is not null)
         {
-            query = query.Where(entity => entity.DateControle == filter.DateControle);
+            query = query.Where(entity => entity.DateControle >= filter.DateDebut);
+        }
+
+        if (filter.DateFin is not null)
+        {
+            query = query.Where(entity => entity.DateControle <= filter.DateFin);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.NumeroOF))

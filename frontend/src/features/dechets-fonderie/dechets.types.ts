@@ -1,6 +1,6 @@
 export type DechetType = 'Bavure' | 'Poudre';
-
-export type StatutDechet = 'Valide' | 'Annule';
+export type OrigineDechet = 'Fonderie' | 'SCI' | 'EMR' | 'TRN' | 'U2';
+export type StatutDechet = 'Brouillon' | 'Valide' | 'Annule';
 
 export interface DechetFonderieResponse {
   id: string;
@@ -16,6 +16,11 @@ export interface DechetFonderieResponse {
   declarant: string | null;
   dateCreationUtc: string;
   dateModificationUtc: string | null;
+  origine: OrigineDechet;
+  validePar: string | null;
+  valideLeUtc: string | null;
+  annulePar: string | null;
+  annuleLeUtc: string | null;
 }
 
 export interface DechetFonderiePayload {
@@ -24,12 +29,15 @@ export interface DechetFonderiePayload {
   typeDechet: DechetType;
   poidsKg: number;
   observation: string | null;
+  origine: OrigineDechet;
 }
 
 export interface DechetsFonderieFilters {
   periode: string;
   typeMatiereId?: string;
   typeDechet?: DechetType;
+  origine?: OrigineDechet;
+  statut?: StatutDechet;
   page?: number;
   pageSize?: number;
 }
@@ -53,21 +61,4 @@ export interface ResumeDechetsFonderieResponse {
   periode: string;
   totauxParTypeMatiere: ResumeDechetsFonderieItemResponse[];
   totalGeneralKg: number;
-}
-
-// Legacy view model retained for the mock consumers used by the other modules.
-
-export interface DechetMouvement {
-  id: number;
-  dateDeclaration: string;
-  semaine: number;
-  codeArticle?: string;
-  designationArticle?: string;
-  codeTypeMatiere: string;
-  quantiteKg: number;
-  unite: 'KG';
-  typeDechet: DechetType;
-  commentaire?: string;
-  statut: 'Brouillon' | 'AValider' | 'Valide' | 'Cloture';
-  utilisateur: string;
 }

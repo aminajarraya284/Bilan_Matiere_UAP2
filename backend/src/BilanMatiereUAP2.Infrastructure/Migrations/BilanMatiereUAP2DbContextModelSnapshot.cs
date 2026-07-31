@@ -189,6 +189,16 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("AnnuleLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AnnuleParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("AnnuleParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("CreeParNom")
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
@@ -215,6 +225,13 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("Origine")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Fonderie");
+
                     b.Property<decimal>("PoidsKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("decimal(18,3)");
@@ -235,11 +252,25 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.Property<Guid>("TypeMatiereId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValideParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ValideParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DateDeclaration");
 
                     b.HasIndex("EstSupprime");
+
+                    b.HasIndex("Origine");
+
+                    b.HasIndex("Statut");
 
                     b.HasIndex("TypeDechet");
 
@@ -624,6 +655,372 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.ToTable("ImportX3Files", (string)null);
                 });
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireCategorieComptage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Categorie")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreeParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("CreeParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifieParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ModifieParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("Periode")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("QuantiteKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("TypeMatiereId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValideParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ValideParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Statut");
+
+                    b.HasIndex("TypeMatiereId");
+
+                    b.HasIndex("Periode", "TypeMatiereId");
+
+                    b.ToTable("InventairesCategories", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireConteneur", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CodeArticle")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreeParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("CreeParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("DateInventaire")
+                        .HasColumnType("date");
+
+                    b.Property<string>("DesignationArticle")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifieParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ModifieParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NumeroConteneur")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("NumeroOF")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("Periode")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("QuantiteKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("TypeMatiereId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValideParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ValideParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NumeroConteneur");
+
+                    b.HasIndex("Statut");
+
+                    b.HasIndex("TypeMatiereId");
+
+                    b.HasIndex("Periode", "TypeMatiereId");
+
+                    b.ToTable("InventairesConteneurs", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFonderie", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AnnuleLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AnnuleParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("AnnuleParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreeParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("CreeParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifieParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ModifieParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("Periode")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<decimal>("StockDebutKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("StockFinKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<Guid>("TypeMatiereId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValideParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ValideParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Statut");
+
+                    b.HasIndex("TypeMatiereId");
+
+                    b.HasIndex("Periode", "TypeMatiereId");
+
+                    b.ToTable("InventairesFonderie", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFourComptage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CodeFour")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreeParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("CreeParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("DateInventaire")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifieParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ModifieParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("Periode")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("QuantiteKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("TypeMatiereId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValideParNom")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("ValideParUtilisateurId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Statut");
+
+                    b.HasIndex("TypeMatiereId");
+
+                    b.HasIndex("Periode", "TypeMatiereId");
+
+                    b.ToTable("InventairesFours", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.ParametreApplication", b =>
+                {
+                    b.Property<string>("Cle")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Valeur")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Cle");
+
+                    b.ToTable("ParametresApplication", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Cle = "SEUIL_ECART_FONDERIE",
+                            Description = "Seuil d'ecart Fonderie en pourcentage.",
+                            Valeur = "5.0"
+                        },
+                        new
+                        {
+                            Cle = "SEUIL_ECART_UAP2",
+                            Description = "Seuil d'ecart UAP2 en pourcentage.",
+                            Valeur = "1.5"
+                        },
+                        new
+                        {
+                            Cle = "CODE_ATELIER_UAP2",
+                            Description = "Code atelier X3 identifiant le perimetre UAP2 pour les calculs.",
+                            Valeur = "16"
+                        },
+                        new
+                        {
+                            Cle = "TRANSACTION_ENTREE_OF",
+                            Description = "Libelle de transaction X3 retenu pour les mouvements d'entree OF.",
+                            Valeur = "Entree OF"
+                        },
+                        new
+                        {
+                            Cle = "TYPES_MATIERE",
+                            Description = "Codes matiere autorises pour le rapprochement Sortie MP et Nomenclature.",
+                            Valeur = "M3000L0,M3010L0,M3060L0"
+                        });
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RebutUsinage2", b =>
                 {
                     b.Property<Guid>("Id")
@@ -751,6 +1148,9 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<bool>("EligibleAtelier16")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ModifieParNom")
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
@@ -794,6 +1194,11 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.Property<string>("SituationX3")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("SourceTypeMatiere")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("StatutArticle")
                         .IsRequired()
@@ -1094,6 +1499,94 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.ToTable("RefNomenclatures", (string)null);
                 });
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefPosteProcessus", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CodePoste")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("CreePar")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("DateCreationUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateModificationUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LibellePoste")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ModifiePar")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("OrigineProcessus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodePoste")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive", "OrigineProcessus");
+
+                    b.ToTable("RefPostesProcessus", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefPosteProcessusHistorique", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("CodePoste")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("DateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OrigineProcessus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("PosteProcessusId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Utilisateur")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PosteProcessusId", "DateUtc");
+
+                    b.ToTable("RefPostesProcessusHistorique", (string)null);
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.TypeMatiere", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1151,6 +1644,112 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                             EstActif = true,
                             Libelle = "Matière M3060L0"
                         });
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.X3MouvementStock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime>("DateCreationUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly?>("DateCreationX3")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("DateImputation")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Designation")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("DesignationMouvement")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Emplacement")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("HeureCreationX3")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Lot")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("NomFeuilleSource")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("NumeroLigneSource")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NumeroOFNormalise")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PieceOrigine")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("QuantiteX3Signee")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("StatutRapprochement")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("StatutX3")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Transaction")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("TypePiece")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Unite")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Utilisateur")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("DateImputation");
+
+                    b.HasIndex("ImportBatchId");
+
+                    b.HasIndex("Nature");
+
+                    b.HasIndex("NumeroOFNormalise");
+
+                    b.ToTable("X3MouvementsStock", (string)null);
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.X3OperationOF", b =>
@@ -1343,11 +1942,12 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<decimal>("QuantiteCTRL")
-                        .HasColumnType("decimal(18,4)");
-
                     b.Property<decimal>("QuantiteRebut")
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("QuantiteTotale")
+                        .HasColumnType("decimal(18,4)")
+                        .HasColumnName("QuantiteTotale");
 
                     b.Property<string>("SourceSystem")
                         .IsRequired()
@@ -1442,6 +2042,50 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.Navigation("ImportBatch");
                 });
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireCategorieComptage", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.TypeMatiere", "TypeMatiere")
+                        .WithMany()
+                        .HasForeignKey("TypeMatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TypeMatiere");
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireConteneur", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.TypeMatiere", "TypeMatiere")
+                        .WithMany()
+                        .HasForeignKey("TypeMatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TypeMatiere");
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFonderie", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.TypeMatiere", "TypeMatiere")
+                        .WithMany()
+                        .HasForeignKey("TypeMatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TypeMatiere");
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFourComptage", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.TypeMatiere", "TypeMatiere")
+                        .WithMany()
+                        .HasForeignKey("TypeMatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TypeMatiere");
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefGammeFabrication", b =>
                 {
                     b.HasOne("BilanMatiereUAP2.Domain.Entities.ImportBatch", null)
@@ -1456,6 +2100,15 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.HasOne("BilanMatiereUAP2.Domain.Entities.ImportBatch", null)
                         .WithMany()
                         .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RefPosteProcessusHistorique", b =>
+                {
+                    b.HasOne("BilanMatiereUAP2.Domain.Entities.RefPosteProcessus", null)
+                        .WithMany()
+                        .HasForeignKey("PosteProcessusId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

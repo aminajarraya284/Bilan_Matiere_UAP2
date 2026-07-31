@@ -39,7 +39,6 @@ public sealed class ImportX3Batch
     public DateTime? DateFinUtc { get; private set; }
     public ICollection<ImportX3File> Fichiers { get; private set; } = new List<ImportX3File>();
     public ICollection<ImportX3Anomaly> Anomalies { get; private set; } = new List<ImportX3Anomaly>();
-    public ICollection<X3MouvementStock> Mouvements { get; private set; } = new List<X3MouvementStock>();
     public ICollection<ConsommationComposant> Consommations { get; private set; } = new List<ConsommationComposant>();
 
     public static ImportX3Batch Demarrer(
@@ -68,8 +67,6 @@ public sealed class ImportX3Batch
     }
 
     public void AjouterAnomalie(ImportX3Anomaly anomalie) => Anomalies.Add(anomalie);
-
-    public void AjouterMouvement(X3MouvementStock mouvement) => Mouvements.Add(mouvement);
 
     public void AjouterConsommation(ConsommationComposant consommation) => Consommations.Add(consommation);
 

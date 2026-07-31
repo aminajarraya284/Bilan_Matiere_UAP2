@@ -29,7 +29,7 @@ public sealed record RapportMachineResponse(
     string? DesignationArticle,
     string NumeroOF,
     string? Equipe,
-    decimal QuantiteCTRL,
+    decimal QuantiteTotale,
     decimal QuantiteRebut,
     string? AlternativeGamme,
     string CleMetier,
@@ -81,7 +81,29 @@ public sealed record ReceptionU2ContextResponse(
     string StatutNomenclature,
     string StatutPoidsPhysique,
     string StatutRapportMachine,
-    IReadOnlyList<string> Avertissements);
+    IReadOnlyList<string> Avertissements,
+    string SourceTypeMatiere = "NonResolue",
+    bool EligibleAtelier16 = false,
+    string StatutContexte = "Incomplet",
+    bool ExisteDansYrjmch = false,
+    bool ExisteDansEntreeOf = false,
+    bool ExisteDansSortieMp = false,
+    bool ExisteDansEncoursProduct = false,
+    IReadOnlyList<ReceptionControlePoidsCandidateResponse>? CandidatsControlePoids = null,
+    string? MessageControlePoids = null,
+    string? MessagePoidsTheorique = null)
+{
+    public string? CodeAtelier => AtelierOrigine;
+}
+
+public sealed record ReceptionControlePoidsCandidateResponse(
+    Guid Id,
+    DateOnly DateControle,
+    string? NumeroOF,
+    string CodeArticle,
+    string CodeTypeMatiere,
+    decimal PoidsPhysiqueUnitaireKg,
+    string Statut);
 
 public sealed record GammeReferenceResponse(
     string CodeArticle,
@@ -107,7 +129,10 @@ public sealed record GammeReferenceResponse(
     decimal? TempsReglage,
     decimal? CoefficientCcpt,
     string CleMetier,
-    bool IsActive);
+    bool IsActive,
+    Guid ImportBatchId,
+    string SourceSystem,
+    DateTime ImportedAt);
 
 public sealed record NomenclatureReferenceResponse(
     string CodeArticleParent,
@@ -124,4 +149,9 @@ public sealed record NomenclatureReferenceResponse(
     string? TypeLien,
     decimal? PourcentageRebut,
     string CleMetier,
-    bool IsActive);
+    bool IsActive,
+    Guid ImportBatchId,
+    string SourceSystem,
+    DateTime ImportedAt,
+    DateOnly? DateFinValidite,
+    string StatutValidite);

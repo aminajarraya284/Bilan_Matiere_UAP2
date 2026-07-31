@@ -23,11 +23,19 @@ public static class DependencyInjection
         services.AddScoped<ITypeMatiereRepository, TypeMatiereRepository>();
         services.AddScoped<IDechetFonderieRepository, DechetFonderieRepository>();
         services.AddScoped<IControlePoidsFonderieRepository, ControlePoidsFonderieRepository>();
+        services.AddScoped<IInventaireFonderieRepository, InventaireFonderieRepository>();
         services.AddScoped<IRebutUsinage2Repository, RebutUsinage2Repository>();
         services.AddScoped<IX3ImportRepository, X3ImportRepository>();
+        services.AddScoped<IOfContextDataRepository, OfContextDataRepository>();
+        services.AddScoped<IParametreApplicationRepository, ParametreApplicationRepository>();
+        services.AddScoped<IPosteProcessusRepository, PosteProcessusRepository>();
         services.AddScoped<IEncoursProductReader, EncoursProductExcelReader>();
         services.AddScoped<IMouvementStockX3Reader, MouvementsStockX3ExcelReader>();
-        services.AddScoped<IManufacturingReferencesRepository, ManufacturingReferencesRepository>();
+        services.AddScoped<ManufacturingReferencesRepository>();
+        services.AddScoped<IManufacturingReferencesRepository>(provider =>
+            provider.GetRequiredService<ManufacturingReferencesRepository>());
+        services.AddScoped<IOfContextReferencesRepository>(provider =>
+            provider.GetRequiredService<ManufacturingReferencesRepository>());
         services.AddScoped<IGammeFabricationReader, GammeFabricationExcelReader>();
         services.AddScoped<INomenclatureReader, NomenclatureExcelReader>();
         services.AddScoped<ISortieMpMaterialRepository, SortieMpMaterialRepository>();
@@ -37,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IReceptionUsinage2Repository, ReceptionUsinage2Repository>();
         services.AddScoped<IEntreeOfRepository, EntreeOfRepository>();
         services.AddSingleton<IImportFileStorage, LocalImportFileStorage>();
+        services.AddSingleton<IImportHashCalculator, ImportHashCalculator>();
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<BilanMatiereUAP2DbContext>());
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 

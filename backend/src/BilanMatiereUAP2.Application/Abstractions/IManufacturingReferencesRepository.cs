@@ -31,4 +31,41 @@ public interface IManufacturingReferencesRepository
     Task<IReadOnlyList<RefNomenclature>> QueryNomenclaturesAsync(string? codeArticleParent = null, string? codeComposant = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
     Task<PagedResult<RefGammeFabrication>> QueryGammesPagedAsync(string? codeArticle = null, string? atelier = null, string? numeroOperation = null, bool? actif = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
     Task<PagedResult<RefNomenclature>> QueryNomenclaturesPagedAsync(string? codeArticleParent = null, string? codeComposant = null, string? niveau = null, bool? actif = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
+    Task<PagedResult<RefGammeFabrication>> SearchGammesPagedAsync(
+        GammeReferencesFilter filter,
+        CancellationToken cancellationToken = default);
+    Task<PagedResult<RefNomenclature>> SearchNomenclaturesPagedAsync(
+        NomenclatureReferencesFilter filter,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record GammeReferencesFilter(
+    string? Recherche,
+    string? CodeArticle,
+    string? Designation,
+    DateOnly? ValideLe,
+    string? Alternative,
+    string? NumeroOperation,
+    string? Atelier,
+    string? Poste,
+    string? Groupe,
+    string? Unite,
+    string? Source,
+    Guid? LotImport,
+    bool? Actif,
+    int Page,
+    int PageSize);
+
+public sealed record NomenclatureReferencesFilter(
+    string? Recherche,
+    string? CodeArticleParent,
+    string? CodeComposant,
+    string? Designation,
+    string? Alternative,
+    string? Niveau,
+    string? Unite,
+    string? Source,
+    Guid? LotImport,
+    bool? Actif,
+    int Page,
+    int PageSize);

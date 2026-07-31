@@ -1,10 +1,13 @@
-using System.Security.Cryptography;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Contracts;
+using BilanMatiereUAP2.Contracts.Imports;
+using BilanMatiereUAP2.Contracts.RapportsMachine;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
 using BilanMatiereUAP2.Domain.Services;
+using FluentValidation;
+using FluentValidation.Results;
 
 namespace BilanMatiereUAP2.Application.Services;
 
@@ -13,7 +16,8 @@ public sealed class ReportMachineService(
     IReportMachineReader reader,
     IImportArchiveService archiveService,
     IImportDependencyRefreshService dependencyRefreshService,
-    ICurrentUserService currentUser) : IReportMachineService
+    ICurrentUserService currentUser,
+    IImportHashCalculator hashCalculator) : IReportMachineService
 {
     // La classification vient des 3 premiers caracteres du code poste (regle SOPAL).
     // Voir OrigineProcessusRules : aucun referentiel manuel n'intervient.
@@ -23,7 +27,7 @@ public sealed class ReportMachineService(
     public async Task<ImportRapportMachineResponse> ImportAsync(Stream fileStream, string profilImport, string sourceSystem, string nomFichierOriginal, CancellationToken cancellationToken = default)
     {
         var bytes = await ReadAllBytesAsync(fileStream, cancellationToken);
-        var hash = Convert.ToHexString(SHA256.HashData(bytes));
+        var hash = hashCalculator.CalculateSha256(bytes);
         var profile = profilImport?.Trim() ?? string.Empty;
         var duplicate = await repository.GetCompletedBatchByHashAsync(hash, profile, cancellationToken) is not null;
         var batch = ImportBatch.Demarrer(
@@ -38,6 +42,8 @@ public sealed class ReportMachineService(
 
         if (duplicate)
         {
+            // Idempotence choisie : SHA-256 identique => nouveau lot traçable en Duplicate,
+            // sans relecture ni réécriture des lignes (tous les compteurs de lignes restent à 0).
             batch.TerminerImport(StatutImport.Duplicate, DateTime.UtcNow, 0, 0, 0, 0, 0, 0, 0);
             await repository.SaveChangesAsync(cancellationToken);
             await ArchiverEtTracerErreurAsync(batch, profile, nomFichierOriginal, bytes, cancellationToken);
@@ -55,7 +61,7 @@ public sealed class ReportMachineService(
                 .Select(row => new X3ReadError(
                     row.NumeroLigneSource,
                     StatutRapprochementX3.PosteProcessusNonMappe,
-                    $"Le préfixe du poste '{row.CodePoste}' n'est pas classé SCI, EMR ou TRN.",
+                    $"Le poste '{row.CodePoste}' n'est pas classé CTRL, SCI, EMR ou TRN.",
                     row.NumeroOF,
                     NomFeuilleSource: row.NomFeuilleSource));
             var anomalies = readResult.Errors.Concat(mappingErrors).Select(error => ImportReferenceAnomaly.Creer(
@@ -77,7 +83,7 @@ public sealed class ReportMachineService(
                     row.DesignationArticle,
                     row.NumeroOF,
                     row.Equipe,
-                    row.QuantiteCTRL,
+                    row.QuantiteTotale,
                     row.QuantiteRebut,
                     row.AlternativeGamme,
                     sourceSystem,
@@ -99,7 +105,7 @@ public sealed class ReportMachineService(
                 {
                     if (existing.EstEquivalent(
                         row.DesignationArticle,
-                        row.QuantiteCTRL,
+                        row.QuantiteTotale,
                         row.QuantiteRebut,
                         row.AlternativeGamme,
                         sourceSystem,
@@ -111,7 +117,7 @@ public sealed class ReportMachineService(
                     {
                         existing.MettreAJour(
                             row.DesignationArticle,
-                            row.QuantiteCTRL,
+                            row.QuantiteTotale,
                             row.QuantiteRebut,
                             row.AlternativeGamme,
                             sourceSystem,
@@ -213,6 +219,54 @@ public sealed class ReportMachineService(
         return new PagedResult<RapportMachineResponse>(result.Items.Select(ToResponse).ToArray(), result.Total);
     }
 
+    public async Task<RapportMachineConsultationResponse> QueryConsultationAsync(
+        RapportMachineConsultationQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        if (query.Page < 1)
+            throw Validation(nameof(query.Page), "La page doit être supérieure ou égale à 1.");
+        if (query.PageSize is < 1 or > 100)
+            throw Validation(nameof(query.PageSize), "La taille de page doit être comprise entre 1 et 100.");
+        if (query.DateDebut is not null && query.DateFin is not null && query.DateDebut > query.DateFin)
+            throw Validation(nameof(query.DateFin), "La date de fin doit être postérieure ou égale à la date de début.");
+
+        var sortBy = ParseConsultationSort(query.SortBy);
+        var descending = ParseDescending(query.SortDirection);
+        var result = await repository.QueryConsultationAsync(
+            new RapportMachineConsultationFilter(
+                query.DateDebut,
+                query.DateFin,
+                NormalizeOptional(query.NumeroOF),
+                NormalizeOptional(query.CodeArticle),
+                NormalizeOptional(query.CodePoste),
+                ParseProcessus(query.Processus),
+                query.ImportBatchId,
+                query.Page,
+                query.PageSize,
+                sortBy,
+                descending),
+            cancellationToken);
+
+        return new RapportMachineConsultationResponse(
+            result.Items.Select(ToConsultationResponse).ToArray(),
+            result.Total,
+            query.Page,
+            query.PageSize,
+            new RapportMachineKpiResponse(
+                result.Kpis.NombreLignes,
+                result.Kpis.NombreOF,
+                result.Kpis.Ctrl,
+                result.Kpis.Sci,
+                result.Kpis.Emr,
+                result.Kpis.Trn,
+                result.Kpis.Inconnues,
+                result.Kpis.LignesRejetees),
+            ToTrackingResponse(result.Imports));
+    }
+
+    public async Task<ImportTrackingResponse> GetImportTrackingAsync(CancellationToken cancellationToken = default)
+        => ToTrackingResponse(await repository.GetImportTrackingAsync(TypeImport.RapportMachine, cancellationToken));
+
     public async Task<RapportMachineAggregateResponse> AggregateAsync(string numeroOF, string codeArticle, int? annee = null, int? mois = null, CancellationToken cancellationToken = default)
     {
         var normalizedOF = NormalizeOptional(numeroOF) ?? string.Empty;
@@ -226,7 +280,7 @@ public sealed class ReportMachineService(
 
         // Les totaux sont separes par origine process : ne jamais additionner SCI, EMR et TRN ensemble.
         // Les lignes non mappees (OrigineProcessus.Inconnue) sont exclues des totaux mais comptees.
-        decimal TotalCtrl(OrigineProcessus origine) => rowsAvecOrigine.Where(item => item.Origine == origine).Sum(item => item.Row.QuantiteCTRL);
+        decimal TotalCtrl(OrigineProcessus origine) => rowsAvecOrigine.Where(item => item.Origine == origine).Sum(item => item.Row.QuantiteTotale);
         decimal TotalRebut(OrigineProcessus origine) => rowsAvecOrigine.Where(item => item.Origine == origine).Sum(item => item.Row.QuantiteRebut);
 
         return new RapportMachineAggregateResponse(
@@ -260,7 +314,8 @@ public sealed class ReportMachineService(
                 [OrigineProcessus.Sci] = 0,
                 [OrigineProcessus.Emr] = 0,
                 [OrigineProcessus.Trn] = 0,
-                [OrigineProcessus.Inconnue] = 0
+                [OrigineProcessus.Inconnue] = 0,
+                [OrigineProcessus.Ctrl] = 0
             };
 
             foreach (var row in rows)
@@ -286,7 +341,8 @@ public sealed class ReportMachineService(
                 parOrigine[OrigineProcessus.Sci],
                 parOrigine[OrigineProcessus.Emr],
                 parOrigine[OrigineProcessus.Trn],
-                parOrigine[OrigineProcessus.Inconnue]);
+                parOrigine[OrigineProcessus.Inconnue],
+                parOrigine[OrigineProcessus.Ctrl]);
         }
         catch
         {
@@ -300,7 +356,106 @@ public sealed class ReportMachineService(
     }
 
     private static RapportMachineResponse ToResponse(X3RapportMachine row)
-        => new(row.Id, row.DateProduction, row.CodePoste, row.OrigineProcessus.ToString(), row.NumeroOperation, row.CodeArticle, row.DesignationArticle, row.NumeroOF, row.Equipe, row.QuantiteCTRL, row.QuantiteRebut, row.AlternativeGamme, row.CleMetier, row.IsActive);
+        => new(row.Id, row.DateProduction, row.CodePoste, row.OrigineProcessus.ToString(), row.NumeroOperation, row.CodeArticle, row.DesignationArticle, row.NumeroOF, row.Equipe, row.QuantiteTotale, row.QuantiteRebut, row.AlternativeGamme, row.CleMetier, row.IsActive);
+
+    private static RapportMachineConsultationItemResponse ToConsultationResponse(X3RapportMachine row)
+        => new(
+            row.Id,
+            row.DateProduction,
+            row.NumeroOF,
+            row.CodeArticle,
+            row.DesignationArticle,
+            row.CodePoste,
+            row.NumeroOperation,
+            row.Equipe,
+            ToProcessusLabel(row.OrigineProcessus),
+            row.QuantiteTotale,
+            row.QuantiteRebut,
+            row.QuantiteTotale - row.QuantiteRebut,
+            row.ImportBatchId);
+
+    private static ImportTrackingResponse ToTrackingResponse(ImportTrackingSnapshot tracking)
+        => new(
+            ToImportExecutionResponse(tracking.DerniereTentative),
+            ToImportExecutionResponse(tracking.DernierImportReussi));
+
+    private static ImportExecutionSummaryResponse? ToImportExecutionResponse(ImportBatchSnapshot? snapshot)
+    {
+        if (snapshot is null) return null;
+        var batch = snapshot.Batch;
+        var duplicate = batch.Statut == StatutImport.Duplicate;
+        return new ImportExecutionSummaryResponse(
+            batch.Id,
+            ToImportStatusLabel(batch.Statut),
+            duplicate
+                ? "Ce fichier a déjà été importé. Aucune donnée n’a été réécrite."
+                : batch.ArchiveErrorMessage,
+            snapshot.NomFichier,
+            batch.DateCreationUtc,
+            batch.DateFinUtc,
+            batch.ReadCount,
+            batch.ValidCount,
+            batch.RejectedCount,
+            batch.InsertedCount,
+            batch.UpdatedCount,
+            batch.UnchangedCount);
+    }
+
+    private static string ToImportStatusLabel(StatutImport statut)
+        => statut switch
+        {
+            StatutImport.EnCours => "En cours",
+            StatutImport.Termine => "Importé",
+            StatutImport.Partiel => "Partiel",
+            StatutImport.Echec => "Échec",
+            StatutImport.Duplicate => "Fichier identique",
+            StatutImport.TermineAvecAvertissementArchive => "Importé avec avertissement",
+            _ => statut.ToString()
+        };
+
+    private static string ToProcessusLabel(OrigineProcessus processus)
+        => processus switch
+        {
+            OrigineProcessus.Ctrl => "CTRL",
+            OrigineProcessus.Sci => "SCI",
+            OrigineProcessus.Emr => "EMR",
+            OrigineProcessus.Trn => "TRN",
+            _ => "Inconnue"
+        };
+
+    private static OrigineProcessus? ParseProcessus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value.Trim().ToUpperInvariant() switch
+        {
+            "CTRL" => OrigineProcessus.Ctrl,
+            "SCI" => OrigineProcessus.Sci,
+            "EMR" => OrigineProcessus.Emr,
+            "TRN" => OrigineProcessus.Trn,
+            "INCONNUE" => OrigineProcessus.Inconnue,
+            _ => throw Validation(nameof(RapportMachineConsultationQuery.Processus), "Le processus doit être CTRL, SCI, EMR, TRN ou Inconnue.")
+        };
+    }
+
+    private static string ParseConsultationSort(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant() ?? "date";
+        return normalized is "date" or "numeroof" or "article" or "poste" or "operation" or
+            "processus" or "quantitetotale" or "quantiterebut" or "quantitenette" or "lotimport"
+            ? normalized
+            : throw Validation(nameof(RapportMachineConsultationQuery.SortBy), "Le champ de tri est invalide.");
+    }
+
+    private static bool ParseDescending(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        if (string.Equals(value, "desc", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(value, "asc", StringComparison.OrdinalIgnoreCase)) return false;
+        throw Validation(nameof(RapportMachineConsultationQuery.SortDirection), "Le sens de tri doit être asc ou desc.");
+    }
+
+    private static ValidationException Validation(string propertyName, string message)
+        => new([new ValidationFailure(propertyName, message)]);
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();

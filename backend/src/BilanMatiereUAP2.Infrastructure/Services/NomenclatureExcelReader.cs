@@ -91,14 +91,14 @@ public sealed class NomenclatureExcelReader : INomenclatureReader
     // d'en-tete (Typ.Alt / Parent / Enfant / ...) pour chaque article racine. Les deux doivent etre ignores.
     private static bool IsTitleOrHeaderRow(object?[] row)
     {
-        var col0 = X3ImportParsing.NormaliserEntete(GetAt(row, 0));
+        var col0 = ExcelImportParsing.NormaliserEntete(GetAt(row, 0));
         if (col0.Contains("nomenclature") || col0 == "articleparent" || col0 == "typalt")
         {
             return true;
         }
 
-        var col1 = X3ImportParsing.NormaliserEntete(GetAt(row, 1));
-        var col2 = X3ImportParsing.NormaliserEntete(GetAt(row, 2));
+        var col1 = ExcelImportParsing.NormaliserEntete(GetAt(row, 1));
+        var col2 = ExcelImportParsing.NormaliserEntete(GetAt(row, 2));
         return col1 == "parent" && col2 == "enfant";
     }
 

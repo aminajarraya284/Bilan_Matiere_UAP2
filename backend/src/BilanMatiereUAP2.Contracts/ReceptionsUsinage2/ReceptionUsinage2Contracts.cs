@@ -60,7 +60,12 @@ public sealed record ReceptionUsinage2Response(
     string? CreePar,
     DateTime DateCreationUtc,
     string? ModifiePar,
-    DateTime? DateModificationUtc);
+    DateTime? DateModificationUtc,
+    string SourceTypeMatiere = "NonResolue",
+    bool EligibleAtelier16 = false)
+{
+    public string? CodeAtelier => AtelierOrigine;
+}
 
 public sealed record PagedReceptionsUsinage2Response(
     IReadOnlyList<ReceptionUsinage2Response> Items,

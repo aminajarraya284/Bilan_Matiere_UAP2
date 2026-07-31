@@ -35,6 +35,16 @@ public sealed class DechetFonderieRepository(BilanMatiereUAP2DbContext dbContext
             query = query.Where(entity => entity.TypeDechet == filter.TypeDechet);
         }
 
+        if (filter.Origine is not null)
+        {
+            query = query.Where(entity => entity.Origine == filter.Origine);
+        }
+
+        if (filter.Statut is not null)
+        {
+            query = query.Where(entity => entity.Statut == filter.Statut);
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(entity => entity.DateDeclaration)
@@ -55,6 +65,7 @@ public sealed class DechetFonderieRepository(BilanMatiereUAP2DbContext dbContext
             .AsNoTracking()
             .Where(entity =>
                 !entity.EstSupprime &&
+                entity.Statut == StatutDechet.Valide &&
                 entity.DateDeclaration >= dateDebutIncluse &&
                 entity.DateDeclaration < dateFinExclusive)
             .Select(entity => new

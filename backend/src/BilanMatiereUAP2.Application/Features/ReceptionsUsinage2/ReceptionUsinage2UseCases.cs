@@ -1,12 +1,12 @@
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
-using BilanMatiereUAP2.Application.Options;
+using BilanMatiereUAP2.Contracts;
 using BilanMatiereUAP2.Contracts.ReceptionsUsinage2;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
+using BilanMatiereUAP2.Domain.Services;
 using FluentValidation;
 using FluentValidation.Results;
-using Microsoft.Extensions.Options;
 
 namespace BilanMatiereUAP2.Application.Features.ReceptionsUsinage2;
 
@@ -45,7 +45,7 @@ public sealed class ReceptionUsinage2Service(
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
-    IOptions<ReceptionUsinage2Options> options,
+    IParametreApplicationProvider parametres,
     IValidator<CreateReceptionUsinage2Request> createValidator,
     IValidator<UpdateReceptionUsinage2Request> updateValidator) : IReceptionUsinage2Service
 {
@@ -82,7 +82,14 @@ public sealed class ReceptionUsinage2Service(
         await createValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
 
         var context = await contextService.GetAsync(command.Request.NumeroOF, command.Request.DateReception, cancellationToken)
-            ?? throw new NotFoundException("OF introuvable pour cette réception.");
+            ?? ContextIntrouvable(command.Request.NumeroOF);
+        if (context.Avertissements.Any(avertissement =>
+                string.Equals(avertissement, "OF_X3_INTROUVABLE", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(avertissement, "OF_INTROUVABLE", StringComparison.OrdinalIgnoreCase)) ||
+            string.Equals(context.StatutContexte, "OF_X3_INTROUVABLE", StringComparison.OrdinalIgnoreCase))
+        {
+            throw Validation("numeroOF", "OF_X3_INTROUVABLE");
+        }
 
         var entity = ReceptionUsinage2.Creer(
             command.Request.NumeroOF,
@@ -144,7 +151,7 @@ public sealed class ReceptionUsinage2Service(
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
         var context = await contextService.GetAsync(entity.NumeroOF, entity.DateReception, cancellationToken)
-            ?? throw new NotFoundException("OF introuvable pour cette réception.");
+            ?? ContextIntrouvable(entity.NumeroOF);
         entity.RecalculerContexte(ToSnapshot(context), currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ToResponseAsync(entity, cancellationToken);
@@ -160,12 +167,16 @@ public sealed class ReceptionUsinage2Service(
             ? entity.PoidsPhysiqueUnitaireKg.Value - entity.PoidsTheoriqueUnitaireKg.Value
             : null;
 
-        decimal? tauxEcartPct = ecartUnitaire is not null && entity.PoidsTheoriqueUnitaireKg is > 0
-            ? Math.Abs(ecartUnitaire.Value) / entity.PoidsTheoriqueUnitaireKg.Value * 100m
-            : null;
+        decimal? tauxEcartPct = BilanMetierRules.CalculerTaux(
+            ecartUnitaire,
+            entity.PoidsTheoriqueUnitaireKg,
+            valeurAbsolueNumerateur: true);
 
-        bool? depasseSeuil = tauxEcartPct is not null
-            ? tauxEcartPct.Value > options.Value.SeuilAlerteEcartPoidsPct
+        var seuilEcartFonderie = await parametres.GetDecimalAsync(
+            ParametresApplicationCles.SeuilEcartFonderie,
+            cancellationToken);
+        bool? depasseSeuil = tauxEcartPct is not null && seuilEcartFonderie is not null
+            ? tauxEcartPct.Value > seuilEcartFonderie.Value
             : null;
 
         decimal? totalPiecesMois = null;
@@ -227,7 +238,9 @@ public sealed class ReceptionUsinage2Service(
             entity.CreeParNom ?? entity.CreeParUtilisateurId?.ToString(),
             entity.DateCreationUtc,
             entity.ModifieParNom ?? entity.ModifieParUtilisateurId?.ToString(),
-            entity.DateModificationUtc);
+            entity.DateModificationUtc,
+            entity.SourceTypeMatiere,
+            entity.EligibleAtelier16);
     }
 
     private static ReceptionUsinage2.ContexteSnapshot ToSnapshot(Contracts.ReceptionU2ContextResponse context)
@@ -254,7 +267,9 @@ public sealed class ReceptionUsinage2Service(
             context.StatutNomenclature,
             context.StatutPoidsPhysique,
             context.StatutRapportMachine,
-            context.Avertissements);
+            context.Avertissements,
+            context.SourceTypeMatiere,
+            context.EligibleAtelier16);
 
     private async Task<ReceptionUsinage2> GetRequiredAsync(Guid id, CancellationToken cancellationToken)
         => await repository.GetByIdAsync(id, cancellationToken)
@@ -262,6 +277,15 @@ public sealed class ReceptionUsinage2Service(
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
+
+    private static ReceptionU2ContextResponse ContextIntrouvable(string numeroOF)
+        => new(
+            numeroOF.Trim().ToUpperInvariant(), null, null, null, null, null,
+            null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null, 0, 0,
+            "ArticleIntrouvable", "AtelierIntrouvable", "MouvementAbsent", "NomenclatureIntrouvable", "PoidsPhysiqueManquant", "RapportMachineIntrouvable",
+            ["OF_X3_INTROUVABLE", "ARTICLE_OF_INTROUVABLE"],
+            StatutContexte: "OF_X3_INTROUVABLE");
 
     private static void ValidatePagination(int page, int pageSize)
     {

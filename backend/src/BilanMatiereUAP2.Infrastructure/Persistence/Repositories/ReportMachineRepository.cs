@@ -83,6 +83,141 @@ public sealed class ReportMachineRepository(BilanMatiereUAP2DbContext context) :
         return new PagedResult<X3RapportMachine>(items, total);
     }
 
+    public async Task<RapportMachineConsultationResult> QueryConsultationAsync(
+        RapportMachineConsultationFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        var query = context.X3RapportsMachine
+            .AsNoTracking()
+            .Where(row => row.IsActive)
+            .AsQueryable();
+
+        if (filter.DateDebut is not null)
+            query = query.Where(row => row.DateProduction >= filter.DateDebut.Value);
+        if (filter.DateFin is not null)
+            query = query.Where(row => row.DateProduction <= filter.DateFin.Value);
+        if (!string.IsNullOrWhiteSpace(filter.NumeroOF))
+            query = query.Where(row => row.NumeroOF.Contains(filter.NumeroOF));
+        if (!string.IsNullOrWhiteSpace(filter.CodeArticle))
+            query = query.Where(row => row.CodeArticle.Contains(filter.CodeArticle));
+        if (!string.IsNullOrWhiteSpace(filter.CodePoste))
+            query = query.Where(row => row.CodePoste.Contains(filter.CodePoste));
+        if (filter.Processus is not null)
+            query = query.Where(row => row.OrigineProcessus == filter.Processus.Value);
+        if (filter.ImportBatchId is not null)
+            query = query.Where(row => row.ImportBatchId == filter.ImportBatchId.Value);
+
+        var total = await query.CountAsync(cancellationToken);
+        var nombreOf = await query.Select(row => row.NumeroOF).Distinct().CountAsync(cancellationToken);
+        var processCounts = await query
+            .GroupBy(row => row.OrigineProcessus)
+            .Select(group => new { Processus = group.Key, Nombre = group.Count() })
+            .ToDictionaryAsync(item => item.Processus, item => item.Nombre, cancellationToken);
+
+        var lignesRejetees = filter.ImportBatchId is not null
+            ? await context.ImportBatches
+                .AsNoTracking()
+                .Where(batch => batch.Id == filter.ImportBatchId.Value &&
+                                batch.TypeImport == TypeImport.RapportMachine)
+                .SumAsync(batch => (int?)batch.RejectedCount, cancellationToken) ?? 0
+            : await context.ImportBatches
+                .AsNoTracking()
+                .Where(batch => batch.TypeImport == TypeImport.RapportMachine &&
+                                query.Select(row => row.ImportBatchId).Distinct().Contains(batch.Id))
+                .SumAsync(batch => (int?)batch.RejectedCount, cancellationToken) ?? 0;
+
+        var ordered = filter.SortBy switch
+        {
+            "numeroof" => filter.Descending
+                ? query.OrderByDescending(row => row.NumeroOF)
+                : query.OrderBy(row => row.NumeroOF),
+            "article" => filter.Descending
+                ? query.OrderByDescending(row => row.CodeArticle)
+                : query.OrderBy(row => row.CodeArticle),
+            "poste" => filter.Descending
+                ? query.OrderByDescending(row => row.CodePoste)
+                : query.OrderBy(row => row.CodePoste),
+            "operation" => filter.Descending
+                ? query.OrderByDescending(row => row.NumeroOperation)
+                : query.OrderBy(row => row.NumeroOperation),
+            "processus" => filter.Descending
+                ? query.OrderByDescending(row => row.OrigineProcessus)
+                : query.OrderBy(row => row.OrigineProcessus),
+            "quantitetotale" => filter.Descending
+                ? query.OrderByDescending(row => row.QuantiteTotale)
+                : query.OrderBy(row => row.QuantiteTotale),
+            "quantiterebut" => filter.Descending
+                ? query.OrderByDescending(row => row.QuantiteRebut)
+                : query.OrderBy(row => row.QuantiteRebut),
+            "quantitenette" => filter.Descending
+                ? query.OrderByDescending(row => row.QuantiteTotale - row.QuantiteRebut)
+                : query.OrderBy(row => row.QuantiteTotale - row.QuantiteRebut),
+            "lotimport" => filter.Descending
+                ? query.OrderByDescending(row => row.ImportBatchId)
+                : query.OrderBy(row => row.ImportBatchId),
+            _ => filter.Descending
+                ? query.OrderByDescending(row => row.DateProduction)
+                : query.OrderBy(row => row.DateProduction)
+        };
+
+        var items = await ordered
+            .ThenBy(row => row.NumeroOF)
+            .ThenBy(row => row.CodeArticle)
+            .ThenBy(row => row.CodePoste)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new RapportMachineConsultationResult(
+            items,
+            total,
+            new RapportMachineKpiResult(
+                total,
+                nombreOf,
+                processCounts.GetValueOrDefault(OrigineProcessus.Ctrl),
+                processCounts.GetValueOrDefault(OrigineProcessus.Sci),
+                processCounts.GetValueOrDefault(OrigineProcessus.Emr),
+                processCounts.GetValueOrDefault(OrigineProcessus.Trn),
+                processCounts.GetValueOrDefault(OrigineProcessus.Inconnue),
+                lignesRejetees),
+            await GetImportTrackingAsync(TypeImport.RapportMachine, cancellationToken));
+    }
+
+    public async Task<ImportTrackingSnapshot> GetImportTrackingAsync(
+        TypeImport typeImport,
+        CancellationToken cancellationToken = default)
+    {
+        var batches = context.ImportBatches
+            .AsNoTracking()
+            .Where(batch => batch.TypeImport == typeImport);
+
+        var derniereTentative = await batches
+            .OrderByDescending(batch => batch.DateCreationUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        var dernierImportReussi = await batches
+            .Where(batch => batch.Statut == StatutImport.Termine ||
+                            batch.Statut == StatutImport.TermineAvecAvertissementArchive)
+            .OrderByDescending(batch => batch.DateCreationUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        async Task<ImportBatchSnapshot?> ToSnapshotAsync(ImportBatch? batch)
+        {
+            if (batch is null) return null;
+
+            var nomFichier = await context.ImportSourceFiles
+                .AsNoTracking()
+                .Where(file => file.ImportBatchId == batch.Id && file.TypeImport == typeImport)
+                .OrderByDescending(file => file.DateUploadUtc)
+                .Select(file => file.NomFichierOriginal)
+                .FirstOrDefaultAsync(cancellationToken);
+            return new ImportBatchSnapshot(batch, nomFichier);
+        }
+
+        return new ImportTrackingSnapshot(
+            await ToSnapshotAsync(derniereTentative),
+            await ToSnapshotAsync(dernierImportReussi));
+    }
+
     public Task SaveChangesAsync(CancellationToken cancellationToken = default)
         => context.SaveChangesAsync(cancellationToken);
 
@@ -128,7 +263,7 @@ public sealed class ReportMachineRepository(BilanMatiereUAP2DbContext context) :
         // traduit pas de facon fiable sur tous les providers EF (ex. Sqlite utilise en tests).
         var rows = await context.X3RapportsMachine.AsNoTracking()
             .Where(row => row.IsActive && row.OrigineProcessus == OrigineProcessus.Inconnue)
-            .Select(row => new { row.CodePoste, row.QuantiteCTRL, row.QuantiteRebut, row.DateProduction, row.CodeArticle, row.NumeroOF })
+            .Select(row => new { row.CodePoste, row.QuantiteTotale, row.QuantiteRebut, row.DateProduction, row.CodeArticle, row.NumeroOF })
             .ToListAsync(cancellationToken);
 
         return rows
@@ -136,7 +271,7 @@ public sealed class ReportMachineRepository(BilanMatiereUAP2DbContext context) :
             .Select(group => new PosteNonMappeSummary(
                 group.Key,
                 group.Count(),
-                group.Sum(row => row.QuantiteCTRL),
+                group.Sum(row => row.QuantiteTotale),
                 group.Sum(row => row.QuantiteRebut),
                 group.Min(row => row.DateProduction),
                 group.Max(row => row.DateProduction),

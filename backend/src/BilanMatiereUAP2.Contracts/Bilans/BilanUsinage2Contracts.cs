@@ -53,7 +53,12 @@ public sealed record BilanUsinage2LigneResponse(
 
     string StatutReception,
     string StatutPoids,
-    IReadOnlyList<string> Anomalies);
+    IReadOnlyList<string> Anomalies,
+    bool EligibleAtelier16 = false,
+    string Statut = "Incomplet")
+{
+    public string? CodeAtelier => AtelierOrigine;
+}
 
 public sealed record BilanUsinage2Response(
     string Periode,
@@ -61,4 +66,11 @@ public sealed record BilanUsinage2Response(
     /// <summary>Quantite totale receptionnee U2 sur la periode, en pieces.</summary>
     decimal QuantiteTotaleReceptionneePieces,
     int NombreLignes,
-    int NombreLignesDonneesManquantes);
+    int NombreLignesDonneesManquantes,
+    decimal TotalRebutUsinage2Pieces = 0,
+    decimal TotalEntreeOfPieces = 0,
+    decimal? TotalBilanUsinage2Pieces = null,
+    int NombreAnomalies = 0,
+    int Total = 0,
+    int Page = 1,
+    int PageSize = 50);

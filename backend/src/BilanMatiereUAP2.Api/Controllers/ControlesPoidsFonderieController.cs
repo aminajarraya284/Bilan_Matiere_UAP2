@@ -1,4 +1,5 @@
 using BilanMatiereUAP2.Api.Authorization;
+using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Features.ControlePoidsFonderie;
 using BilanMatiereUAP2.Contracts.ControlePoidsFonderie;
 using Microsoft.AspNetCore.Authorization;
@@ -8,12 +9,16 @@ namespace BilanMatiereUAP2.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/controles-poids-fonderie")]
-public sealed class ControlesPoidsFonderieController(IControlePoidsFonderieService service) : ControllerBase
+public sealed class ControlesPoidsFonderieController(
+    IControlePoidsFonderieService service,
+    IControlePoidsFonderieLookupService lookupService) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ReadControlesPoidsFonderie)]
     [ProducesResponseType<PagedControlesPoidsFonderieResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedControlesPoidsFonderieResponse>> GetAll(
+        [FromQuery] DateOnly? dateDebut,
+        [FromQuery] DateOnly? dateFin,
         [FromQuery] DateOnly? dateControle,
         [FromQuery] string? numeroOF,
         [FromQuery] string? codeArticle,
@@ -23,9 +28,44 @@ public sealed class ControlesPoidsFonderieController(IControlePoidsFonderieServi
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
+        // Compatibilite avec l'ancien filtre exact.
+        dateDebut ??= dateControle;
+        dateFin ??= dateControle;
         return Ok(await service.GetAllAsync(
-            new GetControlesPoidsFonderieQuery(dateControle, numeroOF, codeArticle, typeMatiereId, statut, page, pageSize),
+            new GetControlesPoidsFonderieQuery(dateDebut, dateFin, numeroOF, codeArticle, typeMatiereId, statut, page, pageSize),
             cancellationToken));
+    }
+
+    [HttpGet("resolution")]
+    [Authorize(Policy = AuthorizationPolicies.ReadControlesPoidsFonderie)]
+    [ProducesResponseType<ControlePoidsFonderieResolutionResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ControlePoidsFonderieResolutionResponse>> Resolve(
+        [FromQuery] string numeroOF,
+        [FromQuery] string codeArticle,
+        [FromQuery] string codeTypeMatiere,
+        [FromQuery] DateOnly dateReception,
+        CancellationToken cancellationToken)
+    {
+        var result = await lookupService.ResolvePoidsPhysiqueAsync(
+            numeroOF,
+            codeArticle,
+            codeTypeMatiere,
+            dateReception,
+            cancellationToken);
+        return Ok(new ControlePoidsFonderieResolutionResponse(
+            result.Statut,
+            result.PoidsPhysiqueUnitaireKg,
+            result.ControlePoidsFonderieId,
+            result.Source,
+            result.Candidats.Select(candidate => new ControlePoidsFonderieCandidateResponse(
+                candidate.Id,
+                candidate.DateControle,
+                candidate.NumeroOF,
+                candidate.CodeArticle,
+                candidate.CodeTypeMatiere,
+                candidate.PoidsPhysiqueUnitaireKg,
+                candidate.Statut)).ToArray(),
+            result.Message));
     }
 
     [HttpGet("{id:guid}")]

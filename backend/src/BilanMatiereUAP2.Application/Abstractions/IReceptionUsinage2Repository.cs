@@ -21,9 +21,17 @@ public interface IReceptionUsinage2Repository
 
     // Receptions Valides du mois, utilisees pour le calcul du Bilan Usinage 2 (INPUT en pieces).
     Task<IReadOnlyList<ReceptionUsinage2>> GetValidesByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ReceptionUsinage2>> GetToutesValidesByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default);
 
     // Receptions Valides d'une DATE precise, utilisees par l'alerte journaliere de non-reception.
     Task<IReadOnlyList<ReceptionUsinage2>> GetValidesByDateAsync(DateOnly date, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ReceptionUsinage2>> GetConcernedByControlePoidsAsync(
+        string codeArticle,
+        string codeTypeMatiere,
+        string? numeroOF,
+        DateOnly dateControle,
+        CancellationToken cancellationToken = default);
 
     Task AddAsync(ReceptionUsinage2 reception, CancellationToken cancellationToken = default);
 }

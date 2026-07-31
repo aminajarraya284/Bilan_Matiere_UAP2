@@ -39,11 +39,15 @@ public sealed class ReceptionUsinage2Tests
     [InlineData("ArticleIntrouvable", "Trouve", "Trouve")]
     [InlineData("Trouve", "MouvementAbsent", "Trouve")]
     [InlineData("Trouve", "Trouve", "NomenclatureIntrouvable")]
-    public void Creer_SansArticleOuMatiereOuNomenclatureTrouve_Echoue(string statutArticle, string statutMatiere, string statutNomenclature)
+    public void Creer_SansArticleOuMatiereOuNomenclatureTrouve_ResteEnregistreAvecAnomalies(string statutArticle, string statutMatiere, string statutNomenclature)
     {
-        Assert.Throws<DomainValidationException>(() => ReceptionUsinage2.Creer(
+        var reception = ReceptionUsinage2.Creer(
             "OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null,
-            SnapshotComplet(statutArticle, statutMatiere, statutNomenclature), Guid.NewGuid(), "Testeur", Now));
+            SnapshotComplet(statutArticle, statutMatiere, statutNomenclature), Guid.NewGuid(), "Testeur", Now);
+
+        Assert.Equal(statutArticle, reception.StatutArticle);
+        Assert.Equal(statutMatiere, reception.StatutTypeMatiere);
+        Assert.Equal(statutNomenclature, reception.StatutNomenclature);
     }
 
     [Fact]
@@ -79,26 +83,33 @@ public sealed class ReceptionUsinage2Tests
         Assert.Throws<DomainValidationException>(() => reception.Modifier(150m, 300m, null, null, Guid.NewGuid(), "X", Now));
     }
 
+    // Le poids physique unitaire est une donnee AUTOMATIQUE, issue du controle poids Fonderie.
+    // Son absence est une anomalie visible, jamais un blocage de saisie : la validation reste
+    // possible et la reception conserve un poids physique NUL (jamais un faux zero).
     [Fact]
-    public void Valider_SansPoidsPhysiqueEtSansDerogation_Echoue()
+    public void Valider_SansPoidsPhysique_ResteAutoriseeEtLaisseLAnomalieVisible()
     {
         var reception = ReceptionUsinage2.Creer(
             "OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null,
             SnapshotComplet(statutPoidsPhysique: "PoidsPhysiqueManquant", poidsPhysiqueUnitaireKg: null),
             Guid.NewGuid(), "Testeur", Now);
 
-        Assert.Throws<DomainValidationException>(() => reception.Valider(false, null, Guid.NewGuid(), "X", Now));
+        reception.Valider(false, null, Guid.NewGuid(), "X", Now);
+
+        Assert.Equal(StatutReceptionUsinage2.Valide, reception.StatutReception);
+        Assert.Null(reception.PoidsPhysiqueUnitaireKg);
+        Assert.Equal("PoidsPhysiqueManquant", reception.StatutPoidsPhysique);
     }
 
     [Fact]
-    public void Valider_SansPoidsPhysiqueAvecDerogationSansJustification_Echoue()
+    public void Valider_DeuxFois_EstRefuse()
     {
         var reception = ReceptionUsinage2.Creer(
             "OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null,
-            SnapshotComplet(statutPoidsPhysique: "PoidsPhysiqueManquant", poidsPhysiqueUnitaireKg: null),
-            Guid.NewGuid(), "Testeur", Now);
+            SnapshotComplet(), Guid.NewGuid(), "Testeur", Now);
+        reception.Valider(false, null, Guid.NewGuid(), "X", Now);
 
-        Assert.Throws<DomainValidationException>(() => reception.Valider(true, "  ", Guid.NewGuid(), "X", Now));
+        Assert.Throws<DomainValidationException>(() => reception.Valider(false, null, Guid.NewGuid(), "X", Now));
     }
 
     [Fact]

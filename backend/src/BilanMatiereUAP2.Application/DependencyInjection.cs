@@ -5,6 +5,9 @@ using BilanMatiereUAP2.Application.Features.ControlePoidsFonderie;
 using BilanMatiereUAP2.Application.Features.EntreeOf;
 using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
+using BilanMatiereUAP2.Application.Features.InventairesFonderie;
+using BilanMatiereUAP2.Application.Features.Parametres;
+using BilanMatiereUAP2.Application.Features.PostesProcessus;
 using BilanMatiereUAP2.Application.Features.ReceptionsUsinage2;
 using BilanMatiereUAP2.Application.Features.TypesMatiere;
 using BilanMatiereUAP2.Application.Services;
@@ -22,9 +25,11 @@ public static class DependencyInjection
         services.AddScoped<ITypeMatiereService, TypeMatiereService>();
         services.AddScoped<IDechetFonderieService, DechetFonderieService>();
         services.AddScoped<IControlePoidsFonderieService, ControlePoidsFonderieService>();
+        services.AddScoped<IInventaireFonderieService, InventaireFonderieService>();
         services.AddScoped<IX3ImportService, X3ImportService>();
         services.AddScoped<IManufacturingReferencesService, ManufacturingReferencesService>();
         services.AddScoped<IReportMachineService, ReportMachineService>();
+        services.AddScoped<IOfContextResolver, OfContextResolver>();
         services.AddScoped<IReceptionUsinage2ContextService, ReceptionUsinage2ContextService>();
         services.AddScoped<IControlePoidsFonderieLookupService, ControlePoidsFonderieLookupService>();
         services.AddScoped<IImportArchiveService, ImportArchiveService>();
@@ -34,6 +39,10 @@ public static class DependencyInjection
         services.AddScoped<IAlerteNonReceptionService, AlerteNonReceptionService>();
         services.AddScoped<IBilanUsinage2Service, BilanUsinage2Service>();
         services.AddScoped<IImportDependencyRefreshService, ImportDependencyRefreshService>();
+        services.AddScoped<IParametreApplicationService, ParametreApplicationService>();
+        services.AddScoped<IParametreApplicationProvider>(provider =>
+            provider.GetRequiredService<IParametreApplicationService>());
+        services.AddScoped<IPosteProcessusService, PosteProcessusService>();
         return services;
     }
 }

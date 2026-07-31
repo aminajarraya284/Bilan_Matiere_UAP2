@@ -17,7 +17,7 @@ public sealed class X3RapportMachine
         string? designationArticle,
         string numeroOF,
         string? equipe,
-        decimal quantiteCTRL,
+        decimal quantiteTotale,
         decimal quantiteRebut,
         string? alternativeGamme,
         string cleMetier,
@@ -34,7 +34,7 @@ public sealed class X3RapportMachine
         DesignationArticle = NormalizeOptional(designationArticle, 250);
         NumeroOF = Normalize(numeroOF, 50);
         Equipe = NormalizeOptional(equipe, 50);
-        QuantiteCTRL = quantiteCTRL;
+        QuantiteTotale = quantiteTotale;
         QuantiteRebut = quantiteRebut;
         AlternativeGamme = NormalizeOptional(alternativeGamme, 50);
         CleMetier = cleMetier;
@@ -53,7 +53,7 @@ public sealed class X3RapportMachine
     public string? DesignationArticle { get; private set; }
     public string NumeroOF { get; private set; } = string.Empty;
     public string? Equipe { get; private set; }
-    public decimal QuantiteCTRL { get; private set; }
+    public decimal QuantiteTotale { get; private set; }
     public decimal QuantiteRebut { get; private set; }
     public string? AlternativeGamme { get; private set; }
     public string CleMetier { get; private set; } = string.Empty;
@@ -72,7 +72,7 @@ public sealed class X3RapportMachine
         string? designationArticle,
         string numeroOF,
         string? equipe,
-        decimal quantiteCTRL,
+        decimal quantiteTotale,
         decimal quantiteRebut,
         string? alternativeGamme,
         string sourceSystem,
@@ -88,7 +88,7 @@ public sealed class X3RapportMachine
             designationArticle,
             numeroOF,
             equipe,
-            quantiteCTRL,
+            quantiteTotale,
             quantiteRebut,
             alternativeGamme,
             GenererCleMetier(dateProduction, numeroOF, codeArticle, numeroOperation, codePoste, equipe, alternativeGamme),
@@ -103,7 +103,7 @@ public sealed class X3RapportMachine
 
     public void MettreAJour(
         string? designationArticle,
-        decimal quantiteCTRL,
+        decimal quantiteTotale,
         decimal quantiteRebut,
         string? alternativeGamme,
         string sourceSystem,
@@ -112,7 +112,7 @@ public sealed class X3RapportMachine
         DateTime importedAt)
     {
         DesignationArticle = NormalizeOptional(designationArticle, 250);
-        QuantiteCTRL = quantiteCTRL;
+        QuantiteTotale = quantiteTotale;
         QuantiteRebut = quantiteRebut;
         AlternativeGamme = NormalizeOptional(alternativeGamme, 50);
         SourceSystem = Normalize(sourceSystem, 100);
@@ -124,13 +124,13 @@ public sealed class X3RapportMachine
 
     public bool EstEquivalent(
         string? designationArticle,
-        decimal quantiteCTRL,
+        decimal quantiteTotale,
         decimal quantiteRebut,
         string? alternativeGamme,
         string sourceSystem,
         OrigineProcessus origineProcessus)
         => string.Equals(DesignationArticle, NormalizeOptional(designationArticle, 250), StringComparison.Ordinal)
-           && QuantiteCTRL == quantiteCTRL
+           && QuantiteTotale == quantiteTotale
            && QuantiteRebut == quantiteRebut
            && string.Equals(AlternativeGamme, NormalizeOptional(alternativeGamme, 50), StringComparison.Ordinal)
            && string.Equals(SourceSystem, Normalize(sourceSystem, 100), StringComparison.Ordinal)

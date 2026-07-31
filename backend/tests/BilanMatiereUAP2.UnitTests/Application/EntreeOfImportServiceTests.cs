@@ -17,7 +17,14 @@ public sealed class EntreeOfImportServiceTests
         var reader = new FixedMouvementReader();
         var archive = new RecordingArchiveService();
         var refresh = new RecordingDependencyRefreshService();
-        var service = new EntreeOfImportService(reader, repository, archive, refresh, new AnonymousCurrentUserService());
+        var service = new EntreeOfImportService(
+            reader,
+            repository,
+            archive,
+            refresh,
+            new AnonymousCurrentUserService(),
+            new TestImportHashCalculator(),
+            new TestParametreApplicationProvider());
 
         reader.Rows = [CreerLigneImport("OF1", "ART1", 10m), CreerLigneImport("OF2", "ART2", 20m)];
         var first = await service.ImportAsync(new MemoryStream([1]), "X3", "MVT-v1.xls");
@@ -127,8 +134,10 @@ public sealed class EntreeOfImportServiceTests
         Assert.Equal(100m, result.QuantiteNetteEntreeOfPieces);
     }
 
+    // Les quantites X3 sont SIGNEES : un net negatif est une donnee legitime, pas une erreur.
+    // Aucun Math.Abs, aucun clamp a zero, aucun rejet.
     [Fact]
-    public async Task ResolveAsync_QuantiteNetteNegative_RetourneValeurInvalide()
+    public async Task ResolveAsync_QuantiteNetteNegative_ConserveLeSigne()
     {
         var rows = new[]
         {
@@ -139,8 +148,24 @@ public sealed class EntreeOfImportServiceTests
 
         var result = await service.ResolveAsync("OF123", 2026, 7, "ART1", CancellationToken.None);
 
-        Assert.Equal("ValeurInvalide", result.Statut);
+        Assert.Equal("Trouve", result.Statut);
         Assert.Equal(-15m, result.QuantiteNetteEntreeOfPieces);
+    }
+
+    // Exigence explicite du cahier des charges : -980 + 980 = 0, sans valeur absolue.
+    [Fact]
+    public async Task ResolveAsync_MouvementsOpposes_SAnnulentExactement()
+    {
+        var rows = new[]
+        {
+            CreerMouvement("OF123", "ART1", "UN", -980m),
+            CreerMouvement("OF123", "ART1", "UN", 980m)
+        };
+        var service = CreateService(new FakeEntreeOfRepository(rows));
+
+        var result = await service.ResolveAsync("OF123", 2026, 7, "ART1", CancellationToken.None);
+
+        Assert.Equal(0m, result.QuantiteNetteEntreeOfPieces);
     }
 
     [Fact]
@@ -191,7 +216,9 @@ public sealed class EntreeOfImportServiceTests
             repository,
             new ThrowingArchiveService(),
             new NoopDependencyRefreshService(),
-            new AnonymousCurrentUserService());
+            new AnonymousCurrentUserService(),
+            new TestImportHashCalculator(),
+            new TestParametreApplicationProvider());
 
     private sealed class NoopDependencyRefreshService : IImportDependencyRefreshService
     {
@@ -235,6 +262,14 @@ public sealed class EntreeOfImportServiceTests
         }
         public Task<IReadOnlyList<EntreeOfComposant>> GetByOfAndPeriodeAsync(string numeroOF, int annee, int mois, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyList<EntreeOfComposant>)_rows.Where(r => r.NumeroOF == numeroOF.ToUpperInvariant()).ToArray());
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)_rows
+                .Where(r => r.DateImputation.Year == annee && r.DateImputation.Month == mois)
+                .ToArray());
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByDateAsync(DateOnly date, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)_rows
+                .Where(r => r.DateImputation == date)
+                .ToArray());
         public Task<IDisposable> BeginTransactionAsync(CancellationToken cancellationToken = default) => Task.FromResult<IDisposable>(new NoopDisposable());
         public Task CommitTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task RollbackTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -290,5 +325,23 @@ public sealed class EntreeOfImportServiceTests
             => throw new NotSupportedException();
         public Task<StoredFileContent> DownloadAsync(Guid importBatchId, Guid fileId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    private sealed class TestImportHashCalculator : IImportHashCalculator
+    {
+        public string CalculateSha256(byte[] content) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));
+        public string CalculateCoupleHash(string firstHash, string secondHash) => CalculateSha256(System.Text.Encoding.UTF8.GetBytes($"{firstHash}:{secondHash}"));
+    }
+
+    private sealed class TestParametreApplicationProvider : IParametreApplicationProvider
+    {
+        public Task<string?> GetValueAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>("Entree OF");
+
+        public Task<decimal?> GetDecimalAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<decimal?>(null);
+
+        public Task<IReadOnlyList<string>> GetCsvValuesAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>([]);
     }
 }

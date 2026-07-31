@@ -49,11 +49,14 @@ public sealed record DechetsFonderieFilter(
     DateOnly DateFinExclusive,
     Guid? TypeMatiereId,
     TypeDechet? TypeDechet,
+    OrigineDechet? Origine,
+    StatutDechet? Statut,
     int Page,
     int PageSize);
 
 public sealed record ControlesPoidsFonderieFilter(
-    DateOnly? DateControle,
+    DateOnly? DateDebut,
+    DateOnly? DateFin,
     string? NumeroOF,
     string? CodeArticle,
     Guid? TypeMatiereId,

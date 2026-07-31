@@ -38,7 +38,6 @@ public sealed class ImportX3BatchConfiguration : IEntityTypeConfiguration<Import
             .HasForeignKey(e => e.ImportBatchId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.Ignore(e => e.Mouvements);
         builder.Ignore(e => e.Consommations);
     }
 }

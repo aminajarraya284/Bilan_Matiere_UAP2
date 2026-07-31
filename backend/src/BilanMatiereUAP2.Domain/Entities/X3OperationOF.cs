@@ -32,8 +32,8 @@ public sealed class X3OperationOF
 
         Id = id;
         OrdreFabricationId = ordreFabricationId;
-        NumeroOperation = NormaliserCle(numeroOperation, 30);
-        CodePoste = NormaliserCle(codePoste, 50);
+        NumeroOperation = NormaliserCodeOperation(numeroOperation, 30);
+        CodePoste = NormaliserCodeOperation(codePoste, 50);
         MettreAJourValeurs(
             numeroLigneSource,
             typePoste,
@@ -153,7 +153,7 @@ public sealed class X3OperationOF
         ImportBatchId = importBatchId;
     }
 
-    private static string NormaliserCle(string value, int maxLength)
+    private static string NormaliserCodeOperation(string value, int maxLength)
     {
         var normalized = value?.Trim().ToUpperInvariant() ?? string.Empty;
         if (normalized.Length > maxLength)

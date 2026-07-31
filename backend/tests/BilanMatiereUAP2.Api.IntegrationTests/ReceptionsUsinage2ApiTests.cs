@@ -45,27 +45,34 @@ public sealed class ReceptionsUsinage2ApiTests : IClassFixture<ApiWebApplication
     }
 
     [Fact]
-    public async Task Create_SansArticleTrouve_RetourneBadRequest()
+    public async Task Create_SansArticleTrouve_RetourneCreatedAvecAnomalieVisible()
     {
         await _factory.ResetDatabaseAsync();
         var client = BuildFactory(FakeReceptionContextService.ArticleIntrouvable()).CreateClient();
 
         var response = await client.PostAsJsonAsync("/api/v1/receptions-usinage2", new CreateReceptionUsinage2Request(
-            "OF999", new DateOnly(2026, 7, 26), 100m, null, null, null));
+            "OF999", new DateOnly(2026, 7, 26), 100m, 250m, null, null));
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<ReceptionUsinage2Response>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("ArticleIntrouvable", created!.StatutArticle);
+        Assert.Contains("Aucun article unique", created.Avertissements[0]);
     }
 
+    // Un OF absent des QUATRE sources X3 est le seul cas de blocage lie au contexte :
+    // il n'est pas enregistrable, contrairement a un OF reconnu au contexte incomplet.
     [Fact]
-    public async Task Create_OFIntrouvable_RetourneNotFound()
+    public async Task Create_OFIntrouvable_EstBloque()
     {
         await _factory.ResetDatabaseAsync();
         var client = BuildFactory(FakeReceptionContextService.Null()).CreateClient();
 
         var response = await client.PostAsJsonAsync("/api/v1/receptions-usinage2", new CreateReceptionUsinage2Request(
-            "OFXXX", new DateOnly(2026, 7, 26), 100m, null, null, null));
+            "OFXXX", new DateOnly(2026, 7, 26), 100m, 250m, null, null));
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("OF_X3_INTROUVABLE", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -98,20 +105,25 @@ public sealed class ReceptionsUsinage2ApiTests : IClassFixture<ApiWebApplication
         Assert.Equal("Annule", cancelled!.StatutReception);
     }
 
+    // Le poids physique unitaire vient du controle poids Fonderie : c'est une donnee
+    // AUTOMATIQUE. Son absence est une anomalie visible, pas un blocage de validation.
     [Fact]
-    public async Task Valider_SansPoidsPhysiqueEtSansDerogation_RetourneBadRequest()
+    public async Task Valider_SansPoidsPhysiqueEtSansDerogation_Reussit()
     {
         await _factory.ResetDatabaseAsync();
         var client = BuildFactory(FakeReceptionContextService.PoidsManquant()).CreateClient();
 
         var createResponse = await client.PostAsJsonAsync("/api/v1/receptions-usinage2", new CreateReceptionUsinage2Request(
-            "OF123", new DateOnly(2026, 7, 26), 100m, null, null, null));
+            "OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null));
         var created = await createResponse.Content.ReadFromJsonAsync<ReceptionUsinage2Response>();
 
         var validateResponse = await client.PostAsJsonAsync($"/api/v1/receptions-usinage2/{created!.Id}/valider",
             new ValiderReceptionUsinage2Request(false, null));
+        var validated = await validateResponse.Content.ReadFromJsonAsync<ReceptionUsinage2Response>();
 
-        Assert.Equal(HttpStatusCode.BadRequest, validateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, validateResponse.StatusCode);
+        Assert.Equal("Valide", validated!.StatutReception);
+        Assert.Null(validated.PoidsPhysiqueUnitaireKg);
     }
 
     [Fact]
@@ -121,7 +133,7 @@ public sealed class ReceptionsUsinage2ApiTests : IClassFixture<ApiWebApplication
         var client = BuildFactory(FakeReceptionContextService.PoidsManquant()).CreateClient();
 
         var createResponse = await client.PostAsJsonAsync("/api/v1/receptions-usinage2", new CreateReceptionUsinage2Request(
-            "OF123", new DateOnly(2026, 7, 26), 100m, null, null, null));
+            "OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null));
         var created = await createResponse.Content.ReadFromJsonAsync<ReceptionUsinage2Response>();
 
         var validateResponse = await client.PostAsJsonAsync($"/api/v1/receptions-usinage2/{created!.Id}/valider",
@@ -140,7 +152,7 @@ public sealed class ReceptionsUsinage2ApiTests : IClassFixture<ApiWebApplication
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/receptions-usinage2")
         {
-            Content = JsonContent.Create(new CreateReceptionUsinage2Request("OF123", new DateOnly(2026, 7, 26), 100m, null, null, null))
+            Content = JsonContent.Create(new CreateReceptionUsinage2Request("OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null))
         };
         request.Headers.Add("X-Development-Role", "ResponsableFonderie");
 
@@ -155,7 +167,7 @@ public sealed class ReceptionsUsinage2ApiTests : IClassFixture<ApiWebApplication
         await _factory.ResetDatabaseAsync();
         var client = BuildFactory(FakeReceptionContextService.Complet()).CreateClient();
         await client.PostAsJsonAsync("/api/v1/receptions-usinage2", new CreateReceptionUsinage2Request(
-            "OF123", new DateOnly(2026, 7, 26), 100m, null, null, null));
+            "OF123", new DateOnly(2026, 7, 26), 100m, 250m, null, null));
 
         var list = await client.GetFromJsonAsync<PagedReceptionsUsinage2Response>("/api/v1/receptions-usinage2");
 

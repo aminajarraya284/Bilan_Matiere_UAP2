@@ -14,9 +14,21 @@ public sealed class DechetFonderieTests
     {
         var entity = Create();
 
-        Assert.Equal(StatutDechet.Valide, entity.Statut);
+        // Un dechet nait BROUILLON : il est modifiable et exclu des totaux jusqu'a validation.
+        Assert.Equal(StatutDechet.Brouillon, entity.Statut);
         Assert.Equal(125.5m, entity.PoidsKg);
         Assert.False(entity.EstSupprime);
+    }
+
+    [Fact]
+    public void Valider_FaitPasserLeDechetDeBrouillonAValide()
+    {
+        var entity = Create();
+
+        entity.Valider(null, "V", Now.AddMinutes(1));
+
+        Assert.Equal(StatutDechet.Valide, entity.Statut);
+        Assert.Equal(Now.AddMinutes(1), entity.ValideLeUtc);
     }
 
     [Fact]
@@ -61,16 +73,29 @@ public sealed class DechetFonderieTests
         Assert.Equal(50.25m, entity.PoidsKg);
     }
 
+    // Le dechet n'est plus supprime logiquement : il est ANNULE et reste dans l'historique.
     [Fact]
-    public void SupprimerLogiquement_MasqueEtAnnuleLeDechet()
+    public void Annuler_ConserveLeDechetDansLHistorique()
     {
         var entity = Create();
 
-        entity.SupprimerLogiquement(Now.AddMinutes(1));
+        entity.Annuler(null, "A", Now.AddMinutes(1));
 
-        Assert.True(entity.EstSupprime);
         Assert.Equal(StatutDechet.Annule, entity.Statut);
-        Assert.Equal(Now.AddMinutes(1), entity.DateSuppressionUtc);
+        Assert.False(entity.EstSupprime);
+        Assert.Equal(Now.AddMinutes(1), entity.AnnuleLeUtc);
+    }
+
+    [Fact]
+    public void Annuler_EstIdempotent()
+    {
+        var entity = Create();
+        entity.Annuler(null, "A", Now.AddMinutes(1));
+
+        entity.Annuler(null, "A2", Now.AddMinutes(5));
+
+        Assert.Equal(StatutDechet.Annule, entity.Statut);
+        Assert.Equal(Now.AddMinutes(1), entity.AnnuleLeUtc);
     }
 
     private static DechetFonderie Create(DateOnly? date = null)

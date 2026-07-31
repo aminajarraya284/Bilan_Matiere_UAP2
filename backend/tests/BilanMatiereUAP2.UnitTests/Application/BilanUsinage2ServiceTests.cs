@@ -17,6 +17,10 @@ public sealed class BilanUsinage2ServiceTests
     private static readonly DateTime Now = new(2026, 7, 26, 10, 0, 0, DateTimeKind.Utc);
     private const string Periode = "2026-07";
 
+    // Valeur du parametre applicatif CodeAtelierUap2 utilisee par les fakes.
+    // Elle n'est pas codee en dur dans le service, qui la lit via IParametreApplicationProvider.
+    private const string CodeAtelierUap2 = "16";
+
     // 1. CTRL EMR = 100, Rebut EMR = 5 -> Nombre de pieces = 95.
     [Fact]
     public async Task NombreDePieces_EstCtrlEmrMoinsRebutEmr()
@@ -145,9 +149,11 @@ public sealed class BilanUsinage2ServiceTests
         Assert.Equal(100m, ligne.BilanUsinage2Pieces);
     }
 
-    // 11, 12. La cle de regroupement est bien « Numero OF + Code article ».
+    // 11, 12. La cle de regroupement est le NUMERO D'OF SEUL.
+    // Un OF portant plusieurs articles reste UNE ligne, avec l'anomalie correspondante :
+    // le bilan ne scinde pas un OF en plusieurs lignes et ne fait disparaitre aucune quantite.
     [Fact]
-    public async Task Regroupement_SepareLesArticlesEtLesOf()
+    public async Task Regroupement_UneLigneParOf_MemeAvecPlusieursArticles()
     {
         var service = CreateService(
             [
@@ -160,10 +166,11 @@ public sealed class BilanUsinage2ServiceTests
 
         var lignes = (await service.GetAsync(Periode, CancellationToken.None)).Lignes;
 
-        Assert.Equal(3, lignes.Count);
-        Assert.Equal(10m, lignes.Single(l => l.NumeroOF == "OF1" && l.CodeArticle == "ART1").QuantiteReceptionneePieces);
-        Assert.Equal(20m, lignes.Single(l => l.NumeroOF == "OF1" && l.CodeArticle == "ART2").QuantiteReceptionneePieces);
-        Assert.Equal(30m, lignes.Single(l => l.NumeroOF == "OF2" && l.CodeArticle == "ART1").QuantiteReceptionneePieces);
+        Assert.Equal(2, lignes.Count);
+        var of1 = lignes.Single(ligne => ligne.NumeroOF == "OF1");
+        Assert.Equal(30m, of1.QuantiteReceptionneePieces); // 10 + 20, aucune quantite perdue
+        Assert.Contains("PLUSIEURS_ARTICLES_POUR_OF", of1.Anomalies);
+        Assert.Equal(30m, lignes.Single(ligne => ligne.NumeroOF == "OF2").QuantiteReceptionneePieces);
     }
 
     // 13. SCI et TRN n'entrent pas dans le Nombre de pieces Usinage 2.
@@ -287,7 +294,9 @@ public sealed class BilanUsinage2ServiceTests
         Assert.Null(ligne.NombreDePieces);
         Assert.Null(ligne.QuantiteNonReceptionneePieces);
         Assert.Equal("DonneesManquantes", ligne.StatutReception);
-        Assert.Contains("RAPPORT_MACHINE_EMR_INTROUVABLE", ligne.Anomalies);
+        // L'anomalie RAPPORT_MACHINE_EMR_INTROUVABLE appartient a l'ALERTE de non-reception :
+        // le Bilan U2 n'integre pas l'EMR, il se contente de ne rien fabriquer.
+        Assert.DoesNotContain("RAPPORT_MACHINE_EMR_INTROUVABLE", ligne.Anomalies);
     }
 
     [Fact]
@@ -376,20 +385,205 @@ public sealed class BilanUsinage2ServiceTests
         Assert.Equal("M3060L0", lignes["OF2"].TypeMatiere);
     }
 
+    // ======================================================================
+    // PRIORITÉ 1 — Règle de population du Bilan Usinage 2
+    // Seules les Réceptions U2 validées initialisent l'univers des OF.
+    // Les Rebuts, Entrées OF et Sorties MP ne créent pas de nouvelles lignes.
+    // ======================================================================
+
+    // P1-A : Une Entrée OF seule (sans réception) ne crée pas de ligne Bilan U2.
+    [Fact]
+    public async Task EntreeOf_SansReceptionCorrespondante_NeCreeAucuneLigneBilan()
+    {
+        var entreeOrpheline = EntreeOf("OF_ORPHELIN", "ART_X", 50m);
+        var service = CreateServiceWithEntreesRaw(
+            receptions: [],
+            entreesRaw: [entreeOrpheline],
+            rapport: Rapport(0m, 0m, trouve: false));
+
+        var result = await service.GetAsync(Periode, CancellationToken.None);
+        Assert.Empty(result.Lignes);
+    }
+
+    // P1-B : Un Rebut U2 seul (sans réception) ne crée pas de ligne Bilan U2.
+    [Fact]
+    public async Task RebutU2_SansReceptionCorrespondante_NeCreeAucuneLigneBilan()
+    {
+        var service = CreateService(
+            receptions: [],
+            entreeOf: null,
+            rapport: Rapport(0m, 0m, trouve: false),
+            rebuts: [RebutValide(30m)]);
+
+        var result = await service.GetAsync(Periode, CancellationToken.None);
+        Assert.Empty(result.Lignes);
+    }
+
+    // P1-C : Une Sortie MP seule (sans réception) ne crée pas de ligne Bilan U2.
+    [Fact]
+    public async Task SortieMP_SansReceptionCorrespondante_NeCreeAucuneLigneBilan()
+    {
+        var service = CreateService(
+            receptions: [],
+            entreeOf: null,
+            rapport: Rapport(0m, 0m, trouve: false),
+            sortiesMp: [new SortieMpMaterialLink("OF_ORPHELIN", "ART_X", "M3010L0")]);
+
+        var result = await service.GetAsync(Periode, CancellationToken.None);
+        Assert.Empty(result.Lignes);
+    }
+
+    // P1-D : Entrée OF + Rebut U2 pour le même OF, mais sans réception → aucune ligne.
+    [Fact]
+    public async Task EntreeOfEtRebutU2_SansReception_NeCreeAucuneLigne()
+    {
+        var entreeOrpheline = EntreeOf("OF1", "ART1", 50m);
+        var service = CreateServiceWithEntreesRaw(
+            receptions: [],
+            entreesRaw: [entreeOrpheline],
+            rapport: Rapport(0m, 0m, trouve: false),
+            rebuts: [RebutValide(20m)]);
+
+        var result = await service.GetAsync(Periode, CancellationToken.None);
+        Assert.Empty(result.Lignes);
+    }
+
+    // P1-E : OF1 a une réception ; OF_ORPHELIN a seulement une Entrée OF.
+    //        Seule la ligne OF1 doit apparaître dans le bilan.
+    [Fact]
+    public async Task EntreeOf_OfSansReception_NApparaïtPasDansLeBilan()
+    {
+        var service = CreateServiceWithEntreesRaw(
+            receptions: [ReceptionValidee(100m, numeroOF: "OF1")],
+            entreesRaw:
+            [
+                EntreeOf("OF1", "ART1", 10m),          // enrichit OF1 existant
+                EntreeOf("OF_ORPHELIN", "ART_X", 50m)  // OF sans réception → ignoré
+            ],
+            rapport: Rapport(100m, 5m));
+
+        var lignes = (await service.GetAsync(Periode, CancellationToken.None)).Lignes;
+
+        Assert.Single(lignes);
+        Assert.Equal("OF1", lignes[0].NumeroOF, ignoreCase: true);
+        // L'entrée de OF1 est bien prise en compte.
+        Assert.Equal(10m, lignes[0].EntreeOfPieces);
+    }
+
+    // P1-F (régression) : Réception + Rebut → la ligne existe et les deux quantités sont correctes.
+    [Fact]
+    public async Task P1Regression_ReceptionEtRebut_LigneExisteAvecBonnesQuantites()
+    {
+        var service = CreateService(
+            [ReceptionValidee(100m)],
+            entreeOf: null,
+            rapport: Rapport(100m, 5m),
+            rebuts: [RebutValide(15m)]);
+
+        var ligne = Assert.Single((await service.GetAsync(Periode, CancellationToken.None)).Lignes);
+
+        Assert.Equal(100m, ligne.QuantiteReceptionneePieces);
+        Assert.Equal(15m, ligne.RebutUsinage2Pieces);
+    }
+
+    // P1-G (régression) : Réception + Entrée OF → la ligne existe et l'entrée alimente EntreeOfPieces.
+    [Fact]
+    public async Task P1Regression_ReceptionEtEntreeOf_LigneExisteEtEntreeEstPriseEnCompte()
+    {
+        var service = CreateServiceWithEntreesRaw(
+            receptions: [ReceptionValidee(100m, numeroOF: "OF1")],
+            entreesRaw: [EntreeOf("OF1", "ART1", 40m)],
+            rapport: Rapport(100m, 5m));
+
+        var ligne = Assert.Single((await service.GetAsync(Periode, CancellationToken.None)).Lignes);
+
+        Assert.Equal(100m, ligne.QuantiteReceptionneePieces);
+        Assert.Equal(40m, ligne.EntreeOfPieces);
+    }
+
     // ------------------------------------------------------------------------
+    /// <summary>
+    /// Le service lit desormais directement les repositories (Receptions, Rebuts, Entrees OF,
+    /// YRJMCH, Sorties MP) puis resout l'eligibilite atelier via les gammes et le parametre
+    /// applicatif CodeAtelierUap2. Les fakes reproduisent ce contrat.
+    /// </summary>
     private static BilanUsinage2Service CreateService(
         IReadOnlyList<ReceptionUsinage2> receptions,
         decimal? entreeOf,
         RapportMachineAggregateResponse rapport,
         IReadOnlyList<RebutUsinage2>? rebuts = null,
         IReadOnlyList<SortieMpMaterialLink>? sortiesMp = null)
-        => new(
+    {
+        // Un couple (OF, article) par OF present dans les receptions ou les rebuts :
+        // les mouvements Entree OF et les lignes YRJMCH sont rattaches a ces memes cles,
+        // sans introduire d'article supplementaire qui fausserait la detection d'ambiguite.
+        var cles = receptions
+            .Select(reception => (Of: reception.NumeroOF, Article: reception.CodeArticle ?? "ART1"))
+            .Concat((rebuts ?? []).Select(rebut => (Of: rebut.NumeroOF, Article: rebut.CodeArticle ?? "ART1")))
+            .GroupBy(cle => cle.Of, StringComparer.OrdinalIgnoreCase)
+            .Select(groupe => (Of: groupe.Key, groupe.First().Article))
+            .ToArray();
+        var articles = cles
+            .Select(cle => cle.Article)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .DefaultIfEmpty("ART1")
+            .ToArray();
+
+        return new BilanUsinage2Service(
             new FakeReceptionRepository(receptions),
             new FakeRebutRepository(rebuts ?? []),
-            new FakeEntreeOfService(entreeOf),
-            new FakeReportMachineService(rapport),
-            new FakeReportMachineRepository(receptions),
-            new FakeSortieMpMaterialRepository(sortiesMp));
+            new FakeEntreeOfRepository(entreeOf, cles),
+            new FakeReportMachineRepository(rapport, cles),
+            new FakeSortieMpMaterialRepository(sortiesMp),
+            new FakeReferencesRepository(articles),
+            new FakeParametres());
+    }
+
+    /// <summary>
+    /// Variante de CreateService acceptant des EntreeOfComposant bruts (independants
+    /// des receptions). Indispensable pour les tests P1 mettant en scene des OF
+    /// qui ont des entrees OF mais AUCUNE reception (cas d'OF orphelins).
+    /// </summary>
+    private static BilanUsinage2Service CreateServiceWithEntreesRaw(
+        IReadOnlyList<ReceptionUsinage2> receptions,
+        IReadOnlyList<EntreeOfComposant>? entreesRaw,
+        RapportMachineAggregateResponse rapport,
+        IReadOnlyList<RebutUsinage2>? rebuts = null,
+        IReadOnlyList<SortieMpMaterialLink>? sortiesMp = null)
+    {
+        var cles = receptions
+            .Select(reception => (Of: reception.NumeroOF, Article: reception.CodeArticle ?? "ART1"))
+            .Concat((rebuts ?? []).Select(rebut => (Of: rebut.NumeroOF, Article: rebut.CodeArticle ?? "ART1")))
+            .GroupBy(cle => cle.Of, StringComparer.OrdinalIgnoreCase)
+            .Select(groupe => (Of: groupe.Key, groupe.First().Article))
+            .ToArray();
+        var articles = cles
+            .Select(cle => cle.Article)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .DefaultIfEmpty("ART1")
+            .ToArray();
+
+        return new BilanUsinage2Service(
+            new FakeReceptionRepository(receptions),
+            new FakeRebutRepository(rebuts ?? []),
+            new FakeEntreeOfRepositoryRaw(entreesRaw ?? []),
+            new FakeReportMachineRepository(rapport, cles),
+            new FakeSortieMpMaterialRepository(sortiesMp),
+            new FakeReferencesRepository(articles),
+            new FakeParametres());
+    }
+
+    /// <summary>Construit un EntreeOfComposant avec les valeurs minimales pour les tests P1.</summary>
+    private static EntreeOfComposant EntreeOf(string numeroOF, string codeArticle, decimal quantite)
+        => EntreeOfComposant.Creer(
+            Guid.NewGuid(),
+            new DateOnly(2026, 7, 6),
+            numeroOF,
+            codeArticle,
+            "Article test",
+            "UN",
+            quantite,
+            new DateTime(2026, 7, 6, 0, 0, 0, DateTimeKind.Utc));
 
     private static ReceptionUsinage2 ReceptionValidee(
         decimal pieces,
@@ -455,7 +649,11 @@ public sealed class BilanUsinage2ServiceTests
             "Trouve",
             "Trouve",
             "Trouve",
-            []);
+            [],
+            "SortieMp",
+            // Sans cette eligibilite, le service exclut la reception du Bilan U2
+            // et leve RECEPTION_U2_HORS_ATELIER_EXCLUE.
+            EligibleAtelier16: true);
 
     private static RapportMachineAggregateResponse Rapport(decimal ctrlEmr, decimal rebutEmr, bool trouve = true)
         => new("OF1", "ART1", 0m, ctrlEmr, 0m, 0m, rebutEmr, 0m, trouve ? 1 : 0, trouve ? 1 : 0, 0, null, null, trouve);
@@ -487,6 +685,18 @@ public sealed class BilanUsinage2ServiceTests
                     && r.DateReception.Year == annee && r.DateReception.Month == mois)
                 .ToArray());
 
+        // Meme perimetre que GetValidesByPeriodeAsync : le filtrage d'eligibilite atelier
+        // est applique par le service, pas par le fake.
+        public Task<IReadOnlyList<ReceptionUsinage2>> GetToutesValidesByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<ReceptionUsinage2>)receptions
+                .Where(r => r.StatutReception == StatutReceptionUsinage2.Valide
+                    && r.DateReception.Year == annee && r.DateReception.Month == mois)
+                .ToArray());
+
+        public Task<IReadOnlyList<ReceptionUsinage2>> GetConcernedByControlePoidsAsync(
+            string codeArticle, string codeTypeMatiere, string? numeroOF, DateOnly dateControle, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<ReceptionUsinage2>)[]);
+
         public Task AddAsync(ReceptionUsinage2 reception, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
@@ -510,36 +720,126 @@ public sealed class BilanUsinage2ServiceTests
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeEntreeOfService(decimal? quantite) : IEntreeOfImportService
+    /// <summary>
+    /// Mouvements Entree OF a l'unite « UN » (pieces). Une quantite nulle signifie
+    /// « aucun mouvement » : le service doit alors rendre le bilan non calculable.
+    /// La quantite est reportee SIGNEE, sans Math.Abs.
+    /// </summary>
+    private sealed class FakeEntreeOfRepository(
+        decimal? quantite,
+        IReadOnlyList<(string Of, string Article)> cles) : IEntreeOfRepository
     {
-        public Task<ImportEntreeOfResponse> ImportAsync(
-            Stream fileStream, string sourceSystem, string nomFichierOriginal, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        private IReadOnlyList<EntreeOfComposant> Rows(int annee, int mois) => quantite is null
+            ? []
+            : cles.Select(cle => EntreeOfComposant.Creer(
+                Guid.NewGuid(),
+                new DateOnly(annee, mois, 6),
+                cle.Of,
+                cle.Article,
+                "Article test",
+                "UN",
+                quantite.Value,
+                new DateTime(annee, mois, 6, 0, 0, 0, DateTimeKind.Utc))).ToArray();
 
-        public Task<EntreeOfResolutionResult> ResolveAsync(
-            string numeroOF, int annee, int mois, string? codeArticleAttendu, CancellationToken cancellationToken = default)
-            => Task.FromResult(quantite is null
-                ? new EntreeOfResolutionResult("MouvementAbsent", null, codeArticleAttendu, "Aucun mouvement Entrée OF.")
-                : new EntreeOfResolutionResult("Trouve", quantite, codeArticleAttendu, null));
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult(Rows(annee, mois));
+
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByDateAsync(DateOnly date, CancellationToken cancellationToken = default)
+            => Task.FromResult(Rows(date.Year, date.Month).Where(row => row.DateImputation == date).ToArray()
+                as IReadOnlyList<EntreeOfComposant>);
+
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByOfAndPeriodeAsync(string numeroOF, int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult(Rows(annee, mois)
+                .Where(row => string.Equals(row.NumeroOF, numeroOF, StringComparison.OrdinalIgnoreCase))
+                .ToArray() as IReadOnlyList<EntreeOfComposant>);
+
+        public Task<ImportBatch?> GetCompletedBatchByHashAsync(string hashSha256, CancellationToken cancellationToken = default)
+            => Task.FromResult<ImportBatch?>(null);
+        public Task AddBatchAsync(ImportBatch batch, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpdateBatchAsync(ImportBatch batch, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task MarkBatchAsEchecAsync(Guid batchId, DateTime dateFinUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyDictionary<string, EntreeOfComposant>> GetByCleMetiersAsync(IReadOnlyCollection<string> cleMetiers, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyDictionary<string, EntreeOfComposant>)new Dictionary<string, EntreeOfComposant>());
+        public Task AddRangeAsync(IEnumerable<EntreeOfComposant> items, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IDisposable> BeginTransactionAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task CommitTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RollbackTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeReportMachineService(RapportMachineAggregateResponse rapport) : IReportMachineService
+    /// <summary>
+    /// Variante de FakeEntreeOfRepository qui retourne directement des entrees brutes
+    /// passees par les tests P1, sans les generer a partir de cles issues des receptions.
+    /// Permet de mettre en scene des OFs « orphelins » (entrees sans reception).
+    /// </summary>
+    private sealed class FakeEntreeOfRepositoryRaw(IReadOnlyList<EntreeOfComposant> entrees) : IEntreeOfRepository
     {
-        public Task<RapportMachineAggregateResponse> AggregateAsync(
-            string numeroOF, string codeArticle, int? annee = null, int? mois = null, CancellationToken cancellationToken = default)
-            => Task.FromResult(rapport with { NumeroOF = numeroOF, CodeArticle = codeArticle });
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByPeriodeAsync(
+            int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)entrees
+                .Where(e => e.DateImputation.Year == annee && e.DateImputation.Month == mois)
+                .ToArray());
 
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByDateAsync(DateOnly date, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)entrees
+                .Where(e => e.DateImputation == date).ToArray());
 
-        public Task<ImportRapportMachineResponse> ImportAsync(
-            Stream fileStream, string profilImport, string sourceSystem, string nomFichierOriginal, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByOfAndPeriodeAsync(
+            string numeroOF, int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)entrees
+                .Where(e => string.Equals(e.NumeroOF, numeroOF, StringComparison.OrdinalIgnoreCase)
+                    && e.DateImputation.Year == annee && e.DateImputation.Month == mois)
+                .ToArray());
 
-        public Task<PagedResult<RapportMachineResponse>> QueryAsync(
-            string? numeroOF, string? codeArticle, string? codePoste, int page, int pageSize, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public Task<ImportBatch?> GetCompletedBatchByHashAsync(string hashSha256, CancellationToken cancellationToken = default)
+            => Task.FromResult<ImportBatch?>(null);
+        public Task AddBatchAsync(ImportBatch batch, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpdateBatchAsync(ImportBatch batch, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task MarkBatchAsEchecAsync(Guid batchId, DateTime dateFinUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyDictionary<string, EntreeOfComposant>> GetByCleMetiersAsync(
+            IReadOnlyCollection<string> cleMetiers, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyDictionary<string, EntreeOfComposant>)new Dictionary<string, EntreeOfComposant>());
+        public Task AddRangeAsync(IEnumerable<EntreeOfComposant> items, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IDisposable> BeginTransactionAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task CommitTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RollbackTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
 
-        public Task<RecalculerOrigineProcessusResult> RecalculerOrigineProcessusAsync(CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+    /// <summary>Gammes actives : chaque article de test appartient a l'atelier UAP2.</summary>
+    private sealed class FakeReferencesRepository(IReadOnlyList<string> articlesEligibles) : IOfContextReferencesRepository
+    {
+        private RefGammeFabrication Gamme(string article) => RefGammeFabrication.Creer(
+            article, null, null, null, null, "10", CodeAtelierUap2, "POSTE", null, "M3010",
+            null, null, null, null, null, null, null, null, null, null, null, null,
+            "TEST", Guid.NewGuid(), Now);
+
+        public Task<IReadOnlyList<RefGammeFabrication>> GetGammesActivesByArticleAsync(string codeArticle, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<RefGammeFabrication>)(
+                articlesEligibles.Contains(codeArticle, StringComparer.OrdinalIgnoreCase) ? [Gamme(codeArticle)] : []));
+
+        public Task<IReadOnlyList<RefGammeFabrication>> GetGammesActivesByArticlesAsync(IReadOnlyCollection<string> codesArticle, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<RefGammeFabrication>)codesArticle
+                .Where(code => articlesEligibles.Contains(code, StringComparer.OrdinalIgnoreCase))
+                .Select(Gamme)
+                .ToArray());
+
+        public Task<IReadOnlyList<RefNomenclature>> GetNomenclaturesByArticleAndComponentAsync(
+            string codeArticleParent, string codeComposant, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<RefNomenclature>)[]);
+    }
+
+    /// <summary>Parametres applicatifs : seul CodeAtelierUap2 est utilise par le Bilan U2.</summary>
+    private sealed class FakeParametres : IParametreApplicationProvider
+    {
+        public Task<string?> GetValueAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>(cle == ParametresApplicationCles.CodeAtelierUap2 ? CodeAtelierUap2 : null);
+
+        public Task<decimal?> GetDecimalAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<decimal?>(null);
+
+        public Task<IReadOnlyList<string>> GetCsvValuesAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<string>)[]);
     }
 
     private sealed class FakeSortieMpMaterialRepository(IReadOnlyList<SortieMpMaterialLink>? links)
@@ -547,6 +847,11 @@ public sealed class BilanUsinage2ServiceTests
     {
         public Task<IReadOnlyList<SortieMpMaterialLink>> GetByDateAsync(DateOnly date, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyList<SortieMpMaterialLink>)[]);
+
+        // Univers du Bilan U2 : les liens configures par le test, sans filtrage sur des cles connues.
+        public Task<IReadOnlyList<SortieMpMaterialLink>> GetAllByPeriodeAsync(
+            int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<SortieMpMaterialLink>)(links ?? []));
 
         public Task<IReadOnlyList<SortieMpMaterialLink>> GetByPeriodeAsync(
             int annee,
@@ -566,29 +871,52 @@ public sealed class BilanUsinage2ServiceTests
     }
 
     /// <summary>
-    /// Fournit une ligne YRJMCH EMR par cle receptionnee, afin que la base de calcul
-    /// (les cles EMR de la periode) contienne les cles attendues par les tests.
+    /// Lignes YRJMCH brutes de la periode. Le service classe lui-meme SCI / EMR / TRN
+    /// d'apres le prefixe du poste : le fake emet donc les trois familles, afin que les
+    /// tests verifient reellement que SCI et TRN sont ignores par le Bilan U2.
+    /// Rapport « non trouve » = aucune ligne, jamais une quantite nulle fabriquee.
     /// </summary>
-    private sealed class FakeReportMachineRepository(IReadOnlyList<ReceptionUsinage2> receptions) : IReportMachineRepository
+    private sealed class FakeReportMachineRepository(
+        RapportMachineAggregateResponse rapport,
+        IReadOnlyList<(string Of, string Article)> cles) : IReportMachineRepository
     {
-        private IReadOnlyList<X3RapportMachine> Rows(int annee, int mois) => receptions
-            .Where(r => r.CodeArticle is not null)
-            .Select(r => X3RapportMachine.Creer(
-                new DateOnly(annee, mois, 1),
-                "EMR01", // prefixe EMR -> classe EMR par la regle
-                OrigineProcessus.Emr,
-                "10",
-                r.CodeArticle!,
-                r.DesignationArticle,
-                r.NumeroOF,
-                null,
-                0m,
-                0m,
-                null,
-                "X3",
-                Guid.NewGuid(),
-                new DateTime(annee, mois, 1, 0, 0, 0, DateTimeKind.Utc)))
-            .ToArray();
+        private IReadOnlyList<X3RapportMachine> Rows(int annee, int mois)
+        {
+            if (!rapport.Trouve) return [];
+
+            var lignes = new List<X3RapportMachine>();
+            foreach (var (of, article) in cles)
+            {
+                void Ajouter(string poste, decimal total, decimal rebut) => lignes.Add(X3RapportMachine.Creer(
+                    new DateOnly(annee, mois, 1),
+                    poste,
+                    OrigineProcessus.Inconnue, // la classification vient du prefixe du poste
+                    "10",
+                    article,
+                    "Article test",
+                    of,
+                    null,
+                    total,
+                    rebut,
+                    null,
+                    "X3",
+                    Guid.NewGuid(),
+                    new DateTime(annee, mois, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+                Ajouter("EMR01", rapport.TotalCtrlEmr, rapport.TotalRebutEmr);
+                if (rapport.TotalCtrlSci != 0m || rapport.TotalRebutSci != 0m)
+                {
+                    Ajouter("SCI01", rapport.TotalCtrlSci, rapport.TotalRebutSci);
+                }
+
+                if (rapport.TotalCtrlTrn != 0m || rapport.TotalRebutTrn != 0m)
+                {
+                    Ajouter("TRN01", rapport.TotalCtrlTrn, rapport.TotalRebutTrn);
+                }
+            }
+
+            return lignes;
+        }
 
         public Task<IReadOnlyList<X3RapportMachine>> GetByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
             => Task.FromResult(Rows(annee, mois));

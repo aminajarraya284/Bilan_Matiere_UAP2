@@ -15,9 +15,12 @@ export type GammeReference = {
   groupePosteCharge: string;
   numeroOperation: string;
   designationOperation: string;
+  unite: string;
   alternative: string;
   dateFinValidite: string;
   source: string;
+  lotImport: string;
+  importeLe: string;
   statut: 'Actif' | 'Brouillon' | 'Importé';
 };
 
@@ -37,6 +40,10 @@ export type NomenclatureReference = {
   pourcentageRebut: string;
   alternative: string;
   source: string;
+  dateFinValidite: string;
+  statutValidite: string;
+  lotImport: string;
+  importeLe: string;
   statut: 'Actif' | 'Brouillon' | 'Importé';
 };
 
@@ -64,8 +71,12 @@ type GammeApiResponse = {
   codePoste: string;
   groupePosteCharge: string | null;
   designationOperation: string | null;
+  uniteOperation: string | null;
   cleMetier: string;
   isActive: boolean;
+  importBatchId: string;
+  sourceSystem: string;
+  importedAt: string;
 };
 
 type NomenclatureApiResponse = {
@@ -84,6 +95,11 @@ type NomenclatureApiResponse = {
   pourcentageRebut: number | null;
   cleMetier: string;
   isActive: boolean;
+  importBatchId: string;
+  sourceSystem: string;
+  importedAt: string;
+  dateFinValidite: string | null;
+  statutValidite: string;
 };
 
 type ImportReferenceApiResponse = { duplicate: boolean; inserted: number; updated: number };
@@ -112,16 +128,31 @@ interface BasePageQuery {
 }
 
 export interface GammePageQuery extends BasePageQuery {
+  recherche?: string;
   codeArticle?: string;
+  designation?: string;
+  valideLe?: string;
+  alternative?: string;
   atelier?: string;
+  poste?: string;
+  groupe?: string;
   numeroOperation?: string;
+  unite?: string;
+  source?: string;
+  lotImport?: string;
   actif?: boolean;
 }
 
 export interface NomenclaturePageQuery extends BasePageQuery {
+  recherche?: string;
   codeArticleParent?: string;
   codeComposant?: string;
+  designation?: string;
+  alternative?: string;
   niveau?: string;
+  unite?: string;
+  source?: string;
+  lotImport?: string;
   actif?: boolean;
 }
 
@@ -142,6 +173,23 @@ const fetchPage = async <T>(
 ): Promise<PagedResponse<T>> => {
   const { data } = await api.get<PagedResponse<T>>(url, { params: cleanParams(params), signal });
   return { items: data.items ?? [], total: data.total ?? 0 };
+};
+
+const downloadCsv = async (
+  url: string,
+  params: Record<string, unknown>,
+  fileName: string
+): Promise<void> => {
+  const { data } = await api.get<Blob>(url, {
+    params: cleanParams(params),
+    responseType: 'blob'
+  });
+  const objectUrl = URL.createObjectURL(data);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(objectUrl);
 };
 
 /**
@@ -171,9 +219,12 @@ const toGammeReferenceFromApi = (gamme: GammeApiResponse, index: number): GammeR
   groupePosteCharge: gamme.groupePosteCharge ?? '',
   numeroOperation: gamme.numeroOperation,
   designationOperation: gamme.designationOperation ?? '',
+  unite: gamme.uniteOperation ?? '',
   alternative: gamme.alternativeGamme ?? '',
   dateFinValidite: gamme.dateFinValidite ?? '',
-  source: 'API',
+  source: gamme.sourceSystem || 'API',
+  lotImport: gamme.importBatchId ?? '',
+  importeLe: gamme.importedAt ?? '',
   statut: gamme.isActive ? 'Actif' : 'Brouillon'
 });
 
@@ -195,7 +246,11 @@ const toNomenclatureReferenceFromApi = (
   typeLien: nomenclature.typeLien ?? '',
   pourcentageRebut: nomenclature.pourcentageRebut?.toString() ?? '',
   alternative: nomenclature.alternativeNomenclature ?? '',
-  source: 'API',
+  source: nomenclature.sourceSystem || 'API',
+  dateFinValidite: nomenclature.dateFinValidite ?? '',
+  statutValidite: nomenclature.statutValidite || 'Règle métier à valider',
+  lotImport: nomenclature.importBatchId ?? '',
+  importeLe: nomenclature.importedAt ?? '',
   statut: nomenclature.isActive ? 'Actif' : 'Brouillon'
 });
 
@@ -357,9 +412,12 @@ const toGammeReference = (gamme: RefGammeFabrication): GammeReference => ({
   groupePosteCharge: gamme.groupePosteCharge,
   numeroOperation: String(gamme.numeroOperation),
   designationOperation: gamme.designationOperation,
+  unite: gamme.uniteOperation,
   alternative: gamme.alternativeGamme,
   dateFinValidite: gamme.dateFinValidite,
   source: gamme.sourceSystem,
+  lotImport: gamme.importBatchId,
+  importeLe: '',
   statut: gamme.isActive ? 'Actif' : 'Brouillon'
 });
 
@@ -379,6 +437,10 @@ const toNomenclatureReference = (nomenclature: RefNomenclature): NomenclatureRef
   pourcentageRebut: `${nomenclature.pourcentageRebut}`,
   alternative: '',
   source: nomenclature.sourceSystem,
+  dateFinValidite: '',
+  statutValidite: 'Règle métier à valider',
+  lotImport: nomenclature.importBatchId,
+  importeLe: '',
   statut: nomenclature.isActive ? 'Actif' : 'Brouillon'
 });
 
@@ -529,6 +591,18 @@ export const parseNomenclatureRows = (
 };
 
 export const referenceService = {
+  async exportGammes(filters: Omit<GammePageQuery, 'page' | 'pageSize' | 'signal'> = {}): Promise<void> {
+    if (!useRealApi()) throw new Error("L'export CSV fiable requiert la source API.");
+    await downloadCsv('/v1/references/gammes/export', filters, 'gammes-fabrication.csv');
+  },
+
+  async exportNomenclatures(
+    filters: Omit<NomenclaturePageQuery, 'page' | 'pageSize' | 'signal'> = {}
+  ): Promise<void> {
+    if (!useRealApi()) throw new Error("L'export CSV fiable requiert la source API.");
+    await downloadCsv('/v1/references/nomenclatures/export', filters, 'nomenclatures.csv');
+  },
+
   /**
    * Une page de gammes. Les filtres sont appliques par le backend
    * (`codeArticle`, `atelier`, `numeroOperation`, `actif`) : aucune ligne hors page

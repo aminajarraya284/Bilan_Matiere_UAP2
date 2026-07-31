@@ -6,6 +6,11 @@ public sealed record SortieMpMaterialLink(string NumeroOF, string CodeArticle, s
 
 public interface ISortieMpMaterialRepository
 {
+    Task<IReadOnlyList<SortieMpMaterialLink>> GetAllByPeriodeAsync(
+        int annee,
+        int mois,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<SortieMpMaterialLink>> GetByPeriodeAsync(
         int annee,
         int mois,

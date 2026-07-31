@@ -173,7 +173,9 @@ public sealed class AlerteNonReceptionServiceTests
 
         Assert.Equal("Plusieurs articles", ligne.CodeArticle);
         Assert.Contains(AnomalieAlerteNonReception.PlusieursArticlesPourOf, ligne.Anomalies);
-        Assert.Equal(StatutAlerteNonReception.AnomalieDonnees, ligne.Statut);
+        // Le statut reste pilote par la QUANTITE non receptionnee (100 - 0 = 100 > 0).
+        // L'ambiguite d'article se lit dans les anomalies, elle n'ecrase pas le statut.
+        Assert.Equal(StatutAlerteNonReception.AVerifier, ligne.Statut);
     }
 
     // Une ligne par OF, meme avec plusieurs lignes YRJMCH et plusieurs receptions.
@@ -216,11 +218,13 @@ public sealed class AlerteNonReceptionServiceTests
     private static AlerteNonReceptionService CreateService(
         IReadOnlyList<(SortieMpMaterialLink Lien, DateOnly Date)> sortiesMp,
         IReadOnlyList<X3RapportMachine> rapports,
-        IReadOnlyList<ReceptionUsinage2> receptions)
+        IReadOnlyList<ReceptionUsinage2> receptions,
+        IReadOnlyList<EntreeOfComposant>? entreesOf = null)
         => new(
             new FakeSortieMp(sortiesMp),
             new FakeRapports(rapports),
-            new FakeReceptions(receptions));
+            new FakeReceptions(receptions),
+            new FakeEntreesOf(entreesOf ?? []));
 
     private static (SortieMpMaterialLink, DateOnly) Lien(string of, string article, string matiere, DateOnly date)
         => (new SortieMpMaterialLink(of, article, matiere), date);
@@ -247,6 +251,10 @@ public sealed class AlerteNonReceptionServiceTests
 
     private sealed class FakeSortieMp(IReadOnlyList<(SortieMpMaterialLink Lien, DateOnly Date)> liens) : ISortieMpMaterialRepository
     {
+        public Task<IReadOnlyList<SortieMpMaterialLink>> GetAllByPeriodeAsync(
+            int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<SortieMpMaterialLink>)[]);
+
         public Task<IReadOnlyList<SortieMpMaterialLink>> GetByPeriodeAsync(
             int annee, int mois, IReadOnlyCollection<SortieMpMaterialKey> cles, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyList<SortieMpMaterialLink>)[]);
@@ -304,6 +312,43 @@ public sealed class AlerteNonReceptionServiceTests
             => Task.FromResult((IReadOnlyList<ReceptionUsinage2>)[]);
         public Task<IReadOnlyList<ReceptionUsinage2>> GetValidesByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyList<ReceptionUsinage2>)[]);
+        public Task<IReadOnlyList<ReceptionUsinage2>> GetToutesValidesByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<ReceptionUsinage2>)[]);
+        public Task<IReadOnlyList<ReceptionUsinage2>> GetConcernedByControlePoidsAsync(
+            string codeArticle, string codeTypeMatiere, string? numeroOF, DateOnly dateControle, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<ReceptionUsinage2>)[]);
         public Task AddAsync(ReceptionUsinage2 reception, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Quatrieme source de l'univers journalier : les mouvements Entree OF du jour.
+    /// Un OF present uniquement ici doit tout de meme produire une ligne d'alerte.
+    /// </summary>
+    private sealed class FakeEntreesOf(IReadOnlyList<EntreeOfComposant> entrees) : IEntreeOfRepository
+    {
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByDateAsync(DateOnly date, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)entrees
+                .Where(entree => entree.DateImputation == date)
+                .ToArray());
+
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByPeriodeAsync(int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)entrees
+                .Where(entree => entree.DateImputation.Year == annee && entree.DateImputation.Month == mois)
+                .ToArray());
+
+        public Task<IReadOnlyList<EntreeOfComposant>> GetByOfAndPeriodeAsync(string numeroOF, int annee, int mois, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<EntreeOfComposant>)[]);
+        public Task<ImportBatch?> GetCompletedBatchByHashAsync(string hashSha256, CancellationToken cancellationToken = default)
+            => Task.FromResult<ImportBatch?>(null);
+        public Task AddBatchAsync(ImportBatch batch, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpdateBatchAsync(ImportBatch batch, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task MarkBatchAsEchecAsync(Guid batchId, DateTime dateFinUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyDictionary<string, EntreeOfComposant>> GetByCleMetiersAsync(IReadOnlyCollection<string> cleMetiers, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyDictionary<string, EntreeOfComposant>)new Dictionary<string, EntreeOfComposant>());
+        public Task AddRangeAsync(IEnumerable<EntreeOfComposant> items, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IDisposable> BeginTransactionAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task CommitTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RollbackTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

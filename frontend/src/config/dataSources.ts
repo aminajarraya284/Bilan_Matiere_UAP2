@@ -72,7 +72,7 @@ const DEFAULTS: Readonly<Record<DataVertical, DataSourceMode>> = {
   dashboard: 'mock',
   bilanFonderie: 'mock',
   bilanUap2: 'mock',
-  inventaire: 'mock',
+  inventaire: 'api',
   rapports: 'mock',
   alertes: 'mock',
   audit: 'mock',

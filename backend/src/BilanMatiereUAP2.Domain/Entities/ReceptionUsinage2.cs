@@ -69,6 +69,8 @@ public sealed class ReceptionUsinage2
     public string StatutNomenclature { get; private set; } = string.Empty;
     public string StatutPoidsPhysique { get; private set; } = string.Empty;
     public string StatutRapportMachine { get; private set; } = string.Empty;
+    public string SourceTypeMatiere { get; private set; } = "NonResolue";
+    public bool EligibleAtelier16 { get; private set; }
     public string? AvertissementsJson { get; private set; }
 
     public StatutReceptionUsinage2 StatutReception { get; private set; }
@@ -103,7 +105,9 @@ public sealed class ReceptionUsinage2
         string StatutNomenclature,
         string StatutPoidsPhysique,
         string StatutRapportMachine,
-        IReadOnlyList<string> Avertissements);
+        IReadOnlyList<string> Avertissements,
+        string SourceTypeMatiere = "NonResolue",
+        bool EligibleAtelier16 = false);
 
     public static ReceptionUsinage2 Creer(
         string numeroOF,
@@ -118,21 +122,6 @@ public sealed class ReceptionUsinage2
         DateTime dateCreationUtc,
         Guid? id = null)
     {
-        if (snapshot.StatutArticle != "Trouve")
-        {
-            throw new DomainValidationException("L'article doit être résolu (Trouve) pour créer une réception U2.");
-        }
-
-        if (snapshot.StatutTypeMatiere != "Trouve")
-        {
-            throw new DomainValidationException("Le type matière doit être résolu (Trouve) pour créer une réception U2.");
-        }
-
-        if (snapshot.StatutNomenclature != "Trouve")
-        {
-            throw new DomainValidationException("La nomenclature doit être résolue (Trouve) pour créer une réception U2.");
-        }
-
         return new ReceptionUsinage2(
             id ?? Guid.NewGuid(),
             numeroOF,
@@ -178,20 +167,28 @@ public sealed class ReceptionUsinage2
         DateModificationUtc = dateModificationUtc;
     }
 
+    // Rafraichissement automatique declenche par une nouvelle reference validee.
+    // Seul le snapshot calcule est remplace : les champs saisis restent inchanges.
+    public void RafraichirContexteAutomatique(
+        ContexteSnapshot snapshot,
+        Guid? modifieParUtilisateurId,
+        string? modifieParNom,
+        DateTime dateModificationUtc)
+    {
+        if (StatutReception == StatutReceptionUsinage2.Annule)
+        {
+            return;
+        }
+
+        AppliquerSnapshot(snapshot);
+        ModifieParUtilisateurId = modifieParUtilisateurId;
+        ModifieParNom = NormaliserTexte(modifieParNom, 150);
+        DateModificationUtc = dateModificationUtc;
+    }
+
     public void Valider(bool derogationAdmin, string? derogationJustification, Guid? modifieParUtilisateurId, string? modifieParNom, DateTime dateModificationUtc)
     {
         GarantirBrouillon("validée");
-
-        if (StatutPoidsPhysique != "Trouve" && !derogationAdmin)
-        {
-            throw new DomainValidationException(
-                "Le poids physique doit être disponible pour valider la réception, sauf dérogation Admin justifiée.");
-        }
-
-        if (StatutPoidsPhysique != "Trouve" && derogationAdmin && string.IsNullOrWhiteSpace(derogationJustification))
-        {
-            throw new DomainValidationException("Une justification est obligatoire pour valider une réception sans poids physique.");
-        }
 
         StatutReception = StatutReceptionUsinage2.Valide;
         DerogationJustification = derogationAdmin ? NormaliserTexte(derogationJustification, 500) : null;
@@ -245,6 +242,8 @@ public sealed class ReceptionUsinage2
         StatutNomenclature = snapshot.StatutNomenclature;
         StatutPoidsPhysique = snapshot.StatutPoidsPhysique;
         StatutRapportMachine = snapshot.StatutRapportMachine;
+        SourceTypeMatiere = snapshot.SourceTypeMatiere;
+        EligibleAtelier16 = snapshot.EligibleAtelier16;
         AvertissementsJson = System.Text.Json.JsonSerializer.Serialize(snapshot.Avertissements);
     }
 
@@ -255,9 +254,9 @@ public sealed class ReceptionUsinage2
             throw new DomainValidationException("Le nombre de pièces réceptionnées doit être strictement positif.");
         }
 
-        if (poidsTotalReceptionneKg is < 0)
+        if (poidsTotalReceptionneKg is null or <= 0)
         {
-            throw new DomainValidationException("Le poids total réceptionné ne peut pas être négatif.");
+            throw new DomainValidationException("Le poids total réceptionné doit être strictement positif.");
         }
 
         if (observation?.Trim().Length > 500)

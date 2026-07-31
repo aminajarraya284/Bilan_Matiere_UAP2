@@ -1,13 +1,9 @@
 ﻿import { SortieX3Mouvement } from '@/features/sorties-x3/sortiesX3.types';
-import { DechetMouvement, DechetType } from '@/features/dechets-fonderie/dechets.types';
 import { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
-import { InventaireConteneur, InventaireCategorie, InventaireFour } from '@/features/inventaire/inventaire.types';
 import { BilanMatiereReport, BilanUsinage2ParPiece, BilanUap2ParOF } from '@/features/bilan-matiere/bilan.types';
 import { AuditLogEntry } from '@/features/audit/audit.types';
 import {
   testBilans,
-  testDechetsFonderie,
-  testInventaire,
   testReceptionsUsinage2,
   testSortiesMagasin
 } from '@/data/testData';
@@ -30,20 +26,6 @@ const ALLOWED_TYPE_MATIERES = new Set(['M3010L0', 'M3000L0', 'M3060L0']);
 const hasAllowedMatiere = (value?: string): boolean => Boolean(value && ALLOWED_TYPE_MATIERES.has(value));
 
 // --- NORMALIZATION HELPERS ---
-
-const normalizeDechetType = (value?: string): DechetType => {
-  const normalized = (value || '').trim().toLowerCase();
-  if (
-    normalized === 'poudre' ||
-    normalized.includes('poudre') ||
-    normalized.includes('scorie') ||
-    normalized.includes('limaille') ||
-    normalized.includes('copeaux')
-  ) {
-    return 'Poudre';
-  }
-  return 'Bavure';
-};
 
 // --- STORAGE MANAGER ---
 
@@ -79,24 +61,6 @@ export const setStorageItem = <T>(key: string, value: T): void => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
-const FOUR_STORAGE_NAMES = ['Four CBP 01', 'Four CBP 02', 'Four CDQ', 'Autre'];
-
-const normalizeInventaireCategorie = (item: InventaireCategorie): InventaireCategorie => {
-  const isFour = FOUR_STORAGE_NAMES.includes(item.categorie);
-  return {
-    ...item,
-    categorieInventaire: isFour ? 'FourHorsBilan' : (item.categorieInventaire ?? 'CategorieBilan'),
-    inclusDansBilanFonderie: isFour ? false : (item.inclusDansBilanFonderie ?? true),
-    visibleDansRapportInventaire: item.visibleDansRapportInventaire ?? true
-  };
-};
-
-const normalizeInventaireFour = (item: InventaireFour): InventaireFour => ({
-  ...item,
-  inclusDansBilanFonderie: false,
-  visibleDansRapportInventaire: true
-});
-
 export const storage = {
   // Sorties X3
   getSortiesX3(): SortieX3Mouvement[] {
@@ -104,34 +68,6 @@ export const storage = {
   },
   saveSortiesX3(data: SortieX3Mouvement[]): void {
     setStorageItem(KEYS.SORTIES_X3, data);
-  },
-
-  // Déchets
-  getDechets(): DechetMouvement[] {
-    const dechets = getStorageItem(KEYS.DECHETS, testDechetsFonderie).filter((item) =>
-      hasAllowedMatiere(item.codeTypeMatiere)
-    );
-    const normalized = dechets.map((dechet) => ({
-      ...dechet,
-      typeDechet: normalizeDechetType(dechet.typeDechet)
-    }));
-
-    if (normalized.some((dechet, index) => dechet.typeDechet !== dechets[index].typeDechet)) {
-      setStorageItem(KEYS.DECHETS, normalized);
-    }
-
-    return normalized;
-  },
-  saveDechets(data: DechetMouvement[]): void {
-    setStorageItem(
-      KEYS.DECHETS,
-      data
-        .map((dechet) => ({
-          ...dechet,
-          typeDechet: normalizeDechetType(dechet.typeDechet)
-        }))
-        .filter((item) => hasAllowedMatiere(item.codeTypeMatiere))
-    );
   },
 
   // Réceptions
@@ -143,71 +79,6 @@ export const storage = {
   saveReceptions(data: ReceptionUsinage2Mouvement[]): void {
     setStorageItem(
       KEYS.RECEPTIONS,
-      data.filter((item) => hasAllowedMatiere(item.codeTypeMatiere))
-    );
-  },
-
-  // Inventaires
-  getConteneurs(): InventaireConteneur[] {
-    return getStorageItem(KEYS.INVENTAIRE_CONTENEURS, testInventaire.conteneurs).filter((item) =>
-      hasAllowedMatiere(item.codeTypeMatiere)
-    );
-  },
-  saveConteneurs(data: InventaireConteneur[]): void {
-    setStorageItem(
-      KEYS.INVENTAIRE_CONTENEURS,
-      data.filter((item) => hasAllowedMatiere(item.codeTypeMatiere))
-    );
-  },
-  getCategories(): InventaireCategorie[] {
-    const categories = getStorageItem(KEYS.INVENTAIRE_CATEGORIES, testInventaire.categories);
-    const normalized = categories.map(normalizeInventaireCategorie);
-    if (JSON.stringify(normalized) !== JSON.stringify(categories)) {
-      setStorageItem(KEYS.INVENTAIRE_CATEGORIES, normalized);
-    }
-    return normalized.filter(
-      (item) => item.categorieInventaire !== 'FourHorsBilan' && hasAllowedMatiere(item.codeTypeMatiere)
-    );
-  },
-  saveCategories(data: InventaireCategorie[]): void {
-    setStorageItem(
-      KEYS.INVENTAIRE_CATEGORIES,
-      data.filter((item) => hasAllowedMatiere(item.codeTypeMatiere))
-    );
-  },
-  getFours(): InventaireFour[] {
-    const current = getStorageItem(KEYS.INVENTAIRE_FOURS, testInventaire.fours).map(normalizeInventaireFour);
-    const legacy = getStorageItem(KEYS.INVENTAIRE_CATEGORIES, testInventaire.categories)
-      .map(normalizeInventaireCategorie)
-      .filter((item) => item.categorieInventaire === 'FourHorsBilan')
-      .map((item) =>
-        normalizeInventaireFour({
-          id: item.id,
-          dateInventaire: `${item.annee}-${String(item.mois).padStart(2, '0')}-01`,
-          mois: item.mois,
-          annee: item.annee,
-          four: (FOUR_STORAGE_NAMES.includes(item.categorie) ? item.categorie : 'Autre') as InventaireFour['four'],
-          codeTypeMatiere: item.codeTypeMatiere,
-          quantite: item.quantiteReelle,
-          unite: item.unite,
-          observation: item.commentaire,
-          statut:
-            item.statut === 'Cloture'
-              ? 'Valide'
-              : item.statut === 'AValider'
-                ? 'Brouillon'
-                : (item.statut as InventaireFour['statut']),
-          inclusDansBilanFonderie: false,
-          visibleDansRapportInventaire: true
-        })
-      );
-    return [...legacy, ...current.filter((item) => !legacy.some((legacyItem) => legacyItem.id === item.id))].filter(
-      (item) => hasAllowedMatiere(item.codeTypeMatiere)
-    );
-  },
-  saveFours(data: InventaireFour[]): void {
-    setStorageItem(
-      KEYS.INVENTAIRE_FOURS,
       data.filter((item) => hasAllowedMatiere(item.codeTypeMatiere))
     );
   },

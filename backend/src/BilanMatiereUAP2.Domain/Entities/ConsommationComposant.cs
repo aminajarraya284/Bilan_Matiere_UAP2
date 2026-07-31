@@ -1,5 +1,6 @@
 using BilanMatiereUAP2.Domain.Common;
 using BilanMatiereUAP2.Domain.Enums;
+using BilanMatiereUAP2.Domain.Services;
 
 namespace BilanMatiereUAP2.Domain.Entities;
 
@@ -40,7 +41,7 @@ public sealed class ConsommationComposant
             ?? throw new DomainValidationException("L'unite du mouvement est obligatoire.");
         CleMetier = GenererCleMetier(NumeroOF, CodeTypeMatiere, Unite, DateImputation);
         SommeQuantiteX3Signee = sommeQuantiteX3Signee;
-        Consommation = -sommeQuantiteX3Signee;
+        Consommation = BilanMetierRules.ToQuantiteMetier(sommeQuantiteX3Signee);
         Statut = StatutRapprochementX3.Rapproche;
         DateCreationUtc = dateCreationUtc;
     }
@@ -88,7 +89,7 @@ public sealed class ConsommationComposant
         DesignationPrincipale = ordre.DesignationPrincipale;
         DesignationComposant = ImportX3Batch.NormaliserTexte(designationComposant, 250);
         SommeQuantiteX3Signee = sommeQuantiteX3Signee;
-        Consommation = -sommeQuantiteX3Signee;
+        Consommation = BilanMetierRules.ToQuantiteMetier(sommeQuantiteX3Signee);
         ImportBatchId = importBatchId;
         DateMiseAJourUtc = dateMiseAJourUtc;
     }

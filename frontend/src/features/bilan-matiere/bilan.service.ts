@@ -118,7 +118,19 @@ export const bilanService = {
         nombreLignes: lignes.length,
         nombreLignesDonneesManquantes: lignes.filter(
           (ligne) => ligne.statutReception === 'DonneesManquantes' || ligne.statutPoids === 'DonneesManquantes'
-        ).length
+        ).length,
+        // En mode mock, `lignes` contient toute la periode : les agregats se calculent ici,
+        // la ou l'API reelle les fournit deja calcules sur l'ensemble des lignes.
+        totalRebutUsinage2Pieces: lignes.reduce((total, ligne) => total + ligne.rebutUsinage2Pieces, 0),
+        totalEntreeOfPieces: lignes.reduce((total, ligne) => total + (ligne.entreeOfPieces ?? 0), 0),
+        // Une seule ligne non calculable rend le total indisponible : jamais un faux zero.
+        totalBilanUsinage2Pieces: lignes.some((ligne) => ligne.bilanUsinage2Pieces === null)
+          ? null
+          : lignes.reduce((total, ligne) => total + (ligne.bilanUsinage2Pieces ?? 0), 0),
+        nombreAnomalies: lignes.reduce((total, ligne) => total + ligne.anomalies.length, 0),
+        total: lignes.length,
+        page: 1,
+        pageSize: lignes.length
       };
     }
     const response = await api.get<BilanUsinage2Api>(`/v1/bilans/usinage2/${encodeURIComponent(periode)}`);

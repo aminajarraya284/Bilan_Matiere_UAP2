@@ -24,18 +24,40 @@ public sealed class RapportsMachineController(IReportMachineService service) : C
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ReadReceptionsUsinage2)]
     public async Task<IActionResult> Get(
+        [FromQuery] DateOnly? dateDebut,
+        [FromQuery] DateOnly? dateFin,
         [FromQuery] string? numeroOF,
         [FromQuery] string? codeArticle,
         [FromQuery] string? codePoste,
+        [FromQuery] string? processus,
+        [FromQuery] Guid? lotImport,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         CancellationToken cancellationToken = default)
     {
-        if (page < 1) page = 1;
-        if (pageSize is < 1 or > 100) pageSize = 50;
-        var result = await service.QueryAsync(numeroOF, codeArticle, codePoste, page, pageSize, cancellationToken);
-        return Ok(new PagedResponse<RapportMachineResponse>(result.Items, result.Total));
+        var result = await service.QueryConsultationAsync(
+            new RapportMachineConsultationQuery(
+                dateDebut,
+                dateFin,
+                numeroOF,
+                codeArticle,
+                codePoste,
+                processus,
+                lotImport,
+                page,
+                pageSize,
+                sortBy,
+                sortDirection),
+            cancellationToken);
+        return Ok(result);
     }
+
+    [HttpGet("imports/statut")]
+    [Authorize(Policy = AuthorizationPolicies.ReadReceptionsUsinage2)]
+    public async Task<IActionResult> GetImportTracking(CancellationToken cancellationToken)
+        => Ok(await service.GetImportTrackingAsync(cancellationToken));
 
     [HttpGet("agregat")]
     [Authorize(Policy = AuthorizationPolicies.ReadReceptionsUsinage2)]

@@ -38,6 +38,7 @@ public sealed class ReceptionUsinage2Configuration : IEntityTypeConfiguration<Re
         builder.Property(entity => entity.StatutNomenclature).HasMaxLength(50);
         builder.Property(entity => entity.StatutPoidsPhysique).HasMaxLength(50);
         builder.Property(entity => entity.StatutRapportMachine).HasMaxLength(50);
+        builder.Property(entity => entity.SourceTypeMatiere).HasMaxLength(30).IsRequired();
         // Pas de HasColumnType("nvarchar(max)") : specifique SQL Server, casse la traduction Sqlite
         // utilisee par les tests d'integration. EF Core mappe par defaut vers un texte non borne.
         builder.Property(entity => entity.AvertissementsJson);

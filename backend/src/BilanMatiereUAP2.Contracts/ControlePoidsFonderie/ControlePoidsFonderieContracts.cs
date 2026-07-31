@@ -42,3 +42,20 @@ public sealed record PagedControlesPoidsFonderieResponse(
     int Total,
     int Page,
     int PageSize);
+
+public sealed record ControlePoidsFonderieCandidateResponse(
+    Guid Id,
+    DateOnly DateControle,
+    string? NumeroOF,
+    string CodeArticle,
+    string CodeTypeMatiere,
+    decimal PoidsPhysiqueUnitaireKg,
+    string Statut);
+
+public sealed record ControlePoidsFonderieResolutionResponse(
+    string Statut,
+    decimal? PoidsPhysiqueUnitaireKg,
+    Guid? ControlePoidsFonderieId,
+    string? Source,
+    IReadOnlyList<ControlePoidsFonderieCandidateResponse> Candidats,
+    string? Message);

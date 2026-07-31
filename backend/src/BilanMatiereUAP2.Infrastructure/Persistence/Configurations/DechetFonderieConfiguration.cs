@@ -18,6 +18,11 @@ public sealed class DechetFonderieConfiguration : IEntityTypeConfiguration<Deche
             .HasConversion<string>()
             .HasMaxLength(20)
             .IsRequired();
+        builder.Property(entity => entity.Origine)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(BilanMatiereUAP2.Domain.Enums.OrigineDechet.Fonderie)
+            .IsRequired();
         builder.Property(entity => entity.PoidsKg)
             .HasPrecision(18, 3)
             .IsRequired();
@@ -34,6 +39,14 @@ public sealed class DechetFonderieConfiguration : IEntityTypeConfiguration<Deche
             .IsRequired();
         builder.Property(entity => entity.DateModificationUtc)
             .HasColumnType("datetime2");
+        builder.Property(entity => entity.ValideParNom)
+            .HasMaxLength(150);
+        builder.Property(entity => entity.ValideLeUtc)
+            .HasColumnType("datetime2");
+        builder.Property(entity => entity.AnnuleParNom)
+            .HasMaxLength(150);
+        builder.Property(entity => entity.AnnuleLeUtc)
+            .HasColumnType("datetime2");
         builder.Property(entity => entity.EstSupprime)
             .IsRequired();
         builder.Property(entity => entity.DateSuppressionUtc)
@@ -47,6 +60,8 @@ public sealed class DechetFonderieConfiguration : IEntityTypeConfiguration<Deche
         builder.HasIndex(entity => entity.DateDeclaration);
         builder.HasIndex(entity => entity.TypeMatiereId);
         builder.HasIndex(entity => entity.TypeDechet);
+        builder.HasIndex(entity => entity.Origine);
+        builder.HasIndex(entity => entity.Statut);
         builder.HasIndex(entity => entity.EstSupprime);
 
         builder.HasQueryFilter(entity => !entity.EstSupprime);

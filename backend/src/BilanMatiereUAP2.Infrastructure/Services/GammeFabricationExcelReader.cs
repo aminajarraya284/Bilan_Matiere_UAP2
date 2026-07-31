@@ -5,6 +5,44 @@ using BilanMatiereUAP2.Domain.Entities;
 
 namespace BilanMatiereUAP2.Infrastructure.Services;
 
+/// <summary>
+/// Signatures d'en-tete relevees sur les fichiers X3 REELS presents dans les archives
+/// d'import. Elles ne sont pas devinees : chaque libelle ci-dessous a ete observe.
+///
+/// GAMMEFAB « GAMMEFAB (34) (1).xls » : 22 colonnes, en-tete en ligne 1.
+/// MVTSTOTRSVCR « MVTSTOTRSVCR (9).xls » : 28 colonnes, en-tete en ligne 10,
+/// precedee d'un bloc de titre et de criteres de selection.
+/// </summary>
+internal static class GammeFabricationSignature
+{
+    /// <summary>Libelles normalises attendus dans l'en-tete d'un export GAMMEFAB.</summary>
+    public static readonly string[] Attendus =
+    [
+        "article", "designation", "datfval", "etpsuivi", "nooper", "nbpostes",
+        "uniteop", "atelier", "postetrv", "grppc", "designationoper"
+    ];
+
+    /// <summary>
+    /// Nombre minimal de libelles GAMMEFAB devant etre reconnus. Volontairement
+    /// inferieur au total pour tolerer une variante d'export, mais suffisamment eleve
+    /// pour qu'aucun autre etat X3 ne puisse l'atteindre par hasard.
+    /// </summary>
+    public const int MinCorrespondances = 6;
+
+    /// <summary>
+    /// Libelles caracteristiques de MVTSTOTRSVCR. Aucun d'eux n'existe dans GAMMEFAB :
+    /// leur presence signe un etat « mouvements de stock ».
+    /// </summary>
+    public static readonly string[] Mvt =
+    [
+        "dateimput", "datecrea", "heurecrea", "utilisateur",
+        "transaction", "typepce", "pieceorigine"
+    ];
+
+    /// <summary>Seuil de detection MVT : trois libelles concordants suffisent.</summary>
+    public const int MinMvt = 3;
+}
+
 public sealed class GammeFabricationExcelReader : IGammeFabricationReader
 {
     public Task<IEnumerable<RefGammeFabrication>> ReadAsync(
@@ -15,21 +53,54 @@ public sealed class GammeFabricationExcelReader : IGammeFabricationReader
     {
         var content = ReadAllBytes(excelStream);
         var file = new X3ImportFileContent("GAMMEFAB.xls", content.Length, content);
+        // Un classeur illisible remonte son erreur : renvoyer une liste vide marquerait
+        // l'import « termine avec 0 ligne », ce qui masquerait le probleme.
+        var sheets = ExcelWorkbook.Read(file, cancellationToken);
+        return Task.FromResult<IEnumerable<RefGammeFabrication>>(
+            LireFeuilles(sheets, sourceSystem, importBatchId, cancellationToken));
+    }
+
+    /// <summary>
+    /// Coeur de lecture, isole du format de fichier pour etre directement testable
+    /// sur des feuilles construites en memoire.
+    /// </summary>
+    internal static IReadOnlyList<RefGammeFabrication> LireFeuilles(
+        IReadOnlyList<ExcelWorkbook.Sheet> sheets,
+        string sourceSystem,
+        Guid importBatchId,
+        CancellationToken cancellationToken = default)
+    {
         var result = new List<RefGammeFabrication>();
-        IReadOnlyList<ExcelWorkbook.Sheet> sheets;
-        try
+
+        // Aucune ligne n'est lue tant que la structure du classeur n'est pas reconnue :
+        // un etat X3 different (MVTSTOTRSVCR notamment) doit etre REJETE, jamais
+        // interprete positionnellement comme une gamme.
+        var feuilleRetenue = -1;
+        var ligneEntete = -1;
+        for (var index = 0; index < sheets.Count; index++)
         {
-            sheets = ExcelWorkbook.Read(file, cancellationToken);
-        }
-        catch (ImportFileException)
-        {
-            return Task.FromResult<IEnumerable<RefGammeFabrication>>(result);
+            var candidate = ExcelWorkbook.DetecterLigneEntete(
+                sheets[index].Rows,
+                GammeFabricationSignature.Attendus,
+                GammeFabricationSignature.MinCorrespondances);
+            if (candidate >= 0)
+            {
+                feuilleRetenue = index;
+                ligneEntete = candidate;
+                break;
+            }
         }
 
-        foreach (var sheet in sheets)
+        if (feuilleRetenue < 0)
         {
-            foreach (var row in sheet.Rows)
+            throw new ImportFileException(ConstruireErreurStructure(sheets));
+        }
+
+        var feuille = sheets[feuilleRetenue];
+        for (var numeroLigne = ligneEntete + 1; numeroLigne < feuille.Rows.Count; numeroLigne++)
+        {
             {
+                var row = feuille.Rows[numeroLigne];
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!ExcelWorkbook.HasData(row)) continue;
 
@@ -37,11 +108,17 @@ public sealed class GammeFabricationExcelReader : IGammeFabricationReader
                 var numeroOperationRaw = ExcelWorkbook.Text(GetAt(row, 4));
                 var numeroOperation = NormalizeText(numeroOperationRaw);
 
-                // Les en-têtes GAMMEFAB sont des libellés multi-lignes qui ne correspondent pas
-                // systematiquement au contenu reel (cf. spec) : on ne peut donc pas filtrer les
-                // titres/en-tetes par comparaison de texte. Le NumeroOperation (colonne E) est en
-                // revanche toujours numerique sur une vraie ligne metier ; on l'utilise comme
-                // discriminant fiable, en plus du filtre "ligne vide" deja applique par HasData.
+                // MAPPING POSITIONNEL ASSUME ET VERIFIE.
+                // Dans l'export GAMMEFAB reel, l'ordre des LIBELLES d'en-tete differe de
+                // l'ordre des DONNEES : l'en-tete commence par « ETP Suivi, No Opér, Nb
+                // Postes... » alors que les donnees commencent par « Article, Désignation,
+                // DatFVal... ». Resoudre les colonnes par leur nom decalerait donc toutes
+                // les valeurs. Les index ci-dessous ont ete releves sur le fichier reel ;
+                // c'est la SIGNATURE d'en-tete, verifiee plus haut, qui garantit qu'on ne
+                // les applique jamais a un autre etat X3.
+                // [À ARBITRER] Un export GAMMEFAB dont les colonnes seraient reordonnees
+                // ne serait pas detecte : il faudrait pour cela une correspondance
+                // nom -> position fournie par X3, qui n'est pas disponible a ce jour.
                 if (string.IsNullOrWhiteSpace(codeArticle) ||
                     string.IsNullOrWhiteSpace(numeroOperation) ||
                     !X3ImportParsing.TryParseDecimal(numeroOperationRaw, out _))
@@ -99,7 +176,29 @@ public sealed class GammeFabricationExcelReader : IGammeFabricationReader
             }
         }
 
-        return Task.FromResult<IEnumerable<RefGammeFabrication>>(result);
+        return result;
+    }
+
+    /// <summary>
+    /// Erreur metier structuree : feuille inspectee, ligne d'en-tete, colonnes trouvees,
+    /// colonnes attendues absentes, et signature MVTSTOTRSVCR detectee ou non.
+    /// </summary>
+    private static string ConstruireErreurStructure(IReadOnlyList<ExcelWorkbook.Sheet> sheets)
+    {
+        var premiere = sheets.Count > 0 ? sheets[0] : new ExcelWorkbook.Sheet("(aucune)", []);
+        var ligneMvt = ExcelWorkbook.DetecterLigneEntete(
+            premiere.Rows,
+            GammeFabricationSignature.Mvt,
+            GammeFabricationSignature.MinMvt);
+        var signatureMvt = ligneMvt >= 0;
+
+        var detail = ExcelWorkbook.DiagnosticEntete(premiere.Rows, GammeFabricationSignature.Attendus);
+        var origine = signatureMvt
+            ? $"Signature MVTSTOTRSVCR détectée en ligne {ligneMvt + 1} : ce fichier est un état de " +
+              "mouvements de stock, il doit être importé via MVTSTOTRSVCR et non via GAMMEFAB."
+            : "Aucune signature MVTSTOTRSVCR détectée : structure de fichier inconnue.";
+
+        return $"FICHIER_GAMMEFAB_STRUCTURE_INVALIDE. Feuille: {premiere.Name}. {detail} {origine}";
     }
 
     private static object? GetAt(object?[] row, int index) => index < row.Length ? row[index] : null;

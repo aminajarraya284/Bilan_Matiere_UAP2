@@ -1,4 +1,5 @@
 using BilanMatiereUAP2.Domain.Entities;
+using BilanMatiereUAP2.Domain.Enums;
 
 namespace BilanMatiereUAP2.Application.Abstractions;
 
@@ -11,7 +12,7 @@ public sealed record RapportMachineRow(
     string? DesignationArticle,
     string NumeroOF,
     string? Equipe,
-    decimal QuantiteCTRL,
+    decimal QuantiteTotale,
     decimal QuantiteRebut,
     string? AlternativeGamme,
     string NomFeuilleSource);
@@ -26,7 +27,7 @@ public interface IReportMachineReader
 public sealed record PosteNonMappeSummary(
     string CodePoste,
     int NombreLignes,
-    decimal QuantiteCtrlTotale,
+    decimal QuantiteTotale,
     decimal QuantiteRebutTotale,
     DateOnly PremiereDate,
     DateOnly DerniereDate,
@@ -55,6 +56,14 @@ public interface IReportMachineRepository
     /// <summary>Lignes de rapport machine d'une date precise (alerte journaliere de non-reception).</summary>
     Task<IReadOnlyList<X3RapportMachine>> GetByDateAsync(DateOnly date, CancellationToken cancellationToken = default);
     Task<PagedResult<X3RapportMachine>> QueryAsync(string? numeroOF = null, string? codeArticle = null, string? codePoste = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
+    Task<RapportMachineConsultationResult> QueryConsultationAsync(
+        RapportMachineConsultationFilter filter,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+    Task<ImportTrackingSnapshot> GetImportTrackingAsync(
+        TypeImport typeImport,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<IDisposable> BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task CommitTransactionAsync(IDisposable transaction, CancellationToken cancellationToken = default);

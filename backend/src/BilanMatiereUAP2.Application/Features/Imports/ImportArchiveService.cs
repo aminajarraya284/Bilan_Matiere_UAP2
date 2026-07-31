@@ -29,7 +29,8 @@ public sealed class ImportArchiveService(
     IImportSourceFileRepository repository,
     IImportFileStorage storage,
     IUnitOfWork unitOfWork,
-    IDateTimeProvider dateTimeProvider) : IImportArchiveService
+    IDateTimeProvider dateTimeProvider,
+    IImportHashCalculator hashCalculator) : IImportArchiveService
 {
     private static readonly IReadOnlyDictionary<string, string> MimeTypesByExtension = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -50,7 +51,7 @@ public sealed class ImportArchiveService(
         var now = dateTimeProvider.UtcNow;
         var fileId = Guid.NewGuid();
         var extension = Path.GetExtension(nomFichierOriginal);
-        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));
+        var hash = hashCalculator.CalculateSha256(content);
         var cheminStockage = await storage.SaveAsync(importBatchId, fileId, nomFichierOriginal, content, now, cancellationToken);
 
         var entity = ImportSourceFile.Creer(

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { Trash2, Plus, CheckCircle2, ArrowLeftRight, AlertCircle } from 'lucide-vue-next';
 import { receptionsService } from './receptions.service';
 import { bilanUsinage2Service } from './bilanUsinage2.service';
 import type { ReceptionUsinage2Mouvement } from './receptions.types';
 import type { BilanUsinage2 } from './bilanUsinage2.types';
+import { alerteNonReceptionService } from './alerteNonReception.service';
+import type { AlerteNonReception, StatutAlerteNonReception } from './alerteNonReception.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
@@ -278,9 +280,82 @@ const handleAnnuler = async (row: ReceptionUsinage2Mouvement) => {
   }
 };
 
+// ===== ALERTE DES PIECES NON RECEPTIONNEES =====
+// Alerte JOURNALIERE, une ligne par numero d'OF, entierement calculee par le backend.
+// Univers du jour : YRJMCH EMR, Receptions U2, Entrees OF et Sorties MP.
+// Une donnee absente reste `null` et s'affiche « — » : jamais un zero fabrique.
+const alerteDate = ref(new Date().toISOString().slice(0, 10));
+// La page est suivie a part : reprendre celle de la reponse precedente afficherait un
+// tableau vide des que la nouvelle date compte moins de pages.
+const ALERTE_PAGE_SIZE = 20;
+const alertePage = ref(1);
+const alerte = ref<AlerteNonReception | null>(null);
+const alerteLoading = ref(false);
+const alerteError = ref('');
+const alerteIndisponible = ref(false);
+
+const formatAlerte = (valeur: number | null): string =>
+  valeur === null || valeur === undefined ? '—' : formatNumber(valeur, 0);
+
+const alertePages = computed(() =>
+  Math.max(1, Math.ceil((alerte.value?.total ?? 0) / ALERTE_PAGE_SIZE))
+);
+
+const libelleStatutAlerte = (statut: StatutAlerteNonReception): string =>
+  ({
+    OK: 'OK',
+    AVerifier: 'À vérifier',
+    SurReception: 'Sur-réception',
+    DonneeManquante: 'Donnée manquante'
+  })[statut];
+
+const classeStatutAlerte = (statut: StatutAlerteNonReception): string =>
+  ({
+    OK: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+    AVerifier: 'bg-amber-50 border-amber-100 text-amber-700',
+    SurReception: 'bg-rose-50 border-rose-100 text-rose-700',
+    DonneeManquante: 'bg-slate-50 border-slate-200 text-slate-600'
+  })[statut];
+
+const loadAlerte = async () => {
+  if (!isAdmin.value) return;
+  if (!alerteNonReceptionService.isAvailable()) {
+    alerteIndisponible.value = true;
+    return;
+  }
+  alerteLoading.value = true;
+  alerteError.value = '';
+  try {
+    alerte.value = await alerteNonReceptionService.getParDate(
+      alerteDate.value,
+      alertePage.value,
+      ALERTE_PAGE_SIZE
+    );
+  } catch (err) {
+    // Une erreur API reste visible : aucun repli sur des donnees locales.
+    alerte.value = null;
+    alerteError.value =
+      err instanceof Error ? err.message : "L'alerte des pièces non réceptionnées n'a pas pu être chargée.";
+  } finally {
+    alerteLoading.value = false;
+  }
+};
+
+const allerPageAlerte = (page: number) => {
+  alertePage.value = Math.min(Math.max(1, page), alertePages.value);
+  loadAlerte();
+};
+
+// Changer la date DOIT relancer l'alerte, sinon le filtre principal reste inerte.
+watch(alerteDate, () => {
+  alertePage.value = 1;
+  loadAlerte();
+});
+
 onMounted(() => {
   loadReceptions();
   loadBilanUsinage2();
+  loadAlerte();
 });
 </script>
 
@@ -311,6 +386,143 @@ onMounted(() => {
       <p class="font-bold">
         Bilan matière : seules les lignes <strong>Origine = FONDERIE</strong> sont prises en compte.
       </p>
+    </div>
+
+    <!-- Admin-only : Alerte JOURNALIERE des pieces non receptionnees -->
+    <div v-if="isAdmin" class="bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-4">
+      <div class="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
+        <div>
+          <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            <AlertCircle class="w-4 h-4 text-blue-900" />
+            Alerte des pièces non réceptionnées
+          </h3>
+          <p class="mt-1 text-[11px] font-semibold text-slate-500">
+            Univers journalier : YRJMCH EMR, Réceptions U2, Entrées OF et Sorties MP.
+            Net EMR - Réception U2, sans valeur absolue.
+          </p>
+        </div>
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-500">
+          Date
+          <input
+            v-model="alerteDate"
+            type="date"
+            class="ml-2 rounded-lg border border-slate-300 p-2 text-xs font-bold"
+          />
+        </label>
+      </div>
+
+      <div
+        v-if="alerteIndisponible"
+        class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-500"
+      >
+        L'alerte de non-réception n'est disponible qu'avec une source API réelle.
+      </div>
+
+      <div
+        v-else-if="alerteError"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800"
+      >
+        <span>{{ alerteError }}</span>
+        <button type="button" class="font-black underline" @click="loadAlerte">Réessayer</button>
+      </div>
+
+      <LoadingState v-else-if="alerteLoading" />
+
+      <template v-else>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Nombre d’OF</p>
+            <p class="mt-1 font-mono text-lg font-black text-slate-800">{{ alerte?.total ?? 0 }}</p>
+          </div>
+          <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">À vérifier</p>
+            <p class="mt-1 font-mono text-lg font-black text-amber-700">{{ alerte?.nombreAVerifier ?? 0 }}</p>
+          </div>
+          <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Sur-réceptions</p>
+            <p class="mt-1 font-mono text-lg font-black text-rose-700">{{ alerte?.nombreSurReceptions ?? 0 }}</p>
+          </div>
+          <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Incomplets</p>
+            <p class="mt-1 font-mono text-lg font-black text-slate-600">{{ alerte?.nombreDonneesManquantes ?? 0 }}</p>
+          </div>
+          <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Total non réceptionné</p>
+            <p class="mt-1 font-mono text-lg font-black text-blue-900">
+              {{ formatAlerte(alerte?.totalPiecesNonReceptionnees ?? null) }}
+            </p>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-100">
+          <table class="w-full min-w-[1100px] text-left text-xs">
+            <thead class="bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              <tr>
+                <th class="p-3">Date</th>
+                <th class="p-3">OF</th>
+                <th class="p-3">Article</th>
+                <th class="p-3">Désignation</th>
+                <th class="p-3">Type matière</th>
+                <th class="p-3 text-right">Total EMR</th>
+                <th class="p-3 text-right">Rebut EMR</th>
+                <th class="p-3 text-right">Net EMR</th>
+                <th class="p-3 text-right">Réception U2</th>
+                <th class="p-3 text-right">Non réceptionnées</th>
+                <th class="p-3">Statut / anomalies</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="ligne in alerte?.lignes ?? []" :key="`${ligne.date}-${ligne.numeroOF}`" class="hover:bg-slate-50/40">
+                <td class="p-3 font-mono text-slate-600">{{ ligne.date }}</td>
+                <td class="p-3 font-mono font-bold text-slate-800">{{ ligne.numeroOF }}</td>
+                <td class="p-3 font-mono text-slate-700">{{ ligne.codeArticle ?? '—' }}</td>
+                <td class="p-3 text-slate-600">{{ ligne.designationArticle ?? '—' }}</td>
+                <td class="p-3 font-mono font-black text-blue-900">{{ ligne.codeTypeMatiere ?? '—' }}</td>
+                <td class="p-3 text-right font-mono">{{ formatAlerte(ligne.totalEmrPieces) }}</td>
+                <td class="p-3 text-right font-mono text-slate-400">{{ formatAlerte(ligne.rebutEmrPieces) }}</td>
+                <td class="p-3 text-right font-mono">{{ formatAlerte(ligne.netEmrPieces) }}</td>
+                <td class="p-3 text-right font-mono text-blue-700">
+                  {{ formatNumber(ligne.quantiteReceptionneeU2Pieces, 0) }}
+                </td>
+                <td class="p-3 text-right font-mono font-black text-slate-800">
+                  {{ formatAlerte(ligne.piecesNonReceptionnees) }}
+                </td>
+                <td class="p-3">
+                  <span
+                    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap"
+                    :class="classeStatutAlerte(ligne.statut)"
+                  >
+                    {{ libelleStatutAlerte(ligne.statut) }}
+                  </span>
+                  <p v-if="ligne.anomalies.length" class="mt-1 max-w-xs text-[10px] text-rose-700">
+                    {{ ligne.anomalies.join(' · ') }}
+                  </p>
+                </td>
+              </tr>
+              <tr v-if="!alerte?.lignes?.length">
+                <td colspan="11" class="p-6 text-center font-bold uppercase tracking-wider text-slate-400">
+                  Aucun OF pour cette date
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 text-xs">
+          <button type="button" :disabled="alertePage <= 1" class="font-bold disabled:opacity-40" @click="allerPageAlerte(alertePage - 1)">
+            Précédent
+          </button>
+          <span class="font-semibold text-slate-500">Page {{ alertePage }} / {{ alertePages }}</span>
+          <button
+            type="button"
+            :disabled="alertePage >= alertePages"
+            class="font-bold disabled:opacity-40"
+            @click="allerPageAlerte(alertePage + 1)"
+          >
+            Suivant
+          </button>
+        </div>
+      </template>
     </div>
 
     <!-- Admin-only : Bilan Usinage 2 en pieces (calcule server-side) -->

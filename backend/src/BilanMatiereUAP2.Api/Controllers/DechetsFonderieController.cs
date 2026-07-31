@@ -18,13 +18,15 @@ public sealed class DechetsFonderieController(IDechetFonderieService service) : 
         [FromQuery] string? periode,
         [FromQuery] Guid? typeMatiereId,
         [FromQuery] string? typeDechet,
+        [FromQuery] string? origine,
+        [FromQuery] string? statut,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
         var selectedPeriod = periode ?? DateTime.UtcNow.ToString("yyyy-MM", CultureInfo.InvariantCulture);
         return Ok(await service.GetAllAsync(
-            new GetDechetsFonderieQuery(selectedPeriod, typeMatiereId, typeDechet, page, pageSize),
+            new GetDechetsFonderieQuery(selectedPeriod, typeMatiereId, typeDechet, origine, statut, page, pageSize),
             cancellationToken));
     }
 
@@ -64,6 +66,20 @@ public sealed class DechetsFonderieController(IDechetFonderieService service) : 
         CancellationToken cancellationToken)
     {
         return Ok(await service.UpdateAsync(new UpdateDechetFonderieCommand(id, request), cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/valider")]
+    [ProducesResponseType<DechetFonderieResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<DechetFonderieResponse>> Valider(Guid id, CancellationToken cancellationToken)
+    {
+        return Ok(await service.ValiderAsync(new ValiderDechetFonderieCommand(id), cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/annuler")]
+    [ProducesResponseType<DechetFonderieResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<DechetFonderieResponse>> Annuler(Guid id, CancellationToken cancellationToken)
+    {
+        return Ok(await service.AnnulerAsync(new AnnulerDechetFonderieCommand(id), cancellationToken));
     }
 
     [HttpDelete("{id:guid}")]

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import { useAppDialog } from '@/composables/useAppDialog';
-import { AlertTriangle, FileUp, LoaderCircle, RefreshCw } from 'lucide-vue-next';
+import { AlertTriangle, FileDown, FileUp, LoaderCircle } from 'lucide-vue-next';
 import {
   DEFAULT_REFERENCE_PAGE_SIZE,
   REFERENCE_PAGE_SIZES,
@@ -22,6 +22,7 @@ const activeTab = ref<ReferenceTabKey>('gamme');
 const gammeFileInput = ref<HTMLInputElement | null>(null);
 const nomenclatureFileInput = ref<HTMLInputElement | null>(null);
 const importing = ref<ReferenceTabKey | null>(null);
+const exporting = ref<ReferenceTabKey | null>(null);
 const pageSizes = REFERENCE_PAGE_SIZES;
 
 /**
@@ -244,11 +245,26 @@ const showImportResult = async (importedCount: number, ignoredCount: number, fil
   });
 };
 
-const handleSync = async (target: ReferenceTabKey) => {
-  await dialog.alert(target === 'gamme' ? 'Synchronisation gamme simulée.' : 'Synchronisation nomenclature simulée.', {
-    title: 'Références fabrication',
-    tone: 'success'
-  });
+const handleExport = async (target: ReferenceTabKey) => {
+  exporting.value = target;
+  try {
+    if (target === 'gamme') {
+      await referenceService.exportGammes({
+        codeArticle: normalizedGammeSearch.value || undefined
+      });
+    } else {
+      await referenceService.exportNomenclatures({
+        codeArticleParent: normalizedNomenclatureSearch.value || undefined
+      });
+    }
+  } catch (error) {
+    await dialog.alert(error instanceof Error ? error.message : "L'export CSV a échoué.", {
+      title: 'Export des références',
+      tone: 'danger'
+    });
+  } finally {
+    exporting.value = null;
+  }
 };
 </script>
 
@@ -276,8 +292,9 @@ const handleSync = async (target: ReferenceTabKey) => {
       <div class="bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
         <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider">Gamme de fabrication</h3>
 
-        <div v-if="isAdmin" class="mt-4 flex">
+        <div class="mt-4 flex flex-wrap gap-3">
           <input
+            v-if="isAdmin"
             ref="gammeFileInput"
             class="hidden"
             type="file"
@@ -285,6 +302,7 @@ const handleSync = async (target: ReferenceTabKey) => {
             @change="handleImport('gamme', $event)"
           />
           <button
+            v-if="isAdmin"
             class="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-bold text-slate-700 sm:w-auto sm:min-w-64"
             :disabled="importing !== null"
             @click="selectImportFile('gamme')"
@@ -292,6 +310,15 @@ const handleSync = async (target: ReferenceTabKey) => {
             <LoaderCircle v-if="importing === 'gamme'" class="w-4 h-4 animate-spin text-blue-700" />
             <FileUp v-else class="w-4 h-4 text-blue-700" />
             {{ importing === 'gamme' ? 'Import en cours…' : 'Importer GAMMEFAB' }}
+          </button>
+          <button
+            class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-bold text-slate-700"
+            :disabled="exporting !== null"
+            @click="handleExport('gamme')"
+          >
+            <LoaderCircle v-if="exporting === 'gamme'" class="w-4 h-4 animate-spin text-blue-700" />
+            <FileDown v-else class="w-4 h-4 text-blue-700" />
+            Exporter CSV
           </button>
         </div>
 
@@ -339,20 +366,23 @@ const handleSync = async (target: ReferenceTabKey) => {
                 <th class="p-3">Groupe poste de charge</th>
                 <th class="p-3">Numéro opération</th>
                 <th class="p-3">Désignation opération</th>
+                <th class="p-3">Unité</th>
                 <th class="p-3">Alternative</th>
                 <th class="p-3">Date fin validité</th>
+                <th class="p-3">Lot d'import</th>
                 <th class="p-3">Source</th>
+                <th class="p-3">Importé le</th>
                 <th class="p-3">Statut</th>
               </tr>
             </thead>
             <tbody :class="gamme.loading && gamme.loaded ? 'opacity-60 transition-opacity' : ''">
               <tr v-if="gammeFirstLoad">
-                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="11">
+                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="14">
                   Chargement de la page…
                 </td>
               </tr>
               <tr v-else-if="!gamme.rows.length && !gamme.error">
-                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="11">
+                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="14">
                   Aucune référence pour cette page.
                 </td>
               </tr>
@@ -368,9 +398,12 @@ const handleSync = async (target: ReferenceTabKey) => {
                 <td class="p-3">{{ row.groupePosteCharge }}</td>
                 <td class="p-3 font-mono">{{ row.numeroOperation }}</td>
                 <td class="p-3">{{ row.designationOperation }}</td>
+                <td class="p-3">{{ row.unite || '—' }}</td>
                 <td class="p-3 font-mono">{{ row.alternative }}</td>
                 <td class="p-3 font-mono">{{ row.dateFinValidite }}</td>
+                <td class="p-3 font-mono text-[10px]">{{ row.lotImport || '—' }}</td>
                 <td class="p-3 text-slate-500">{{ row.source }}</td>
+                <td class="p-3 font-mono text-[10px]">{{ row.importeLe || '—' }}</td>
                 <td class="p-3">
                   <span class="status-success">
                     {{ row.statut }}
@@ -423,8 +456,9 @@ const handleSync = async (target: ReferenceTabKey) => {
       <div class="bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
         <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider">Nomenclature</h3>
 
-        <div v-if="isAdmin" class="mt-4 grid gap-3 md:grid-cols-3">
+        <div class="mt-4 flex flex-wrap gap-3">
           <input
+            v-if="isAdmin"
             ref="nomenclatureFileInput"
             class="hidden"
             type="file"
@@ -432,6 +466,7 @@ const handleSync = async (target: ReferenceTabKey) => {
             @change="handleImport('nomenclature', $event)"
           />
           <button
+            v-if="isAdmin"
             class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-bold text-slate-700"
             :disabled="importing !== null"
             @click="selectImportFile('nomenclature')"
@@ -441,11 +476,13 @@ const handleSync = async (target: ReferenceTabKey) => {
             {{ importing === 'nomenclature' ? 'Import en cours…' : 'Importer BOMARTPARENT' }}
           </button>
           <button
-            class="flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-xs font-bold text-white"
-            @click="handleSync('nomenclature')"
+            class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-bold text-slate-700"
+            :disabled="exporting !== null"
+            @click="handleExport('nomenclature')"
           >
-            <RefreshCw class="w-4 h-4" />
-            Synchroniser nomenclature
+            <LoaderCircle v-if="exporting === 'nomenclature'" class="w-4 h-4 animate-spin text-blue-700" />
+            <FileDown v-else class="w-4 h-4 text-blue-700" />
+            Exporter CSV
           </button>
         </div>
 
@@ -501,18 +538,23 @@ const handleSync = async (target: ReferenceTabKey) => {
                 <th class="p-3">Catégorie</th>
                 <th class="p-3">Type lien</th>
                 <th class="p-3">Pourcentage rebut</th>
+                <th class="p-3">Alternative</th>
+                <th class="p-3">Fin validité</th>
+                <th class="p-3">Statut validité</th>
+                <th class="p-3">Lot d'import</th>
                 <th class="p-3">Source</th>
+                <th class="p-3">Importé le</th>
                 <th class="p-3">Statut</th>
               </tr>
             </thead>
             <tbody :class="nomenclature.loading && nomenclature.loaded ? 'opacity-60 transition-opacity' : ''">
               <tr v-if="nomenclatureFirstLoad">
-                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="14">
+                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="20">
                   Chargement de la page…
                 </td>
               </tr>
               <tr v-else-if="!nomenclature.rows.length && !nomenclature.error">
-                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="14">
+                <td class="p-4 text-center text-xs font-semibold text-slate-400" colspan="20">
                   Aucune référence pour cette page.
                 </td>
               </tr>
@@ -533,7 +575,12 @@ const handleSync = async (target: ReferenceTabKey) => {
                 <td class="p-3">{{ row.categorie }}</td>
                 <td class="p-3">{{ row.typeLien }}</td>
                 <td class="p-3 font-mono">{{ row.pourcentageRebut }}</td>
+                <td class="p-3 font-mono">{{ row.alternative || '—' }}</td>
+                <td class="p-3 font-mono">{{ row.dateFinValidite || '—' }}</td>
+                <td class="p-3">{{ row.statutValidite }}</td>
+                <td class="p-3 font-mono text-[10px]">{{ row.lotImport || '—' }}</td>
                 <td class="p-3 text-slate-500">{{ row.source }}</td>
+                <td class="p-3 font-mono text-[10px]">{{ row.importeLe || '—' }}</td>
                 <td class="p-3">
                   <span class="status-info">
                     {{ row.statut }}

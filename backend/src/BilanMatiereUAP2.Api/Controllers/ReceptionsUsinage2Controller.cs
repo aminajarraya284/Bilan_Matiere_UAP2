@@ -16,8 +16,8 @@ public sealed class ReceptionsUsinage2Controller(
     IAlerteNonReceptionService alerteService) : ControllerBase
 {
     /// <summary>
-    /// Alerte journaliere des pieces non receptionnees, une ligne par Numero OF.
-    /// L'univers des OF vient des Sorties MP imputees a la date demandee.
+    /// Alerte journalière des pièces non réceptionnées, une ligne par numéro d'OF.
+    /// Univers : YRJMCH EMR, réceptions U2, entrées OF et sorties MP du jour.
     /// </summary>
     [HttpGet("non-receptionnees")]
     [ProducesResponseType<AlerteNonReceptionResponse>(StatusCodes.Status200OK)]

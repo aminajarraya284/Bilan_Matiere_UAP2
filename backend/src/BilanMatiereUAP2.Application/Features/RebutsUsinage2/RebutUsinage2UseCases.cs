@@ -16,7 +16,8 @@ public interface IRebutUsinage2Service
 
 public sealed class RebutUsinage2Service(
     IRebutUsinage2Repository repository,
-    ICurrentUserService currentUser) : IRebutUsinage2Service
+    ICurrentUserService currentUser,
+    IOfContextResolver ofContextResolver) : IRebutUsinage2Service
 {
     public async Task<PagedRebutsUsinage2Response> QueryAsync(
         int? annee,
@@ -67,6 +68,16 @@ public sealed class RebutUsinage2Service(
     public async Task<RebutUsinage2Response> ValiderAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var entity = await GetRequiredAsync(id, cancellationToken);
+        var contexte = await ofContextResolver.ResolveAsync(entity.NumeroOF, entity.DateDeclaration, cancellationToken);
+        if (contexte.Anomalies.Contains("OF_X3_INTROUVABLE", StringComparer.OrdinalIgnoreCase))
+        {
+            throw new ConflictException("OF_X3_INTROUVABLE");
+        }
+        if (!contexte.EligibleCalculUap2)
+        {
+            throw new ConflictException("HORS_ATELIER_UAP2");
+        }
+
         entity.Valider(currentUser.UserId, currentUser.UserName, DateTime.UtcNow);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);

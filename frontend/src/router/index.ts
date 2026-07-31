@@ -113,6 +113,10 @@ const routes: Array<RouteRecordRaw> = [
       subtitle: 'Quantités reçues'
     }
   ),
+  {
+    path: '/receptions-usinage2',
+    redirect: '/receptions-usinage-2'
+  },
   appRoute('/rapports', 'Rapports', () => import('@/features/rapports/RapportsView.vue'), {
     title: 'Rapports',
     subtitle: 'Résultats et exports'

@@ -5,6 +5,12 @@ type ViteDataSourceMode = 'api' | 'mock' | 'disabled';
 
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
+  readonly VITE_SEUIL_ECART_FONDERIE?: string;
+  readonly VITE_SEUIL_ECART_UAP2?: string;
+  readonly VITE_TYPES_MATIERE?: string;
+  readonly VITE_SEUIL_ALERTE_POIDS_KG?: string;
+  readonly VITE_SEUIL_ECART_KG_HIGHLIGHT?: string;
+  readonly VITE_SEUIL_DECALAGE_IMPORTANT_KG?: string;
 
   /**
    * @deprecated Repli historique uniquement. Sera supprime dans un lot ulterieur.

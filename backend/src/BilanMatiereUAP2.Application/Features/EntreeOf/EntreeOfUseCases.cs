@@ -1,8 +1,13 @@
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Application.Features.Imports;
+using BilanMatiereUAP2.Contracts.Imports;
+using BilanMatiereUAP2.Contracts.MouvementsStock;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
+using BilanMatiereUAP2.Domain.Services;
+using FluentValidation;
+using FluentValidation.Results;
 
 namespace BilanMatiereUAP2.Application.Features.EntreeOf;
 
@@ -24,6 +29,12 @@ public interface IEntreeOfImportService
 {
     Task<ImportEntreeOfResponse> ImportAsync(Stream fileStream, string sourceSystem, string nomFichierOriginal, CancellationToken cancellationToken = default);
     Task<EntreeOfResolutionResult> ResolveAsync(string numeroOF, int annee, int mois, string? codeArticleAttendu, CancellationToken cancellationToken = default);
+    Task<MouvementsStockConsultationResponse> QueryMouvementsAsync(
+        MouvementStockConsultationQuery query,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+    Task<ImportTrackingResponse> GetImportTrackingAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
 }
 
 public sealed class EntreeOfImportService(
@@ -31,14 +42,16 @@ public sealed class EntreeOfImportService(
     IEntreeOfRepository repository,
     IImportArchiveService archiveService,
     IImportDependencyRefreshService dependencyRefreshService,
-    ICurrentUserService currentUser) : IEntreeOfImportService
+    ICurrentUserService currentUser,
+    IImportHashCalculator hashCalculator,
+    IParametreApplicationProvider parametres) : IEntreeOfImportService
 {
     private const string UniteAttendue = "UN";
 
     public async Task<ImportEntreeOfResponse> ImportAsync(Stream fileStream, string sourceSystem, string nomFichierOriginal, CancellationToken cancellationToken = default)
     {
         var bytes = await ReadAllBytesAsync(fileStream, cancellationToken);
-        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+        var hash = hashCalculator.CalculateSha256(bytes);
         var existing = await repository.GetCompletedBatchByHashAsync(hash, cancellationToken);
         var batch = ImportBatch.Demarrer(
             hash,
@@ -66,11 +79,41 @@ public sealed class EntreeOfImportService(
 
             var file = new X3ImportFileContent(nomFichierOriginal, bytes.Length, bytes);
             var readResult = await reader.ReadAsync(file, cancellationToken);
+            var now = DateTime.UtcNow;
+
+            var transactionEntreeOf = X3ImportParsing.NormaliserEntete(
+                await parametres.GetValueAsync(ParametresApplicationCles.TransactionEntreeOf, cancellationToken));
+            var mouvementsBruts = readResult.Rows
+                .Select(row => X3MouvementStock.Creer(
+                    batch.Id,
+                    row.NumeroLigneSource,
+                    row.NomFeuilleSource,
+                    row.DateImputation,
+                    row.Code,
+                    row.Designation,
+                    row.DateCreation,
+                    row.HeureCreation,
+                    row.Utilisateur,
+                    row.QuantiteX3Signee,
+                    row.Unite,
+                    row.Transaction,
+                    row.TypePiece,
+                    row.Lot,
+                    row.PieceOrigine,
+                    row.NumeroOFNormalise,
+                    row.DesignationMouvement,
+                    row.Emplacement,
+                    row.Statut,
+                    DeterminerNature(row, transactionEntreeOf),
+                    now))
+                .ToArray();
+            if (mouvementsBruts.Length > 0)
+                await repository.AddMouvementsBrutsAsync(mouvementsBruts, cancellationToken);
 
             // Meme reader generique que MVTSTOTRSVCR (Sortie OF) : seul le filtre de TypeTransaction
-            // change. Les variantes d'accent (Entrée OF / Entree OF) sont normalisees en amont.
+            // change. Les variantes d'accent sont normalisees en amont.
             var entreeRows = readResult.Rows
-                .Where(row => X3ImportParsing.NormaliserEntete(row.Transaction) == "entreeof")
+                .Where(row => X3ImportParsing.NormaliserEntete(row.Transaction) == transactionEntreeOf)
                 .Where(row => !string.IsNullOrWhiteSpace(row.NumeroOFNormalise) && X3ImportParsing.EstNumeroOF(row.NumeroOFNormalise))
                 .Where(row => !string.IsNullOrWhiteSpace(row.Code) && !string.IsNullOrWhiteSpace(row.Unite))
                 .ToArray();
@@ -94,7 +137,6 @@ public sealed class EntreeOfImportService(
             var inserted = 0;
             var updated = 0;
             var unchanged = 0;
-            var now = DateTime.UtcNow;
 
             foreach (var g in grouped)
             {
@@ -228,13 +270,149 @@ public sealed class EntreeOfImportService(
             return new EntreeOfResolutionResult("Trouve", 0m, article, null);
         }
 
-        if (quantiteNette < 0)
-        {
-            return new EntreeOfResolutionResult("ValeurInvalide", quantiteNette, article, "La quantité nette Entrée OF est négative.");
-        }
-
         return new EntreeOfResolutionResult("Trouve", quantiteNette, article, null);
     }
+
+    public async Task<MouvementsStockConsultationResponse> QueryMouvementsAsync(
+        MouvementStockConsultationQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        if (query.Page < 1)
+            throw Validation(nameof(query.Page), "La page doit être supérieure ou égale à 1.");
+        if (query.PageSize is < 1 or > 100)
+            throw Validation(nameof(query.PageSize), "La taille de page doit être comprise entre 1 et 100.");
+        if (query.DateDebut is not null && query.DateFin is not null && query.DateDebut > query.DateFin)
+            throw Validation(nameof(query.DateFin), "La date de fin doit être postérieure ou égale à la date de début.");
+
+        var result = await repository.QueryMouvementsAsync(
+            new MouvementStockConsultationFilter(
+                query.DateDebut,
+                query.DateFin,
+                NormalizeOptional(query.NumeroOF),
+                NormalizeOptional(query.CodeArticle),
+                NormalizeOptional(query.Designation),
+                NormalizeOptional(query.Transaction),
+                NormalizeOptional(query.TypePiece),
+                NormalizeOptional(query.PieceOrigine),
+                ParseNature(query.Nature),
+                query.ImportBatchId,
+                query.Page,
+                query.PageSize,
+                ParseSort(query.SortBy),
+                ParseDescending(query.SortDirection)),
+            cancellationToken);
+
+        return new MouvementsStockConsultationResponse(
+            result.Items.Select(ToMouvementResponse).ToArray(),
+            result.Total,
+            query.Page,
+            query.PageSize,
+            ToTrackingResponse(result.Imports));
+    }
+
+    public async Task<ImportTrackingResponse> GetImportTrackingAsync(CancellationToken cancellationToken = default)
+        => ToTrackingResponse(await repository.GetImportTrackingAsync(TypeImport.MvtEntreeOF, cancellationToken));
+
+    private static NatureMouvementStock DeterminerNature(
+        MouvementStockX3Row row,
+        string transactionEntreeOf)
+    {
+        var transaction = X3ImportParsing.NormaliserEntete(row.Transaction);
+        if (!string.IsNullOrEmpty(transactionEntreeOf) && transaction == transactionEntreeOf)
+            return NatureMouvementStock.EntreeOF;
+
+        return transaction == "sortieof" &&
+               X3ImportParsing.NormaliserEntete(row.TypePiece) == "suivimatiere" &&
+               X3ImportParsing.EstNumeroOF(row.PieceOrigine)
+            ? NatureMouvementStock.SortieMP
+            : NatureMouvementStock.NonClassee;
+    }
+
+    private static MouvementStockResponse ToMouvementResponse(X3MouvementStock row)
+        => new(
+            row.Id,
+            row.DateImputation,
+            string.IsNullOrWhiteSpace(row.NumeroOFNormalise) ? null : row.NumeroOFNormalise,
+            row.Code,
+            row.Designation,
+            row.QuantiteX3Signee,
+            row.Unite,
+            row.Transaction,
+            row.TypePiece,
+            row.PieceOrigine,
+            row.Nature.ToString(),
+            row.ImportBatchId);
+
+    private static ImportTrackingResponse ToTrackingResponse(ImportTrackingSnapshot tracking)
+        => new(
+            ToImportExecutionResponse(tracking.DerniereTentative),
+            ToImportExecutionResponse(tracking.DernierImportReussi));
+
+    private static ImportExecutionSummaryResponse? ToImportExecutionResponse(ImportBatchSnapshot? snapshot)
+    {
+        if (snapshot is null) return null;
+        var batch = snapshot.Batch;
+        var duplicate = batch.Statut == StatutImport.Duplicate;
+        return new ImportExecutionSummaryResponse(
+            batch.Id,
+            batch.Statut switch
+            {
+                StatutImport.EnCours => "En cours",
+                StatutImport.Termine => "Importé",
+                StatutImport.Partiel => "Partiel",
+                StatutImport.Echec => "Échec",
+                StatutImport.Duplicate => "Fichier identique",
+                StatutImport.TermineAvecAvertissementArchive => "Importé avec avertissement",
+                _ => batch.Statut.ToString()
+            },
+            duplicate
+                ? "Ce fichier a déjà été importé. Aucune donnée n’a été réécrite."
+                : batch.ArchiveErrorMessage,
+            snapshot.NomFichier,
+            batch.DateCreationUtc,
+            batch.DateFinUtc,
+            batch.ReadCount,
+            batch.ValidCount,
+            batch.RejectedCount,
+            batch.InsertedCount,
+            batch.UpdatedCount,
+            batch.UnchangedCount);
+    }
+
+    private static NatureMouvementStock? ParseNature(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value.Trim().ToUpperInvariant() switch
+        {
+            "ENTREEOF" => NatureMouvementStock.EntreeOF,
+            "SORTIEMP" => NatureMouvementStock.SortieMP,
+            "NONCLASSEE" => NatureMouvementStock.NonClassee,
+            _ => throw Validation(nameof(MouvementStockConsultationQuery.Nature), "La nature doit être EntreeOF, SortieMP ou NonClassee.")
+        };
+    }
+
+    private static string ParseSort(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant() ?? "date";
+        return normalized is "date" or "numeroof" or "article" or "designation" or "quantite" or
+            "transaction" or "typepiece" or "pieceorigine" or "nature" or "lotimport"
+            ? normalized
+            : throw Validation(nameof(MouvementStockConsultationQuery.SortBy), "Le champ de tri est invalide.");
+    }
+
+    private static bool ParseDescending(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        if (string.Equals(value, "desc", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(value, "asc", StringComparison.OrdinalIgnoreCase)) return false;
+        throw Validation(nameof(MouvementStockConsultationQuery.SortDirection), "Le sens de tri doit être asc ou desc.");
+    }
+
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
+
+    private static ValidationException Validation(string propertyName, string message)
+        => new([new ValidationFailure(propertyName, message)]);
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
     {

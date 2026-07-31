@@ -234,6 +234,18 @@ export interface BilanUsinage2ApiResponse {
   quantiteTotaleReceptionneePieces: number;
   nombreLignes: number;
   nombreLignesDonneesManquantes: number;
+  // Agregats calcules par le backend sur la PERIODE ENTIERE. Ils ne doivent pas etre
+  // recalcules a partir de `lignes`, qui ne contient que la page courante.
+  /** Somme des rebuts U2 VALIDES de la periode, en pieces. */
+  totalRebutUsinage2Pieces: number;
+  /** Somme des quantites Entree OF signees de la periode, en pieces. */
+  totalEntreeOfPieces: number;
+  /** Null des qu'une ligne de la periode n'est pas calculable : jamais un faux zero. */
+  totalBilanUsinage2Pieces: number | null;
+  nombreAnomalies: number;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface BilanUap2Response {

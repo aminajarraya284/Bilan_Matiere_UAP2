@@ -14,6 +14,8 @@ import {
 import { RouterLink } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { bilanService } from './bilan.service';
+import { rebutsUsinage2Service } from './rebutsUsinage2.service';
+import type { RebutUsinage2 } from './rebutsUsinage2.types';
 import { BilanMatiereReport, BilanUsinage2Api, BilanUap2ParOF } from './bilan.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
@@ -52,18 +54,14 @@ const bilanUsinage = ref<BilanUsinage2Api | null>(null);
 const bilansUsinage = computed(() => bilanUsinage.value?.lignes ?? []);
 const isLoadingUsinage = ref(true);
 const usinageError = ref('');
-const totalRebutUsinage2Pieces = computed(() =>
-  bilansUsinage.value.reduce((total, ligne) => total + ligne.rebutUsinage2Pieces, 0)
-);
-const totalEntreeOfPieces = computed(() =>
-  bilansUsinage.value.reduce((total, ligne) => total + (ligne.entreeOfPieces ?? 0), 0)
-);
-const totalBilanUsinage2Pieces = computed(() =>
-  bilansUsinage.value.reduce((total, ligne) => total + (ligne.bilanUsinage2Pieces ?? 0), 0)
-);
-const nombreAnomaliesUsinage2 = computed(() =>
-  bilansUsinage.value.reduce((total, ligne) => total + ligne.anomalies.length, 0)
-);
+// Les totaux viennent du backend et couvrent la PERIODE ENTIERE. Les additionner depuis
+// `bilansUsinage` ne sommerait que la page affichee (50 lignes sur plusieurs centaines) :
+// un rebut saisi sur un OF absent de la page 1 resterait invisible dans les KPI.
+const totalRebutUsinage2Pieces = computed(() => bilanUsinage.value?.totalRebutUsinage2Pieces ?? 0);
+const totalEntreeOfPieces = computed(() => bilanUsinage.value?.totalEntreeOfPieces ?? 0);
+/** Null tant qu'une ligne de la periode n'est pas calculable : affiche « — », jamais 0. */
+const totalBilanUsinage2Pieces = computed(() => bilanUsinage.value?.totalBilanUsinage2Pieces ?? null);
+const nombreAnomaliesUsinage2 = computed(() => bilanUsinage.value?.nombreAnomalies ?? 0);
 
 const getBilanUsinageStatus = (ligne: BilanUsinage2Api['lignes'][number]): string => {
   if (ligne.bilanUsinage2Pieces === null) return 'DonneesManquantes';
@@ -225,6 +223,155 @@ const loadBilansUsinage = async () => {
   }
 };
 
+// ===== REBUTS USINAGE 2 (saisie en PIECES) =====
+// Le rebut saisi ici alimente le terme « Rebut U2 » de la formule
+// Bilan U2 = Réception U2 - Rebut U2 - Entrée OF signée.
+// Le calcul reste integralement backend : seuls les rebuts VALIDES sont pris en compte,
+// et le bilan est rechargé apres chaque action plutot que recalculé dans la vue.
+const rebuts = ref<RebutUsinage2[]>([]);
+const rebutsLoading = ref(false);
+const rebutsError = ref('');
+const rebutSuccess = ref('');
+const rebutActionEnCours = ref(false);
+const rebutEnEdition = ref<string | null>(null);
+const rebutForm = ref({
+  dateDeclaration: `${filterMois.value}-01`,
+  numeroOF: '',
+  codeArticle: '',
+  quantiteRebutPieces: null as number | null,
+  motif: '',
+  observation: ''
+});
+
+const rebutsDisponibles = computed(() => rebutsUsinage2Service.isAvailable());
+
+/** Champs bloquants de la saisie : OF, article et une quantite strictement positive. */
+const blocagesRebut = computed(() => {
+  const motifs: string[] = [];
+  if (!rebutForm.value.numeroOF.trim()) motifs.push("Numéro d'OF obligatoire");
+  if (!rebutForm.value.codeArticle.trim()) motifs.push('Code article obligatoire');
+  if (!rebutForm.value.dateDeclaration) motifs.push('Date de déclaration obligatoire');
+  const quantite = rebutForm.value.quantiteRebutPieces;
+  if (quantite === null || quantite <= 0) motifs.push('Quantité rebutée strictement positive (pièces)');
+  return motifs;
+});
+
+const messageErreurRebut = (error: unknown, secours: string): string => {
+  const probleme = (error as { response?: { data?: { detail?: string; title?: string; errors?: Record<string, string[]> } } })
+    ?.response?.data;
+  const validation = probleme?.errors ? Object.values(probleme.errors).flat().join(' ') : '';
+  return validation || probleme?.detail || probleme?.title || (error instanceof Error ? error.message : secours);
+};
+
+const loadRebuts = async () => {
+  if (!isAdmin.value || !rebutsDisponibles.value) return;
+  const [annee, mois] = filterMois.value.split('-').map(Number);
+  rebutsLoading.value = true;
+  rebutsError.value = '';
+  try {
+    rebuts.value = (await rebutsUsinage2Service.getRebuts({ annee, mois, page: 1, pageSize: 50 })).items;
+  } catch (error) {
+    rebuts.value = [];
+    rebutsError.value = messageErreurRebut(error, "Les rebuts U2 n'ont pas pu être chargés.");
+  } finally {
+    rebutsLoading.value = false;
+  }
+};
+
+const reinitialiserRebutForm = () => {
+  rebutEnEdition.value = null;
+  rebutForm.value = {
+    dateDeclaration: `${filterMois.value}-01`,
+    numeroOF: '',
+    codeArticle: '',
+    quantiteRebutPieces: null,
+    motif: '',
+    observation: ''
+  };
+};
+
+/** Recharge la liste ET le bilan : le total Rebut U2 doit refleter l'action immediatement. */
+const rafraichirApresRebut = async (message: string) => {
+  await Promise.all([loadRebuts(), loadBilansUsinage()]);
+  rebutSuccess.value = message;
+  window.setTimeout(() => (rebutSuccess.value = ''), 4000);
+};
+
+const enregistrerRebut = async () => {
+  if (blocagesRebut.value.length > 0) return;
+  rebutActionEnCours.value = true;
+  rebutsError.value = '';
+  try {
+    const payload = {
+      dateDeclaration: rebutForm.value.dateDeclaration,
+      numeroOF: rebutForm.value.numeroOF.trim().toUpperCase(),
+      codeArticle: rebutForm.value.codeArticle.trim().toUpperCase(),
+      quantiteRebutPieces: rebutForm.value.quantiteRebutPieces as number,
+      motif: rebutForm.value.motif.trim() || null,
+      observation: rebutForm.value.observation.trim() || null
+    };
+    if (rebutEnEdition.value) {
+      await rebutsUsinage2Service.updateRebut(rebutEnEdition.value, payload);
+      await rafraichirApresRebut('Rebut U2 modifié. Bilan U2 actualisé.');
+    } else {
+      await rebutsUsinage2Service.createRebut(payload);
+      await rafraichirApresRebut('Rebut U2 créé en brouillon. Bilan U2 actualisé.');
+    }
+    reinitialiserRebutForm();
+  } catch (error) {
+    rebutsError.value = messageErreurRebut(error, "L'enregistrement du rebut U2 a échoué.");
+  } finally {
+    rebutActionEnCours.value = false;
+  }
+};
+
+const modifierRebut = (rebut: RebutUsinage2) => {
+  rebutEnEdition.value = rebut.id;
+  rebutForm.value = {
+    dateDeclaration: rebut.dateDeclaration,
+    numeroOF: rebut.numeroOF,
+    codeArticle: rebut.codeArticle,
+    quantiteRebutPieces: rebut.quantiteRebutPieces,
+    motif: rebut.motif ?? '',
+    observation: rebut.observation ?? ''
+  };
+};
+
+const validerRebut = async (rebut: RebutUsinage2) => {
+  const confirme = await dialog.confirm(
+    `Valider le rebut de ${formatNumber(rebut.quantiteRebutPieces, 0)} pièce(s) sur ${rebut.numeroOF} ?`,
+    { title: 'Valider le rebut U2', tone: 'warning', confirmLabel: 'Valider' }
+  );
+  if (!confirme) return;
+  rebutActionEnCours.value = true;
+  try {
+    await rebutsUsinage2Service.validerRebut(rebut.id);
+    await rafraichirApresRebut('Rebut U2 validé. Il entre désormais dans le Bilan U2.');
+  } catch (error) {
+    rebutsError.value = messageErreurRebut(error, 'La validation du rebut a échoué.');
+  } finally {
+    rebutActionEnCours.value = false;
+  }
+};
+
+const annulerRebut = async (rebut: RebutUsinage2) => {
+  const confirme = await dialog.confirm(`Annuler le rebut sur ${rebut.numeroOF} ?`, {
+    title: 'Annuler le rebut U2',
+    tone: 'danger',
+    confirmLabel: 'Annuler le rebut'
+  });
+  if (!confirme) return;
+  rebutActionEnCours.value = true;
+  try {
+    await rebutsUsinage2Service.annulerRebut(rebut.id);
+    await rafraichirApresRebut('Rebut U2 annulé. Il sort du Bilan U2 mais reste dans l’historique.');
+  } catch (error) {
+    rebutsError.value = messageErreurRebut(error, "L'annulation du rebut a échoué.");
+  } finally {
+    rebutActionEnCours.value = false;
+  }
+};
+
 const formatNullable = (value: number | null, decimals = 0): string =>
   value === null ? '—' : formatNumber(value, decimals);
 
@@ -309,6 +456,8 @@ const submitVerification = async () => {
 const switchTab = (tab: TabId) => {
   activeTab.value = tab;
   if (tab === 'usinage2' && bilansUsinage.value.length === 0) loadBilansUsinage();
+  // La saisie des rebuts vit dans cet onglet : sa liste doit suivre la meme periode.
+  if (tab === 'usinage2') loadRebuts();
   if (tab === 'uap2' && bilansUap2.value.length === 0) loadBilansUap2();
 };
 
@@ -578,7 +727,7 @@ onMounted(() => {
         </div>
         <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
           <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Écart total Bilan U2</p>
-          <p class="mt-2 text-xl font-black text-blue-900">{{ formatNumber(totalBilanUsinage2Pieces, 0) }}</p>
+          <p class="mt-2 text-xl font-black text-blue-900">{{ formatNullable(totalBilanUsinage2Pieces, 0) }}</p>
           <p class="text-[10px] text-slate-400">pièces</p>
         </div>
         <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
@@ -588,6 +737,176 @@ onMounted(() => {
         <div class="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
           <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nombre d’anomalies</p>
           <p class="mt-2 text-xl font-black text-amber-700">{{ nombreAnomaliesUsinage2 }}</p>
+        </div>
+      </div>
+
+      <!-- ===== Saisie des Rebuts Usinage 2, en PIECES =====
+           Le rebut valide alimente directement le terme « Rebut U2 » du bilan ci-dessous. -->
+      <div v-if="isAdmin" class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/20">
+          <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Wrench class="w-4 h-4 text-rose-700" />
+            {{ rebutEnEdition ? 'Modifier le rebut U2' : 'Déclarer un rebut Usinage 2' }}
+          </h3>
+          <p class="mt-1 text-[10px] font-semibold text-slate-500">
+            Quantité en pièces. Seuls les rebuts <strong>validés</strong> entrent dans le Bilan U2.
+          </p>
+        </div>
+
+        <div v-if="!rebutsDisponibles" class="p-6 text-xs font-semibold text-slate-500">
+          La saisie des rebuts U2 nécessite une source API réelle.
+        </div>
+
+        <div v-else class="p-6 space-y-4">
+          <div
+            v-if="rebutSuccess"
+            class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800"
+            role="status"
+          >
+            {{ rebutSuccess }}
+          </div>
+          <div
+            v-if="rebutsError"
+            class="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800"
+          >
+            <span>{{ rebutsError }}</span>
+            <button type="button" class="font-black underline" @click="loadRebuts">Réessayer</button>
+          </div>
+
+          <form class="grid gap-3 md:grid-cols-2 xl:grid-cols-6" @submit.prevent="enregistrerRebut">
+            <label class="space-y-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Date de déclaration *
+              <input
+                v-model="rebutForm.dateDeclaration"
+                type="date"
+                class="w-full rounded-lg border border-slate-300 p-2 text-xs font-bold"
+              />
+            </label>
+            <label class="space-y-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Numéro OF *
+              <input
+                v-model.trim="rebutForm.numeroOF"
+                placeholder="OF26070378"
+                class="w-full rounded-lg border border-slate-300 p-2 font-mono text-xs"
+              />
+            </label>
+            <label class="space-y-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Code article *
+              <input
+                v-model.trim="rebutForm.codeArticle"
+                placeholder="07BL201-2"
+                class="w-full rounded-lg border border-slate-300 p-2 font-mono text-xs"
+              />
+            </label>
+            <label class="space-y-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Quantité rebutée (pièces) *
+              <input
+                v-model.number="rebutForm.quantiteRebutPieces"
+                type="number"
+                min="0.0001"
+                step="any"
+                class="w-full rounded-lg border border-slate-300 p-2 font-mono text-xs"
+              />
+            </label>
+            <label class="space-y-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Motif
+              <input v-model.trim="rebutForm.motif" maxlength="200" class="w-full rounded-lg border border-slate-300 p-2 text-xs" />
+            </label>
+            <div class="flex items-end gap-2">
+              <button
+                type="submit"
+                :disabled="blocagesRebut.length > 0 || rebutActionEnCours"
+                class="flex-1 rounded-lg bg-blue-900 px-3 py-2.5 text-[10px] font-black uppercase text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {{ rebutEnEdition ? 'Enregistrer' : 'Déclarer' }}
+              </button>
+              <button
+                v-if="rebutEnEdition"
+                type="button"
+                class="rounded-lg border border-slate-300 px-3 py-2.5 text-[10px] font-black uppercase text-slate-600"
+                @click="reinitialiserRebutForm"
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+
+          <ul v-if="blocagesRebut.length" class="list-disc pl-5 text-[11px] font-semibold text-rose-700">
+            <li v-for="motif in blocagesRebut" :key="motif">{{ motif }}</li>
+          </ul>
+
+          <LoadingState v-if="rebutsLoading" />
+          <div v-else class="overflow-x-auto rounded-xl border border-slate-100">
+            <table class="w-full min-w-[820px] text-left text-xs">
+              <thead class="bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Numéro OF</th>
+                  <th class="p-3">Code article</th>
+                  <th class="p-3 text-right">Rebut (pièces)</th>
+                  <th class="p-3">Motif</th>
+                  <th class="p-3">Statut</th>
+                  <th class="p-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-for="rebut in rebuts" :key="rebut.id" class="hover:bg-slate-50/40">
+                  <td class="p-3 font-mono text-slate-600">{{ rebut.dateDeclaration }}</td>
+                  <td class="p-3 font-mono font-bold text-slate-800">{{ rebut.numeroOF }}</td>
+                  <td class="p-3 font-mono text-slate-700">{{ rebut.codeArticle }}</td>
+                  <td class="p-3 text-right font-mono font-black text-rose-700">
+                    {{ formatNumber(rebut.quantiteRebutPieces, 0) }}
+                  </td>
+                  <td class="p-3 text-slate-600">{{ rebut.motif ?? '—' }}</td>
+                  <td class="p-3">
+                    <span
+                      class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold"
+                      :class="{
+                        'border-slate-200 bg-slate-50 text-slate-600': rebut.statut === 'Brouillon',
+                        'border-emerald-100 bg-emerald-50 text-emerald-700': rebut.statut === 'Valide',
+                        'border-slate-200 bg-slate-100 text-slate-500': rebut.statut === 'Annule'
+                      }"
+                    >
+                      {{ rebut.statut }}
+                    </span>
+                  </td>
+                  <td class="p-3">
+                    <div class="flex gap-2">
+                      <button
+                        v-if="rebut.statut === 'Brouillon'"
+                        class="font-bold text-blue-800"
+                        :disabled="rebutActionEnCours"
+                        @click="modifierRebut(rebut)"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        v-if="rebut.statut === 'Brouillon'"
+                        class="font-bold text-emerald-700"
+                        :disabled="rebutActionEnCours"
+                        @click="validerRebut(rebut)"
+                      >
+                        Valider
+                      </button>
+                      <button
+                        v-if="rebut.statut !== 'Annule'"
+                        class="font-bold text-rose-700"
+                        :disabled="rebutActionEnCours"
+                        @click="annulerRebut(rebut)"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="!rebuts.length">
+                  <td colspan="7" class="p-6 text-center font-bold uppercase tracking-wider text-slate-400">
+                    Aucun rebut U2 déclaré sur cette période
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -719,7 +1038,11 @@ onMounted(() => {
           <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Taux écart global</p>
           <p
             class="mt-1.5 text-lg font-black"
-            :class="Math.abs(totalUap2.tauxGlobal) > 3 ? 'text-rose-600' : 'text-slate-700'"
+            :class="
+              Math.abs(totalUap2.tauxGlobal) > BUSINESS_RULES.seuilEcartBilanAutoPourcentage
+                ? 'text-rose-600'
+                : 'text-slate-700'
+            "
           >
             {{ formatNumber(totalUap2.tauxGlobal, 2) }} %
           </p>
@@ -804,7 +1127,11 @@ onMounted(() => {
                 </td>
                 <td
                   class="p-2.5 text-right font-bold font-mono"
-                  :class="Math.abs(item.tauxEcartOF) > 3 ? 'text-rose-600' : 'text-slate-600'"
+                  :class="
+                    Math.abs(item.tauxEcartOF) > BUSINESS_RULES.seuilEcartBilanAutoPourcentage
+                      ? 'text-rose-600'
+                      : 'text-slate-600'
+                  "
                 >
                   {{ formatNumber(item.tauxEcartOF, 2) }} %
                 </td>

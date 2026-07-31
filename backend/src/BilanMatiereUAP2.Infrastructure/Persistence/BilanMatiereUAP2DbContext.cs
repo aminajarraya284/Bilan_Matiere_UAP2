@@ -10,6 +10,11 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<TypeMatiere> TypesMatiere => Set<TypeMatiere>();
     public DbSet<DechetFonderie> DechetsFonderie => Set<DechetFonderie>();
     public DbSet<ControlePoidsFonderie> ControlesPoidsFonderie => Set<ControlePoidsFonderie>();
+    public DbSet<InventaireFonderie> InventairesFonderie => Set<InventaireFonderie>();
+    // Comptage physique en trois parties. Parties 1 et 2 -> Stock fin ; fours exclus.
+    public DbSet<InventaireConteneur> InventairesConteneurs => Set<InventaireConteneur>();
+    public DbSet<InventaireCategorieComptage> InventairesCategories => Set<InventaireCategorieComptage>();
+    public DbSet<InventaireFourComptage> InventairesFours => Set<InventaireFourComptage>();
     public DbSet<ImportX3Batch> ImportX3Batches => Set<ImportX3Batch>();
     public DbSet<ImportX3File> ImportX3Files => Set<ImportX3File>();
     public DbSet<ImportX3Anomaly> ImportX3Anomalies => Set<ImportX3Anomaly>();
@@ -25,11 +30,12 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<ReceptionUsinage2> ReceptionsUsinage2 => Set<ReceptionUsinage2>();
     public DbSet<RebutUsinage2> RebutsUsinage2 => Set<RebutUsinage2>();
     public DbSet<EntreeOfComposant> EntreesOfComposants => Set<EntreeOfComposant>();
+    public DbSet<X3MouvementStock> X3MouvementsStock => Set<X3MouvementStock>();
+    public DbSet<ParametreApplication> ParametresApplication => Set<ParametreApplication>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BilanMatiereUAP2DbContext).Assembly);
-        modelBuilder.Ignore<X3MouvementStock>();
         modelBuilder.Ignore<Composant>();
         base.OnModelCreating(modelBuilder);
     }

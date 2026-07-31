@@ -18,7 +18,7 @@ internal sealed class X3RapportMachineConfiguration : IEntityTypeConfiguration<X
         builder.Property(e => e.NumeroOF).HasMaxLength(50).IsRequired();
         builder.Property(e => e.Equipe).HasMaxLength(50);
         builder.Property(e => e.OrigineProcessus).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(e => e.QuantiteCTRL).HasColumnType("decimal(18,4)").IsRequired();
+        builder.Property(e => e.QuantiteTotale).HasColumnName("QuantiteTotale").HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(e => e.QuantiteRebut).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(e => e.AlternativeGamme).HasMaxLength(50);
         builder.Property(e => e.CleMetier).HasMaxLength(500).IsRequired();

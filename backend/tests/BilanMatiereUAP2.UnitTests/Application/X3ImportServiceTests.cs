@@ -193,7 +193,9 @@ public sealed class X3ImportServiceTests
             dateTimeProvider,
             validator,
             Options.Create(new ImportX3Options()),
-            new NoopImportArchiveService());
+            new NoopImportArchiveService(),
+            new TestImportHashCalculator(),
+            new TestTypeMatiereRepository("M3000L0", "M3060L0"));
 
         var command = new ImportSortiesMatiereX3Command(
             new X3ImportFileContent("Encours.xlsx", 100, [1, 2, 3]),
@@ -240,6 +242,30 @@ public sealed class X3ImportServiceTests
         public DateTime UtcNow => Now;
     }
 
+    private sealed class TestTypeMatiereRepository(params string[] codes) : ITypeMatiereRepository
+    {
+        private readonly List<TypeMatiere> values = codes
+            .Select(code => TypeMatiere.Creer(code, $"Type {code}", Now))
+            .ToList();
+
+        public Task<IReadOnlyList<TypeMatiere>> GetAllAsync(bool? actif, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<TypeMatiere>>(values
+                .Where(type => actif is null || type.EstActif == actif)
+                .ToArray());
+
+        public Task<TypeMatiere?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+            => Task.FromResult(values.SingleOrDefault(type => type.Id == id));
+
+        public Task<TypeMatiere?> GetByCodeAsync(string normalizedCode, CancellationToken cancellationToken)
+            => Task.FromResult(values.SingleOrDefault(type => type.Code == normalizedCode));
+
+        public Task AddAsync(TypeMatiere typeMatiere, CancellationToken cancellationToken)
+        {
+            values.Add(typeMatiere);
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class FakeCurrentUserService : ICurrentUserService
     {
         public Guid? UserId => Guid.Parse("10000000-0000-0000-0000-000000000001");
@@ -266,5 +292,23 @@ public sealed class X3ImportServiceTests
             => Task.FromResult((IReadOnlyList<ImportSourceFileResponse>)Array.Empty<ImportSourceFileResponse>());
         public Task<StoredFileContent> DownloadAsync(Guid importBatchId, Guid fileId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    private sealed class TestImportHashCalculator : IImportHashCalculator
+    {
+        public string CalculateSha256(byte[] content) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));
+        public string CalculateCoupleHash(string firstHash, string secondHash) => CalculateSha256(System.Text.Encoding.UTF8.GetBytes($"{firstHash}:{secondHash}"));
+    }
+
+    private sealed class TestParametreApplicationProvider : IParametreApplicationProvider
+    {
+        public Task<string?> GetValueAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>(null);
+
+        public Task<decimal?> GetDecimalAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<decimal?>(null);
+
+        public Task<IReadOnlyList<string>> GetCsvValuesAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>(["M3000L0", "M3010L0", "M3060L0"]);
     }
 }

@@ -15,24 +15,25 @@ public sealed class DechetFonderie
         DateOnly dateDeclaration,
         Guid typeMatiereId,
         TypeDechet typeDechet,
+        OrigineDechet origine,
         decimal poidsKg,
         string? observation,
         Guid? creeParUtilisateurId,
         string? creeParNom,
         DateTime dateCreationUtc)
     {
-        Valider(typeMatiereId, poidsKg, observation);
-
+        ValiderDonnees(typeMatiereId, poidsKg, observation);
         Id = id;
         DateDeclaration = dateDeclaration;
         SemaineIso = CalculerSemaineIso(dateDeclaration);
         TypeMatiereId = typeMatiereId;
         TypeDechet = typeDechet;
+        Origine = origine;
         PoidsKg = poidsKg;
-        Observation = NormaliserObservation(observation);
-        Statut = StatutDechet.Valide;
+        Observation = NormaliserTexte(observation);
+        Statut = StatutDechet.Brouillon;
         CreeParUtilisateurId = creeParUtilisateurId;
-        CreeParNom = NormaliserNomUtilisateur(creeParNom);
+        CreeParNom = NormaliserTexte(creeParNom);
         DateCreationUtc = dateCreationUtc;
     }
 
@@ -42,6 +43,7 @@ public sealed class DechetFonderie
     public Guid TypeMatiereId { get; private set; }
     public TypeMatiere TypeMatiere { get; private set; } = null!;
     public TypeDechet TypeDechet { get; private set; }
+    public OrigineDechet Origine { get; private set; }
     public decimal PoidsKg { get; private set; }
     public string? Observation { get; private set; }
     public StatutDechet Statut { get; private set; }
@@ -49,6 +51,15 @@ public sealed class DechetFonderie
     public string? CreeParNom { get; private set; }
     public DateTime DateCreationUtc { get; private set; }
     public DateTime? DateModificationUtc { get; private set; }
+    public Guid? ValideParUtilisateurId { get; private set; }
+    public string? ValideParNom { get; private set; }
+    public DateTime? ValideLeUtc { get; private set; }
+    public Guid? AnnuleParUtilisateurId { get; private set; }
+    public string? AnnuleParNom { get; private set; }
+    public DateTime? AnnuleLeUtc { get; private set; }
+
+    // Champs historiques conserves pour la compatibilite de schema. Les nouveaux
+    // flux utilisent uniquement le statut Annule, sans suppression logique.
     public bool EstSupprime { get; private set; }
     public DateTime? DateSuppressionUtc { get; private set; }
 
@@ -62,18 +73,40 @@ public sealed class DechetFonderie
         string? creeParNom,
         DateTime dateCreationUtc,
         Guid? id = null)
-    {
-        return new DechetFonderie(
+        => Creer(
+            dateDeclaration,
+            typeMatiereId,
+            typeDechet,
+            OrigineDechet.Fonderie,
+            poidsKg,
+            observation,
+            creeParUtilisateurId,
+            creeParNom,
+            dateCreationUtc,
+            id);
+
+    public static DechetFonderie Creer(
+        DateOnly dateDeclaration,
+        Guid typeMatiereId,
+        TypeDechet typeDechet,
+        OrigineDechet origine,
+        decimal poidsKg,
+        string? observation,
+        Guid? creeParUtilisateurId,
+        string? creeParNom,
+        DateTime dateCreationUtc,
+        Guid? id = null)
+        => new(
             id ?? Guid.NewGuid(),
             dateDeclaration,
             typeMatiereId,
             typeDechet,
+            origine,
             poidsKg,
             observation,
             creeParUtilisateurId,
             creeParNom,
             dateCreationUtc);
-    }
 
     public void Modifier(
         DateOnly dateDeclaration,
@@ -82,23 +115,58 @@ public sealed class DechetFonderie
         decimal poidsKg,
         string? observation,
         DateTime dateModificationUtc)
+        => Modifier(
+            dateDeclaration,
+            typeMatiereId,
+            typeDechet,
+            Origine,
+            poidsKg,
+            observation,
+            dateModificationUtc);
+
+    public void Modifier(
+        DateOnly dateDeclaration,
+        Guid typeMatiereId,
+        TypeDechet typeDechet,
+        OrigineDechet origine,
+        decimal poidsKg,
+        string? observation,
+        DateTime dateModificationUtc)
     {
-        if (Statut == StatutDechet.Annule)
+        if (Statut != StatutDechet.Brouillon)
         {
-            throw new DomainValidationException("Un déchet annulé ne peut pas être modifié.");
+            throw new DomainValidationException("Seul un dechet Brouillon peut etre modifie.");
         }
 
-        Valider(typeMatiereId, poidsKg, observation);
+        ValiderDonnees(typeMatiereId, poidsKg, observation);
         DateDeclaration = dateDeclaration;
         SemaineIso = CalculerSemaineIso(dateDeclaration);
         TypeMatiereId = typeMatiereId;
         TypeDechet = typeDechet;
+        Origine = origine;
         PoidsKg = poidsKg;
-        Observation = NormaliserObservation(observation);
+        Observation = NormaliserTexte(observation);
         DateModificationUtc = dateModificationUtc;
     }
 
+    public void Valider(Guid? utilisateurId, string? utilisateurNom, DateTime dateValidationUtc)
+    {
+        if (Statut != StatutDechet.Brouillon)
+        {
+            throw new DomainValidationException("Seul un dechet Brouillon peut etre valide.");
+        }
+
+        Statut = StatutDechet.Valide;
+        ValideParUtilisateurId = utilisateurId;
+        ValideParNom = NormaliserTexte(utilisateurNom);
+        ValideLeUtc = dateValidationUtc;
+        DateModificationUtc = dateValidationUtc;
+    }
+
     public void Annuler(DateTime dateModificationUtc)
+        => Annuler(null, null, dateModificationUtc);
+
+    public void Annuler(Guid? utilisateurId, string? utilisateurNom, DateTime dateModificationUtc)
     {
         if (Statut == StatutDechet.Annule)
         {
@@ -106,54 +174,42 @@ public sealed class DechetFonderie
         }
 
         Statut = StatutDechet.Annule;
+        AnnuleParUtilisateurId = utilisateurId;
+        AnnuleParNom = NormaliserTexte(utilisateurNom);
+        AnnuleLeUtc = dateModificationUtc;
         DateModificationUtc = dateModificationUtc;
     }
 
+    [Obsolete("Utiliser Annuler : les dechets restent dans l'historique.")]
     public void SupprimerLogiquement(DateTime dateSuppressionUtc)
     {
-        if (EstSupprime)
-        {
-            return;
-        }
-
-        EstSupprime = true;
-        Statut = StatutDechet.Annule;
-        DateSuppressionUtc = dateSuppressionUtc;
-        DateModificationUtc = dateSuppressionUtc;
+        Annuler(dateSuppressionUtc);
     }
 
     public static int CalculerSemaineIso(DateOnly date)
-    {
-        return ISOWeek.GetWeekOfYear(date.ToDateTime(TimeOnly.MinValue));
-    }
+        => ISOWeek.GetWeekOfYear(date.ToDateTime(TimeOnly.MinValue));
 
-    private static void Valider(Guid typeMatiereId, decimal poidsKg, string? observation)
+    private static void ValiderDonnees(Guid typeMatiereId, decimal poidsKg, string? observation)
     {
         if (typeMatiereId == Guid.Empty)
         {
-            throw new DomainValidationException("Le type matière est obligatoire.");
+            throw new DomainValidationException("Le type matiere est obligatoire.");
         }
 
         if (poidsKg <= 0)
         {
-            throw new DomainValidationException("Le poids doit être strictement supérieur à zéro.");
+            throw new DomainValidationException("Le poids doit etre strictement superieur a zero.");
         }
 
         if (observation?.Trim().Length > 500)
         {
-            throw new DomainValidationException("L’observation ne peut pas dépasser 500 caractères.");
+            throw new DomainValidationException("L'observation ne peut pas depasser 500 caracteres.");
         }
     }
 
-    private static string? NormaliserObservation(string? observation)
+    private static string? NormaliserTexte(string? value)
     {
-        var normalized = observation?.Trim();
-        return string.IsNullOrEmpty(normalized) ? null : normalized;
-    }
-
-    private static string? NormaliserNomUtilisateur(string? userName)
-    {
-        var normalized = userName?.Trim();
+        var normalized = value?.Trim();
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 }

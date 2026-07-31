@@ -55,8 +55,28 @@ describe('Bilan Usinage 2 — écran dédié au bilan en pièces', () => {
     expect(bilanUsinageSection).toContain('Réception U2 - Rebut U2 - Entrée OF');
   });
 
-  it('ne rend qu une seule table pour le Bilan U2', () => {
-    expect(bilanUsinageSection.match(/<table/g)).toHaveLength(1);
+  // L'onglet porte desormais DEUX tableaux : la saisie/historique des Rebuts U2, dont la
+  // quantite en pieces alimente le terme « Rebut U2 », puis le Bilan U2 lui-meme.
+  it('rend la saisie des rebuts U2 puis le tableau du Bilan U2', () => {
+    expect(bilanUsinageSection.match(/<table/g)).toHaveLength(2);
+    expect(bilanUsinageSection.indexOf('Déclarer un rebut Usinage 2'))
+      .toBeLessThan(bilanUsinageSection.indexOf('Réception U2 - Rebut U2 - Entrée OF'));
+  });
+
+  it('saisit le rebut U2 en pieces et non en kilogrammes', () => {
+    expect(bilanUsinageSection).toContain('Quantité rebutée (pièces)');
+    expect(bilanUsinageSection).toContain('quantiteRebutPieces');
+    expect(bilanUsinageSection).not.toContain('quantiteRebutKg');
+  });
+
+  it('annonce que seuls les rebuts valides alimentent le bilan', () => {
+    expect(bilanUsinageSection).toContain('validés');
+    expect(bilanUsinageSection).toContain('Bilan U2');
+  });
+
+  it('ne recalcule pas le bilan dans la vue apres une action sur un rebut', () => {
+    // Le total doit venir du backend : la vue recharge, elle ne soustrait pas.
+    expect(bilanUsinageSection).not.toMatch(/totalRebutUsinage2Pieces\s*[-+]/);
   });
 
   it('affiche les six KPI attendus', () => {

@@ -15,13 +15,51 @@ public sealed class BilansUsinage2Controller(IBilanUsinage2Service service) : Co
         => Ok(await service.GetAsync(DateTime.UtcNow.ToString("yyyy-MM"), cancellationToken));
 
     [HttpGet("{periode}")]
-    public async Task<IActionResult> Get(string periode, CancellationToken cancellationToken)
-        => Ok(await service.GetAsync(periode, cancellationToken));
+    public async Task<IActionResult> Get(
+        string periode,
+        [FromQuery] string? numeroOF,
+        [FromQuery] string? codeArticle,
+        [FromQuery] string? codeTypeMatiere,
+        [FromQuery] string? statut,
+        [FromQuery] bool? avecAnomalies,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+        => Ok(await service.QueryAsync(
+            new GetBilanUsinage2Query(
+                periode,
+                numeroOF,
+                codeArticle,
+                codeTypeMatiere,
+                statut,
+                avecAnomalies,
+                page,
+                pageSize),
+            cancellationToken));
 
     [HttpGet("{periode}/details")]
-    public async Task<IActionResult> GetDetails(string periode, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDetails(
+        string periode,
+        [FromQuery] string? numeroOF,
+        [FromQuery] string? codeArticle,
+        [FromQuery] string? codeTypeMatiere,
+        [FromQuery] string? statut,
+        [FromQuery] bool? avecAnomalies,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
-        var bilan = await service.GetAsync(periode, cancellationToken);
+        var bilan = await service.QueryAsync(
+            new GetBilanUsinage2Query(
+                periode,
+                numeroOF,
+                codeArticle,
+                codeTypeMatiere,
+                statut,
+                avecAnomalies,
+                page,
+                pageSize),
+            cancellationToken);
         return Ok(bilan.Lignes);
     }
 

@@ -35,11 +35,11 @@ public sealed class RapportMachineTests
     }
 
     [Fact]
-    public void QuantiteCTRL_EtQuantiteRebut_SontConservees()
+    public void QuantiteTotale_EtQuantiteRebut_SontConservees()
     {
         var rapport = X3RapportMachine.Creer(new DateOnly(2026, 1, 5), "SCI03", OrigineProcessus.Sci, "30", "ART1", "DES", "OF1", "E1", 339m, 7m, "1", "X3", Guid.NewGuid(), DateTime.UtcNow);
 
-        Assert.Equal(339m, rapport.QuantiteCTRL);
+        Assert.Equal(339m, rapport.QuantiteTotale);
         Assert.Equal(7m, rapport.QuantiteRebut);
         Assert.Equal(OrigineProcessus.Sci, rapport.OrigineProcessus);
     }

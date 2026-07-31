@@ -7,6 +7,27 @@ namespace BilanMatiereUAP2.Infrastructure.Persistence.Repositories;
 public sealed class SortieMpMaterialRepository(BilanMatiereUAP2DbContext dbContext)
     : ISortieMpMaterialRepository
 {
+    public async Task<IReadOnlyList<SortieMpMaterialLink>> GetAllByPeriodeAsync(
+        int annee,
+        int mois,
+        CancellationToken cancellationToken = default)
+    {
+        var debut = new DateOnly(annee, mois, 1);
+        var fin = debut.AddMonths(1);
+        return await dbContext.ConsommationsComposants
+            .AsNoTracking()
+            .Where(consommation =>
+                consommation.Statut == StatutRapprochementX3.Rapproche &&
+                consommation.DateImputation >= debut &&
+                consommation.DateImputation < fin)
+            .Select(consommation => new SortieMpMaterialLink(
+                consommation.NumeroOF,
+                consommation.ArticlePrincipal,
+                consommation.CodeTypeMatiere))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SortieMpMaterialLink>> GetByPeriodeAsync(
         int annee,
         int mois,

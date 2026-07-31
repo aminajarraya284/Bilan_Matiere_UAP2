@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BilanMatiereUAP2.Infrastructure.Persistence.Repositories;
 
-public sealed class ManufacturingReferencesRepository : IManufacturingReferencesRepository
+public sealed class ManufacturingReferencesRepository : IManufacturingReferencesRepository, IOfContextReferencesRepository
 {
     private readonly BilanMatiereUAP2DbContext _dbContext;
 
@@ -59,6 +59,33 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
             .OrderBy(n => n.Niveau)
             .ThenBy(n => n.Sequence)
             .ToListAsync(cancellationToken);
+
+    public Task<IReadOnlyList<RefGammeFabrication>> GetGammesActivesByArticleAsync(
+        string codeArticle,
+        CancellationToken cancellationToken = default)
+        => GetGammesActivesByArticleAsync(codeArticle, null, cancellationToken);
+
+    public async Task<IReadOnlyList<RefGammeFabrication>> GetGammesActivesByArticlesAsync(
+        IReadOnlyCollection<string> codesArticle,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<RefGammeFabrication>();
+        var normalizedCodes = codesArticle
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var chunk in normalizedCodes.Chunk(1000))
+        {
+            result.AddRange(await _dbContext.RefGammesFabrication
+                .AsNoTracking()
+                .Where(gamme => gamme.IsActive && chunk.Contains(gamme.CodeArticle))
+                .ToListAsync(cancellationToken));
+        }
+
+        return result;
+    }
 
     // Chargement suivi par lot (tracked) : les entites retournees sont attachees au contexte,
     // de sorte que les appels a MettreAJour sont bien persistes lors du SaveChanges.
@@ -216,6 +243,82 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
         var total = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(r => r.CodeArticleParent).ThenBy(r => r.CodeComposant).ThenBy(r => r.Niveau).ThenBy(r => r.Sequence)
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return new PagedResult<RefNomenclature>(items, total);
+    }
+
+    public async Task<PagedResult<RefGammeFabrication>> SearchGammesPagedAsync(
+        GammeReferencesFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.RefGammesFabrication.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(filter.Recherche))
+        {
+            query = query.Where(row =>
+                row.CodeArticle.Contains(filter.Recherche) ||
+                (row.DesignationArticle != null && row.DesignationArticle.Contains(filter.Recherche)) ||
+                row.CodePoste.Contains(filter.Recherche) ||
+                (row.DesignationOperation != null && row.DesignationOperation.Contains(filter.Recherche)));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.CodeArticle)) query = query.Where(row => row.CodeArticle.Contains(filter.CodeArticle));
+        if (!string.IsNullOrWhiteSpace(filter.Designation)) query = query.Where(row => row.DesignationArticle != null && row.DesignationArticle.Contains(filter.Designation));
+        if (filter.ValideLe is not null)
+        {
+            var sentinel = new DateOnly(1900, 1, 1);
+            query = query.Where(row => row.DateFinValidite == null || row.DateFinValidite < sentinel || row.DateFinValidite >= filter.ValideLe);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Alternative)) query = query.Where(row => row.AlternativeGamme == filter.Alternative);
+        if (!string.IsNullOrWhiteSpace(filter.NumeroOperation)) query = query.Where(row => row.NumeroOperation == filter.NumeroOperation);
+        if (!string.IsNullOrWhiteSpace(filter.Atelier)) query = query.Where(row => row.CodeAtelier == filter.Atelier);
+        if (!string.IsNullOrWhiteSpace(filter.Poste)) query = query.Where(row => row.CodePoste.Contains(filter.Poste));
+        if (!string.IsNullOrWhiteSpace(filter.Groupe)) query = query.Where(row => row.GroupePosteCharge != null && row.GroupePosteCharge.Contains(filter.Groupe));
+        if (!string.IsNullOrWhiteSpace(filter.Unite)) query = query.Where(row => row.UniteOperation == filter.Unite);
+        if (!string.IsNullOrWhiteSpace(filter.Source)) query = query.Where(row => row.SourceSystem == filter.Source);
+        if (filter.LotImport is not null) query = query.Where(row => row.ImportBatchId == filter.LotImport);
+        if (filter.Actif is not null) query = query.Where(row => row.IsActive == filter.Actif);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(row => row.CodeArticle)
+            .ThenBy(row => row.NumeroOperation)
+            .ThenBy(row => row.CodeAtelier)
+            .ThenBy(row => row.CodePoste)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync(cancellationToken);
+        return new PagedResult<RefGammeFabrication>(items, total);
+    }
+
+    public async Task<PagedResult<RefNomenclature>> SearchNomenclaturesPagedAsync(
+        NomenclatureReferencesFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.RefNomenclatures.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(filter.Recherche))
+        {
+            query = query.Where(row =>
+                row.CodeArticleParent.Contains(filter.Recherche) ||
+                row.CodeComposant.Contains(filter.Recherche) ||
+                (row.DesignationComposant != null && row.DesignationComposant.Contains(filter.Recherche)));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.CodeArticleParent)) query = query.Where(row => row.CodeArticleParent.Contains(filter.CodeArticleParent));
+        if (!string.IsNullOrWhiteSpace(filter.CodeComposant)) query = query.Where(row => row.CodeComposant.Contains(filter.CodeComposant));
+        if (!string.IsNullOrWhiteSpace(filter.Designation)) query = query.Where(row => row.DesignationComposant != null && row.DesignationComposant.Contains(filter.Designation));
+        if (!string.IsNullOrWhiteSpace(filter.Alternative)) query = query.Where(row => row.AlternativeNomenclature == filter.Alternative);
+        if (!string.IsNullOrWhiteSpace(filter.Niveau)) query = query.Where(row => row.Niveau == filter.Niveau);
+        if (!string.IsNullOrWhiteSpace(filter.Unite)) query = query.Where(row => row.UniteQuantite == filter.Unite);
+        if (!string.IsNullOrWhiteSpace(filter.Source)) query = query.Where(row => row.SourceSystem == filter.Source);
+        if (filter.LotImport is not null) query = query.Where(row => row.ImportBatchId == filter.LotImport);
+        if (filter.Actif is not null) query = query.Where(row => row.IsActive == filter.Actif);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(row => row.CodeArticleParent)
+            .ThenBy(row => row.CodeComposant)
+            .ThenBy(row => row.Niveau)
+            .ThenBy(row => row.Sequence)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync(cancellationToken);
         return new PagedResult<RefNomenclature>(items, total);
     }
 

@@ -56,11 +56,11 @@ public sealed class X3ImportService(
     IDateTimeProvider dateTimeProvider,
     IValidator<ImportSortiesMatiereX3Command> importValidator,
     IOptions<ImportX3Options> importOptions,
-    IImportArchiveService archiveService) : IX3ImportService
+    IImportArchiveService archiveService,
+    IImportHashCalculator hashCalculator,
+    ITypeMatiereRepository typeMatiereRepository) : IX3ImportService
 {
     // Regles de rapprochement externalisees en configuration (section "ImportX3").
-    private readonly HashSet<string> _typesMatiereAutorises =
-        new(importOptions.Value.TypesMatiereAutorises, StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _unitesConservees =
         new(importOptions.Value.UnitesConservees, StringComparer.OrdinalIgnoreCase);
 
@@ -71,9 +71,14 @@ public sealed class X3ImportService(
         await importValidator.ValidateAndThrowAsync(command, cancellationToken);
         var encoursFile = command.EncoursProductFile!;
         var mouvementsFile = command.MouvementsStockFile!;
-        var encoursHash = X3ImportParsing.CalculerSha256(encoursFile.Content);
-        var mouvementsHash = X3ImportParsing.CalculerSha256(mouvementsFile.Content);
-        var pairHash = X3ImportParsing.CalculerHashCouple(encoursHash, mouvementsHash);
+        var encoursHash = hashCalculator.CalculateSha256(encoursFile.Content);
+        var mouvementsHash = hashCalculator.CalculateSha256(mouvementsFile.Content);
+        var pairHash = hashCalculator.CalculateCoupleHash(encoursHash, mouvementsHash);
+        var typesMatiereAutorises = new HashSet<string>(
+            (await typeMatiereRepository.GetAllAsync(true, cancellationToken))
+                .Select(type => X3ImportParsing.NormaliserCode(type.Code))
+                .Where(code => !string.IsNullOrWhiteSpace(code)),
+            StringComparer.OrdinalIgnoreCase);
 
         // Check for existing successful batch with the same pair hash (idempotency)
         var existingBatch = await repository.GetCompletedBatchByPairHashAsync(pairHash, cancellationToken);
@@ -214,7 +219,7 @@ public sealed class X3ImportService(
             }
 
             var normalizedCode = X3ImportParsing.NormaliserCode(row.Code);
-            if (string.IsNullOrWhiteSpace(normalizedCode) || !EstTypeMatiereAutorise(normalizedCode))
+            if (string.IsNullOrWhiteSpace(normalizedCode) || !EstTypeMatiereAutorise(normalizedCode, typesMatiereAutorises))
             {
                 continue;
             }
@@ -447,10 +452,10 @@ public sealed class X3ImportService(
         return !string.IsNullOrEmpty(normalized) && _unitesConservees.Contains(normalized);
     }
 
-    private bool EstTypeMatiereAutorise(string? code)
+    private static bool EstTypeMatiereAutorise(string? code, ISet<string> typesMatiereAutorises)
     {
         var normalized = X3ImportParsing.NormaliserCode(code);
-        return !string.IsNullOrEmpty(normalized) && _typesMatiereAutorises.Contains(normalized);
+        return !string.IsNullOrEmpty(normalized) && typesMatiereAutorises.Contains(normalized);
     }
 
     private static ImportX3Response ToImportResponse(
