@@ -9,9 +9,11 @@ using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
 using BilanMatiereUAP2.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 const string frontendCorsPolicy = "Frontend";
@@ -43,15 +45,14 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
 
 // Garde de securite : DevelopmentAuthenticationHandler (header X-Development-Role) ne doit
-// jamais etre enregistre ni actif en dehors de Development. Tant qu'aucune authentification
-// de production (JWT/OIDC Entra ID) n'est branchee, le demarrage echoue explicitement dans
-// tout autre environnement plutot que de tourner silencieusement sans authentification reelle.
-// TODO_METIER: brancher ici l'authentification JWT/OIDC Entra ID SOPAL (Authority/Audience)
-// une fois la configuration tenant fournie ; ce garde-fou devra alors accepter ce schema
-// en plus du mode Development, sans jamais reintroduire DevelopmentAuthenticationHandler hors Dev.
+// jamais etre enregistre ni actif en dehors de Development. Hors Development, seule
+// l'authentification JWT/OIDC Entra ID est acceptee ; si elle n'est pas configuree, le
+// demarrage echoue explicitement plutot que de tourner sans authentification reelle.
 var isDevelopmentAuthAllowed = builder.Environment.IsDevelopment()
     && builder.Configuration.GetValue<bool>("Authentication:DevelopmentMode");
-var jwtAuthorityConfigured = !string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Jwt:Authority"]);
+var jwtOptions = builder.Configuration
+    .GetSection(EntraIdAuthenticationOptions.SectionName)
+    .Get<EntraIdAuthenticationOptions>() ?? new EntraIdAuthenticationOptions();
 
 if (isDevelopmentAuthAllowed)
 {
@@ -71,20 +72,50 @@ if (isDevelopmentAuthAllowed)
             DevelopmentAuthenticationHandler.SchemeName,
             _ => { });
 }
-else if (!jwtAuthorityConfigured)
+else if (!jwtOptions.EstConfigure)
 {
     throw new InvalidOperationException(
         $"Authentification de production non configuree pour l'environnement '{builder.Environment.EnvironmentName}'. " +
         "DevelopmentAuthenticationHandler (header X-Development-Role) est reserve a Development avec Authentication:DevelopmentMode=true. " +
-        "Configurez Authentication:Jwt:Authority (JWT/OIDC Entra ID) avant de demarrer l'application hors Development. " +
-        "Voir TODO_METIER Entra ID dans Program.cs.");
+        $"Renseignez {EntraIdAuthenticationOptions.SectionName}:Authority ET " +
+        $"{EntraIdAuthenticationOptions.SectionName}:Audience (Entra ID) avant de demarrer hors Development. " +
+        "Voir docs/AuthentificationEntraId.md.");
 }
 else
 {
-    // TODO_METIER: implementation JWT/OIDC Entra ID en attente de la configuration tenant SOPAL.
-    throw new InvalidOperationException(
-        "Authentication:Jwt:Authority est configure mais l'authentification JWT/OIDC n'est pas encore implementee " +
-        "(TODO_METIER Entra ID). Ne pas demarrer en production sans authentification reelle.");
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = jwtOptions.Authority;
+            options.Audience = jwtOptions.Audience;
+            // Un jeton non signe ou d'un autre emetteur ne doit jamais etre accepte.
+            options.RequireHttpsMetadata = true;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                // Entra ID publie les app roles dans la revendication « roles ».
+                RoleClaimType = jwtOptions.RoleClaimType,
+                NameClaimType = jwtOptions.NameClaimType,
+                ClockSkew = TimeSpan.FromMinutes(2)
+            };
+            if (jwtOptions.ValidIssuers.Length > 0)
+            {
+                options.TokenValidationParameters.ValidIssuers = jwtOptions.ValidIssuers;
+            }
+        });
+
+    // Les app roles Entra ID ne portent pas forcement les memes libelles que les roles
+    // applicatifs. La correspondance est configurable, sans quoi le nom du role Entra
+    // est utilise tel quel.
+    if (jwtOptions.CorrespondanceRoles.Count > 0)
+    {
+        builder.Services.AddSingleton<IClaimsTransformation>(
+            new EntraIdRoleMappingTransformation(jwtOptions.CorrespondanceRoles, jwtOptions.RoleClaimType));
+    }
 }
 builder.Services.AddAuthorization(options =>
 {
@@ -108,6 +139,10 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableUsinage2"));
     options.AddPolicy(AuthorizationPolicies.ManageReceptionsUsinage2, policy =>
         policy.RequireRole("Admin", "ResponsableUsinage2"));
+    options.AddPolicy(AuthorizationPolicies.ReadInventairesFonderie, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie"));
+    options.AddPolicy(AuthorizationPolicies.ManageInventairesFonderie, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie"));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
