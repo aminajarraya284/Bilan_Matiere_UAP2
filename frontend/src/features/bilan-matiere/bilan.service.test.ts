@@ -68,6 +68,108 @@ describe('bilanService - Bilan Usinage 2 réel', () => {
   });
 });
 
+describe('bilanService - Bilan Fonderie réel', () => {
+  const ligneApi = {
+    typeMatiereId: '30000000-0000-0000-0000-000000000001',
+    codeTypeMatiere: 'M3000L0',
+    periode: '2026-07',
+    stockDebutKg: null,
+    sortiesMagasinX3Kg: 40,
+    inputKg: null,
+    stockFinKg: 90,
+    dechetsFonderieKg: 12,
+    receptionsUsinage2Kg: 25,
+    outputKg: 127,
+    ecartKg: null,
+    tauxEcartPourcent: null,
+    anomalies: ['STOCK_DEBUT_INDISPONIBLE'],
+    statut: 'Incomplet'
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('VITE_BILAN_FONDERIE_SOURCE', 'api');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('appelle la route versionnée par période', async () => {
+    mocks.apiGet.mockResolvedValue({ data: { periode: '2026-07', lignes: [ligneApi] } });
+
+    await bilanService.getBilansFonderie('2026-07');
+
+    expect(mocks.apiGet).toHaveBeenCalledWith('/v1/bilans/fonderie/2026-07');
+    expect(mocks.calculateBilanFonderie).not.toHaveBeenCalled();
+  });
+
+  // RM-COM-003 : une composante inconnue reste inconnue jusqu'a l'ecran.
+  it('conserve les composantes inconnues sans les ramener à zéro', async () => {
+    mocks.apiGet.mockResolvedValue({ data: { periode: '2026-07', lignes: [ligneApi] } });
+
+    const [report] = await bilanService.getBilansFonderie('2026-07');
+
+    expect(report.encoursDebut).toBeNull();
+    expect(report.inputTotal).toBeNull();
+    expect(report.ecartKg).toBeNull();
+    expect(report.encoursFinReel).toBe(90);
+    expect(report.anomalies).toContain('STOCK_DEBUT_INDISPONIBLE');
+    expect(report.statut).toBe('AvecEcart');
+  });
+
+  it('filtre par type matière sans endpoint de calcul dédié', async () => {
+    mocks.apiGet.mockResolvedValue({
+      data: { periode: '2026-07', lignes: [ligneApi, { ...ligneApi, codeTypeMatiere: 'M3010L0' }] }
+    });
+
+    const resultats = await bilanService.calculerBilanFonderie('2026-07', 'M3010L0');
+
+    expect(resultats).toHaveLength(1);
+    expect(resultats[0].typeMatiere).toBe('M3010L0');
+    expect(mocks.apiPost).not.toHaveBeenCalled();
+  });
+
+  it("propage l'erreur API sans repli sur les données de démonstration", async () => {
+    const apiError = new Error('API indisponible');
+    mocks.apiGet.mockRejectedValue(apiError);
+
+    await expect(bilanService.getBilansFonderie('2026-07')).rejects.toBe(apiError);
+    expect(mocks.calculateBilanFonderie).not.toHaveBeenCalled();
+  });
+});
+
+describe('bilanService - Bilan UAP2 réel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('VITE_BILAN_UAP2_SOURCE', 'api');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('appelle la route versionnée et renvoie le contrat en pièces', async () => {
+    const response = {
+      periode: '2026-07',
+      lignes: [{ numeroOF: 'OF1', ecartUap2Pieces: 15, tauxEcartPourcent: 1.5, sortieMpKg: 241.25 }],
+      totalEcartUap2Pieces: 15,
+      seuilEcartPourcent: 1.5
+    };
+    mocks.apiGet.mockResolvedValue({ data: response });
+
+    await expect(bilanService.getBilanUap2Reel('2026-07')).resolves.toEqual(response);
+    expect(mocks.apiGet).toHaveBeenCalledWith('/v1/bilans/uap2/2026-07');
+  });
+
+  // L'ancien contrat est tout en kg et porte un terme « entrées semi-finies » qui
+  // n'existe pas dans la règle réelle : il ne peut pas être alimenté par l'API.
+  it("refuse d'alimenter l'ancien contrat depuis l'API plutôt que de convertir à tort", async () => {
+    await expect(bilanService.getBilansUap2('2026-07')).rejects.toThrow('getBilanUap2Reel');
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+  });
+});
+
 describe('bilanService - bilans de démonstration', () => {
   beforeEach(() => {
     vi.clearAllMocks();

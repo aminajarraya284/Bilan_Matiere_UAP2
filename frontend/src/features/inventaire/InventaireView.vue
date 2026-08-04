@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
-import { Plus, Trash2, Layers, Calculator, Flame } from 'lucide-vue-next';
+import { Plus, Ban, Layers, Calculator, Flame } from 'lucide-vue-next';
 import { inventaireService } from './inventaire.service';
 import {
   InventaireConteneur,
   InventaireCategorie,
   InventaireFour,
-  InventaireTotalParMatiere
+  InventaireTotalParMatiere,
+  InventaireTypeMatiere
 } from './inventaire.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
@@ -25,74 +26,98 @@ const conteneurs = ref<InventaireConteneur[]>([]);
 const categories = ref<InventaireCategorie[]>([]);
 const fours = ref<InventaireFour[]>([]);
 const totaux = ref<InventaireTotalParMatiere[]>([]);
+const typesMatiere = ref<InventaireTypeMatiere[]>([]);
 const isLoading = ref(true);
+const loadError = ref('');
 const canUseComments = computed(() => authStore.userRole === 'Admin');
+
+// L'API d'inventaire est portee par periode (AAAA-MM) : toute la page est cadree
+// sur cette valeur, y compris les creations.
+const periode = ref(BUSINESS_RULES.dateFinParDefaut.slice(0, 7));
 
 const formP1 = ref({
   dateInventaire: BUSINESS_RULES.dateFinParDefaut,
   numeroConteneur: '',
-  ofDestination: '',
-  codeTypeMatiere: 'M3010L0',
-  quantiteReelle: 0,
-  unite: 'KG' as const,
+  numeroOF: '',
+  typeMatiereId: '',
+  quantiteKg: 0,
   observation: ''
 });
 
 const formP2 = ref({
   categorie: 'REBUT',
-  codeTypeMatiere: 'M3010L0',
-  quantiteReelle: 0,
-  unite: 'KG' as const,
-  commentaire: ''
+  typeMatiereId: '',
+  quantiteKg: 0,
+  observation: ''
 });
 
 const formP3 = ref({
   dateInventaire: BUSINESS_RULES.dateFinParDefaut,
-  mois: Number(BUSINESS_RULES.dateFinParDefaut.split('-')[1]),
-  annee: Number(BUSINESS_RULES.dateFinParDefaut.split('-')[0]),
-  four: 'Four CBP 01' as InventaireFour['four'],
-  codeTypeMatiere: 'M3010L0',
-  quantite: 0,
-  unite: 'KG' as InventaireFour['unite'],
-  observation: '',
-  statut: 'Brouillon' as InventaireFour['statut']
+  four: 'Four CBP 01',
+  typeMatiereId: '',
+  quantiteKg: 0,
+  observation: ''
 });
 
 const categoriesList = ['REBUT', 'MP LINGOT'];
-const alloysList = ['M3010L0', 'M3000L0', 'M3060L0'];
-const foursList: InventaireFour['four'][] = ['Four CBP 01', 'Four CBP 02', 'Four CDQ', 'Autre'];
-const typeMatiereIds: Record<string, number> = {
-  M3010L0: 1,
-  M3000L0: 2,
-  M3060L0: 3
+const foursList = ['Four CBP 01', 'Four CBP 02', 'Four CDQ', 'Autre'];
+
+/** Aligne les listes deroulantes sur les types matiere actifs renvoyes par l'API. */
+const syncTypeMatiereSelections = () => {
+  const defaultId = typesMatiere.value[0]?.id ?? '';
+  const known = new Set(typesMatiere.value.map((type) => type.id));
+  for (const form of [formP1, formP2, formP3]) {
+    if (!known.has(form.value.typeMatiereId)) form.value.typeMatiereId = defaultId;
+  }
 };
 
 const loadAllData = async () => {
   isLoading.value = true;
+  loadError.value = '';
   try {
-    const [cRes, catRes, fourRes, tRes] = await Promise.all([
-      inventaireService.getConteneurs(),
-      inventaireService.getCategories(),
-      inventaireService.getFours(),
-      inventaireService.getTotauxConsolides()
-    ]);
-    conteneurs.value = cRes;
-    categories.value = catRes;
-    fours.value = fourRes;
-    totaux.value = tRes;
+    const data = await inventaireService.getPeriode(periode.value);
+    conteneurs.value = data.conteneurs;
+    categories.value = data.categories;
+    fours.value = data.fours;
+    totaux.value = data.totaux;
+    typesMatiere.value = data.typesMatiere;
+    syncTypeMatiereSelections();
   } catch (error) {
-    console.error('Failed to load inventory', error);
+    loadError.value = error instanceof Error ? error.message : "Chargement de l'inventaire impossible.";
+    conteneurs.value = [];
+    categories.value = [];
+    fours.value = [];
+    totaux.value = [];
   } finally {
     isLoading.value = false;
+  }
+};
+
+/** La date saisie doit rester dans la periode affichee : le backend la refuserait sinon. */
+const isDansPeriode = (date: string): boolean => date.startsWith(periode.value);
+
+const submitOrAlert = async (action: () => Promise<unknown>): Promise<void> => {
+  try {
+    await action();
+    await loadAllData();
+  } catch (error) {
+    await dialog.alert(error instanceof Error ? error.message : 'Enregistrement impossible.', {
+      title: 'Enregistrement refusé',
+      tone: 'danger'
+    });
   }
 };
 
 const totalGeneralRapport = computed(() => totaux.value.reduce((sum, item) => sum + item.totalInventaireRapport, 0));
 const totalGeneralBilan = computed(() => totaux.value.reduce((sum, item) => sum + item.totalUtiliseBilan, 0));
 const totalGeneralFour = computed(() => totaux.value.reduce((sum, item) => sum + item.totalPartie3, 0));
+const totalGeneralStockDebut = computed(() =>
+  totaux.value.reduce((sum, item) => sum + (item.stockDebutKg ?? 0), 0)
+);
+const totalGeneralStockFin = computed(() => totaux.value.reduce((sum, item) => sum + item.stockFinKg, 0));
 
 const handleAddP1 = async () => {
-  if (!formP1.value.dateInventaire || !formP1.value.numeroConteneur || !formP1.value.ofDestination.trim()) {
+  if (!formP1.value.dateInventaire || !formP1.value.numeroConteneur.trim() || !formP1.value.typeMatiereId) {
     await dialog.alert('Veuillez remplir correctement tous les champs obligatoires.', {
       title: 'Saisie incomplète',
       tone: 'warning'
@@ -100,29 +125,33 @@ const handleAddP1 = async () => {
     return;
   }
 
-  await inventaireService.createConteneur({
-    dateInventaire: formP1.value.dateInventaire,
-    mois: parseInt(formP1.value.dateInventaire.split('-')[1]),
-    annee: parseInt(formP1.value.dateInventaire.split('-')[0]),
-    numeroConteneur: formP1.value.numeroConteneur,
-    ofDestination: formP1.value.ofDestination.trim(),
-    codeArticle: '',
-    typeMatiereId: typeMatiereIds[formP1.value.codeTypeMatiere] || 0,
-    codeTypeMatiere: formP1.value.codeTypeMatiere,
-    quantiteReelle: formP1.value.quantiteReelle,
-    unite: formP1.value.unite,
-    observation: canUseComments.value ? formP1.value.observation || undefined : undefined
-  });
+  if (!isDansPeriode(formP1.value.dateInventaire)) {
+    await dialog.alert(`La date doit appartenir à la période ${periode.value}.`, {
+      title: 'Date hors période',
+      tone: 'warning'
+    });
+    return;
+  }
 
-  formP1.value.numeroConteneur = '';
-  formP1.value.ofDestination = '';
-  formP1.value.quantiteReelle = 0;
-  formP1.value.observation = '';
-  await loadAllData();
+  await submitOrAlert(async () => {
+    await inventaireService.createConteneur({
+      dateInventaire: formP1.value.dateInventaire,
+      numeroConteneur: formP1.value.numeroConteneur.trim(),
+      numeroOF: formP1.value.numeroOF.trim() || undefined,
+      typeMatiereId: formP1.value.typeMatiereId,
+      quantiteKg: Number(formP1.value.quantiteKg),
+      observation: canUseComments.value ? formP1.value.observation || undefined : undefined
+    });
+
+    formP1.value.numeroConteneur = '';
+    formP1.value.numeroOF = '';
+    formP1.value.quantiteKg = 0;
+    formP1.value.observation = '';
+  });
 };
 
 const handleAddP2 = async () => {
-  if (!formP2.value.categorie) {
+  if (!formP2.value.categorie || !formP2.value.typeMatiereId) {
     await dialog.alert('Veuillez remplir correctement tous les champs obligatoires.', {
       title: 'Saisie incomplète',
       tone: 'warning'
@@ -130,27 +159,22 @@ const handleAddP2 = async () => {
     return;
   }
 
-  await inventaireService.createCategorie({
-    mois: 6,
-    annee: 2026,
-    categorie: formP2.value.categorie,
-    categorieInventaire: 'CategorieBilan',
-    typeMatiereId: typeMatiereIds[formP2.value.codeTypeMatiere] || 0,
-    codeTypeMatiere: formP2.value.codeTypeMatiere,
-    quantiteReelle: formP2.value.quantiteReelle,
-    unite: formP2.value.unite,
-    commentaire: canUseComments.value ? formP2.value.commentaire || undefined : undefined,
-    inclusDansBilanFonderie: true,
-    visibleDansRapportInventaire: true
-  });
+  await submitOrAlert(async () => {
+    await inventaireService.createCategorie({
+      periode: periode.value,
+      categorie: formP2.value.categorie,
+      typeMatiereId: formP2.value.typeMatiereId,
+      quantiteKg: Number(formP2.value.quantiteKg),
+      observation: canUseComments.value ? formP2.value.observation || undefined : undefined
+    });
 
-  formP2.value.quantiteReelle = 0;
-  formP2.value.commentaire = '';
-  await loadAllData();
+    formP2.value.quantiteKg = 0;
+    formP2.value.observation = '';
+  });
 };
 
 const handleAddP3 = async () => {
-  if (!formP3.value.dateInventaire || !formP3.value.four) {
+  if (!formP3.value.dateInventaire || !formP3.value.four || !formP3.value.typeMatiereId) {
     await dialog.alert('Veuillez remplir correctement tous les champs obligatoires.', {
       title: 'Saisie incomplète',
       tone: 'warning'
@@ -158,76 +182,67 @@ const handleAddP3 = async () => {
     return;
   }
 
-  await inventaireService.createFour({
-    dateInventaire: formP3.value.dateInventaire,
-    mois: formP3.value.mois,
-    annee: formP3.value.annee,
-    four: formP3.value.four,
-    codeTypeMatiere: formP3.value.codeTypeMatiere,
-    quantite: formP3.value.quantite,
-    unite: formP3.value.unite,
-    observation: canUseComments.value ? formP3.value.observation || undefined : undefined,
-    statut: formP3.value.statut
+  if (!isDansPeriode(formP3.value.dateInventaire)) {
+    await dialog.alert(`La date doit appartenir à la période ${periode.value}.`, {
+      title: 'Date hors période',
+      tone: 'warning'
+    });
+    return;
+  }
+
+  await submitOrAlert(async () => {
+    await inventaireService.createFour({
+      dateInventaire: formP3.value.dateInventaire,
+      four: formP3.value.four,
+      typeMatiereId: formP3.value.typeMatiereId,
+      quantiteKg: Number(formP3.value.quantiteKg),
+      observation: canUseComments.value ? formP3.value.observation || undefined : undefined
+    });
+
+    formP3.value.quantiteKg = 0;
+    formP3.value.observation = '';
+  });
+};
+
+const handleValiderP1 = (id: string) => submitOrAlert(() => inventaireService.validerConteneur(id));
+const handleValiderP2 = (id: string) => submitOrAlert(() => inventaireService.validerCategorie(id));
+const handleValiderP3 = (id: string) => submitOrAlert(() => inventaireService.validerFour(id));
+
+/**
+ * L'API ne supprime pas : elle annule (RM-INV-006). Une ligne annulee sort du
+ * stock mais reste consultable, ce qui preserve la tracabilite de la saisie.
+ */
+const confirmerAnnulation = async (message: string): Promise<boolean> =>
+  dialog.confirm(message, {
+    title: 'Annuler la ligne',
+    tone: 'danger',
+    confirmLabel: 'Annuler la ligne'
   });
 
-  formP3.value.quantite = 0;
-  formP3.value.observation = '';
-  formP3.value.statut = 'Brouillon';
-  await loadAllData();
-};
-
-const handleValiderP1 = async (id: number) => {
-  await inventaireService.validerConteneur(id);
-  await loadAllData();
-};
-
-const handleDeleteP1 = async (id: number) => {
-  if (
-    await dialog.confirm('Voulez-vous supprimer cette ligne de conteneur ?', {
-      title: 'Supprimer la ligne',
-      tone: 'danger',
-      confirmLabel: 'Supprimer'
-    })
-  ) {
-    await inventaireService.deleteConteneur(id);
-    await loadAllData();
+const handleAnnulerP1 = async (id: string) => {
+  if (await confirmerAnnulation('Cette ligne sortira du stock mais restera consultable. Confirmer ?')) {
+    await submitOrAlert(() => inventaireService.annulerConteneur(id));
   }
 };
 
-const handleValiderP2 = async (id: number) => {
-  await inventaireService.validerCategorie(id);
-  await loadAllData();
-};
-
-const handleDeleteP2 = async (id: number) => {
-  if (
-    await dialog.confirm('Voulez-vous supprimer cette ligne par catégorie ?', {
-      title: 'Supprimer la ligne',
-      tone: 'danger',
-      confirmLabel: 'Supprimer'
-    })
-  ) {
-    await inventaireService.deleteCategorie(id);
-    await loadAllData();
+const handleAnnulerP2 = async (id: string) => {
+  if (await confirmerAnnulation('Cette ligne sortira du stock mais restera consultable. Confirmer ?')) {
+    await submitOrAlert(() => inventaireService.annulerCategorie(id));
   }
 };
 
-const handleValiderP3 = async (id: number) => {
-  await inventaireService.validerFour(id);
-  await loadAllData();
+const handleAnnulerP3 = async (id: string) => {
+  if (await confirmerAnnulation('Cette ligne sortira du stock mais restera consultable. Confirmer ?')) {
+    await submitOrAlert(() => inventaireService.annulerFour(id));
+  }
 };
 
-const handleDeleteP3 = async (id: number) => {
-  if (
-    await dialog.confirm('Voulez-vous supprimer cette ligne Four ?', {
-      title: 'Supprimer la ligne',
-      tone: 'danger',
-      confirmLabel: 'Supprimer'
-    })
-  ) {
-    await inventaireService.deleteFour(id);
-    await loadAllData();
-  }
+/** Le changement de periode recadre la page et les dates de saisie par defaut. */
+const handleChangePeriode = async () => {
+  const premierJour = `${periode.value}-01`;
+  formP1.value.dateInventaire = premierJour;
+  formP3.value.dateInventaire = premierJour;
+  await loadAllData();
 };
 
 onMounted(() => {
@@ -243,8 +258,32 @@ onMounted(() => {
     />
     <DataSourceBadge vertical="inventaire" />
 
+    <div
+      class="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex flex-wrap items-end gap-4"
+    >
+      <FormField id="periode" label="Période d'inventaire" required>
+        <input
+          v-model="periode"
+          @change="handleChangePeriode"
+          type="month"
+          class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold"
+          required
+        />
+      </FormField>
+      <p class="text-xs text-slate-500 pb-2">
+        Les saisies et les totaux affichés portent sur cette période.
+      </p>
+    </div>
+
     <div v-if="isLoading">
       <LoadingState />
+    </div>
+
+    <div
+      v-else-if="loadError"
+      class="bg-rose-50 border border-rose-100 rounded-xl p-4 text-xs font-semibold text-rose-700"
+    >
+      {{ loadError }}
     </div>
 
     <div v-else class="space-y-8">
@@ -277,26 +316,25 @@ onMounted(() => {
               required
             />
           </FormField>
-          <FormField id="p1-of" label="OF" required>
+          <FormField id="p1-of" label="OF">
             <input
-              v-model="formP1.ofDestination"
+              v-model="formP1.numeroOF"
               type="text"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
               placeholder="OF18100563"
-              required
             />
           </FormField>
           <FormField id="p1-mat" label="Type matière" required>
             <select
-              v-model="formP1.codeTypeMatiere"
+              v-model="formP1.typeMatiereId"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full cursor-pointer"
             >
-              <option v-for="mat in alloysList" :key="mat" :value="mat">{{ mat }}</option>
+              <option v-for="mat in typesMatiere" :key="mat.id" :value="mat.id">{{ mat.code }}</option>
             </select>
           </FormField>
           <FormField id="p1-qte" label="Poids réel (kg)" required>
             <input
-              v-model="formP1.quantiteReelle"
+              v-model="formP1.quantiteKg"
               type="number"
               min="0"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full font-mono"
@@ -332,8 +370,7 @@ onMounted(() => {
                 <th class="p-3">N° conteneur</th>
                 <th class="p-3">OF</th>
                 <th class="p-3">Type matière</th>
-                <th class="p-3 text-right">Quantité</th>
-                <th class="p-3">Unité</th>
+                <th class="p-3 text-right">Quantité (kg)</th>
                 <th v-if="canUseComments" class="p-3">Observation</th>
                 <th class="p-3">Statut</th>
                 <th class="p-3 text-right">Actions</th>
@@ -343,12 +380,11 @@ onMounted(() => {
               <tr v-for="item in conteneurs" :key="item.id">
                 <td class="p-3 font-mono text-[11px] text-slate-600">{{ item.dateInventaire }}</td>
                 <td class="p-3 font-bold text-slate-800 font-mono">{{ item.numeroConteneur }}</td>
-                <td class="p-3 font-mono text-slate-600">{{ item.ofDestination || '-' }}</td>
+                <td class="p-3 font-mono text-slate-600">{{ item.numeroOF || '-' }}</td>
                 <td class="p-3 font-mono font-bold text-blue-900">{{ item.codeTypeMatiere }}</td>
                 <td class="p-3 text-right font-black font-mono text-slate-800">
-                  {{ formatNumber(item.quantiteReelle, 0) }}
+                  {{ formatNumber(item.quantiteKg, 0) }}
                 </td>
-                <td class="p-3 font-bold font-mono text-slate-500 text-[10px]">{{ item.unite }}</td>
                 <td v-if="canUseComments" class="p-3 text-slate-400 text-[11px] font-semibold">
                   {{ item.observation || '-' }}
                 </td>
@@ -363,12 +399,19 @@ onMounted(() => {
                       Valider
                     </button>
                     <button
-                      @click="handleDeleteP1(item.id)"
+                      v-if="item.statut !== 'Annule'"
+                      @click="handleAnnulerP1(item.id)"
+                      title="Annuler la ligne"
                       class="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
-                      <Trash2 class="w-3.5 h-3.5" />
+                      <Ban class="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </td>
+              </tr>
+              <tr v-if="conteneurs.length === 0">
+                <td :colspan="canUseComments ? 8 : 7" class="p-4 text-center text-slate-400 font-semibold">
+                  Aucune ligne pour cette période.
                 </td>
               </tr>
             </tbody>
@@ -398,24 +441,24 @@ onMounted(() => {
           </FormField>
           <FormField id="p2-mat" label="Type matière" required>
             <select
-              v-model="formP2.codeTypeMatiere"
+              v-model="formP2.typeMatiereId"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full cursor-pointer"
             >
-              <option v-for="mat in alloysList" :key="mat" :value="mat">{{ mat }}</option>
+              <option v-for="mat in typesMatiere" :key="mat.id" :value="mat.id">{{ mat.code }}</option>
             </select>
           </FormField>
           <FormField id="p2-qte" label="Poids réel (kg)" required>
             <input
-              v-model="formP2.quantiteReelle"
+              v-model="formP2.quantiteKg"
               type="number"
               min="0"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full font-mono"
               required
             />
           </FormField>
-          <FormField v-if="canUseComments" id="p2-comment" label="Commentaire">
+          <FormField v-if="canUseComments" id="p2-comment" label="Observation">
             <input
-              v-model="formP2.commentaire"
+              v-model="formP2.observation"
               type="text"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
               placeholder="Note d'observation"
@@ -440,9 +483,8 @@ onMounted(() => {
               >
                 <th class="p-3">Catégorie</th>
                 <th class="p-3">Type matière</th>
-                <th class="p-3 text-right">Quantité réelle</th>
-                <th class="p-3">Unité</th>
-                <th v-if="canUseComments" class="p-3">Commentaire</th>
+                <th class="p-3 text-right">Quantité réelle (kg)</th>
+                <th v-if="canUseComments" class="p-3">Observation</th>
                 <th class="p-3">Statut</th>
                 <th class="p-3 text-right">Actions</th>
               </tr>
@@ -451,10 +493,9 @@ onMounted(() => {
               <tr v-for="item in categories" :key="item.id">
                 <td class="p-3 font-bold text-slate-800">{{ item.categorie }}</td>
                 <td class="p-3 font-mono font-bold text-blue-900">{{ item.codeTypeMatiere }}</td>
-                <td class="p-3 text-right font-bold font-mono">{{ formatNumber(item.quantiteReelle, 0) }}</td>
-                <td class="p-3 text-slate-400 font-bold font-mono">{{ item.unite }}</td>
+                <td class="p-3 text-right font-bold font-mono">{{ formatNumber(item.quantiteKg, 0) }}</td>
                 <td v-if="canUseComments" class="p-3 text-slate-500 text-[11px] font-semibold">
-                  {{ item.commentaire || '-' }}
+                  {{ item.observation || '-' }}
                 </td>
                 <td class="p-3"><BadgeStatus :status="item.statut" /></td>
                 <td class="p-3 text-right">
@@ -467,12 +508,19 @@ onMounted(() => {
                       Valider
                     </button>
                     <button
-                      @click="handleDeleteP2(item.id)"
+                      v-if="item.statut !== 'Annule'"
+                      @click="handleAnnulerP2(item.id)"
+                      title="Annuler la ligne"
                       class="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
-                      <Trash2 class="w-3.5 h-3.5" />
+                      <Ban class="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </td>
+              </tr>
+              <tr v-if="categories.length === 0">
+                <td :colspan="canUseComments ? 6 : 5" class="p-4 text-center text-slate-400 font-semibold">
+                  Aucune ligne pour cette période.
                 </td>
               </tr>
             </tbody>
@@ -498,25 +546,6 @@ onMounted(() => {
               required
             />
           </FormField>
-          <FormField id="p3-mois" label="Mois" required>
-            <input
-              v-model="formP3.mois"
-              type="number"
-              min="1"
-              max="12"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
-              required
-            />
-          </FormField>
-          <FormField id="p3-annee" label="Année" required>
-            <input
-              v-model="formP3.annee"
-              type="number"
-              min="2020"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full"
-              required
-            />
-          </FormField>
           <FormField id="p3-four" label="Four" required>
             <select
               v-model="formP3.four"
@@ -527,39 +556,20 @@ onMounted(() => {
           </FormField>
           <FormField id="p3-mat" label="Type matière" required>
             <select
-              v-model="formP3.codeTypeMatiere"
+              v-model="formP3.typeMatiereId"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full cursor-pointer"
             >
-              <option v-for="mat in alloysList" :key="mat" :value="mat">{{ mat }}</option>
+              <option v-for="mat in typesMatiere" :key="mat.id" :value="mat.id">{{ mat.code }}</option>
             </select>
           </FormField>
-          <FormField id="p3-qte" label="Quantité" required>
+          <FormField id="p3-qte" label="Quantité (kg)" required>
             <input
-              v-model="formP3.quantite"
+              v-model="formP3.quantiteKg"
               type="number"
               min="0"
               class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full font-mono"
               required
             />
-          </FormField>
-          <FormField id="p3-unite" label="Unité" required>
-            <select
-              v-model="formP3.unite"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full cursor-pointer"
-            >
-              <option value="KG">KG</option>
-              <option value="UN">UN</option>
-            </select>
-          </FormField>
-          <FormField id="p3-statut" label="Statut" required>
-            <select
-              v-model="formP3.statut"
-              class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold w-full cursor-pointer"
-            >
-              <option value="Brouillon">Brouillon</option>
-              <option value="Valide">Valide</option>
-              <option value="Annule">Annule</option>
-            </select>
           </FormField>
           <FormField v-if="canUseComments" id="p3-observation" label="Observation">
             <input
@@ -587,16 +597,11 @@ onMounted(() => {
                 class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider"
               >
                 <th class="p-3">Date inventaire</th>
-                <th class="p-3">Mois</th>
-                <th class="p-3">Année</th>
                 <th class="p-3">Four</th>
                 <th class="p-3">Type matière</th>
-                <th class="p-3 text-right">Quantité</th>
-                <th class="p-3">Unité</th>
+                <th class="p-3 text-right">Quantité (kg)</th>
                 <th class="p-3">Observation</th>
                 <th class="p-3">Statut</th>
-                <th class="p-3">Inclus bilan fonderie</th>
-                <th class="p-3">Visible rapport inventaire</th>
                 <th class="p-3">Badges</th>
                 <th class="p-3 text-right">Actions</th>
               </tr>
@@ -604,16 +609,11 @@ onMounted(() => {
             <tbody class="divide-y divide-slate-100 text-xs font-medium">
               <tr v-for="item in fours" :key="item.id">
                 <td class="p-3 font-mono text-[11px] text-slate-600">{{ item.dateInventaire }}</td>
-                <td class="p-3 font-mono">{{ item.mois }}</td>
-                <td class="p-3 font-mono">{{ item.annee }}</td>
                 <td class="p-3 font-bold text-slate-800">{{ item.four }}</td>
                 <td class="p-3 font-mono font-bold text-blue-900">{{ item.codeTypeMatiere }}</td>
-                <td class="p-3 text-right font-bold font-mono">{{ formatNumber(item.quantite, 0) }}</td>
-                <td class="p-3 font-mono text-slate-500">{{ item.unite }}</td>
+                <td class="p-3 text-right font-bold font-mono">{{ formatNumber(item.quantiteKg, 0) }}</td>
                 <td class="p-3 text-slate-500">{{ item.observation || '-' }}</td>
                 <td class="p-3"><BadgeStatus :status="item.statut" /></td>
-                <td class="p-3"><span class="text-rose-700 font-black">Non</span></td>
-                <td class="p-3"><span class="text-emerald-700 font-black">Oui</span></td>
                 <td class="p-3">
                   <div class="flex flex-wrap gap-1.5">
                     <span
@@ -636,12 +636,19 @@ onMounted(() => {
                       Valider
                     </button>
                     <button
-                      @click="handleDeleteP3(item.id)"
+                      v-if="item.statut !== 'Annule'"
+                      @click="handleAnnulerP3(item.id)"
+                      title="Annuler la ligne"
                       class="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
-                      <Trash2 class="w-3.5 h-3.5" />
+                      <Ban class="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </td>
+              </tr>
+              <tr v-if="fours.length === 0">
+                <td colspan="8" class="p-4 text-center text-slate-400 font-semibold">
+                  Aucune ligne pour cette période.
                 </td>
               </tr>
             </tbody>
@@ -670,17 +677,23 @@ onMounted(() => {
                 class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider"
               >
                 <th class="p-3">Type matière</th>
+                <th class="p-3 text-right">Stock début</th>
                 <th class="p-3 text-right">Partie 1</th>
                 <th class="p-3 text-right">Partie 2</th>
                 <th class="p-3 text-right text-[var(--color-attention-strong)]">Partie 3 Four</th>
                 <th class="p-3 text-right">Total rapport inventaire</th>
                 <th class="p-3 text-right text-blue-900">Total utilisé dans bilan matière</th>
-                <th class="p-3">Statut</th>
+                <th class="p-3 text-right">Stock fin</th>
+                <th class="p-3">Anomalies</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 text-xs font-medium">
               <tr v-for="tot in totaux" :key="tot.codeTypeMatiere">
                 <td class="p-3 font-bold text-slate-800 font-mono">{{ tot.codeTypeMatiere }}</td>
+                <td class="p-3 text-right font-semibold font-mono">
+                  <span v-if="tot.stockDebutKg !== null">{{ formatNumber(tot.stockDebutKg, 0) }} kg</span>
+                  <span v-else class="text-slate-400">—</span>
+                </td>
                 <td class="p-3 text-right font-semibold font-mono">{{ formatNumber(tot.totalPartie1, 0) }} kg</td>
                 <td class="p-3 text-right font-semibold font-mono">{{ formatNumber(tot.totalPartie2, 0) }} kg</td>
                 <td class="p-3 text-right font-semibold font-mono text-[var(--color-attention-strong)]">
@@ -692,10 +705,22 @@ onMounted(() => {
                 <td class="p-3 text-right font-black font-mono text-blue-900">
                   {{ formatNumber(tot.totalUtiliseBilan, 0) }} kg
                 </td>
-                <td class="p-3"><BadgeStatus :status="tot.statut" /></td>
+                <td class="p-3 text-right font-semibold font-mono">{{ formatNumber(tot.stockFinKg, 0) }} kg</td>
+                <td class="p-3">
+                  <div v-if="tot.anomalies.length" class="flex flex-wrap gap-1.5">
+                    <span
+                      v-for="anomalie in tot.anomalies"
+                      :key="anomalie"
+                      class="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-bold"
+                      >{{ anomalie }}</span
+                    >
+                  </div>
+                  <span v-else class="text-slate-400">—</span>
+                </td>
               </tr>
               <tr class="bg-slate-50/50 font-black">
                 <td class="p-3 uppercase text-slate-600">Total général</td>
+                <td class="p-3 text-right font-mono">{{ formatNumber(totalGeneralStockDebut, 0) }} kg</td>
                 <td class="p-3 text-right font-mono">
                   {{
                     formatNumber(
@@ -719,7 +744,8 @@ onMounted(() => {
                 </td>
                 <td class="p-3 text-right font-mono">{{ formatNumber(totalGeneralRapport, 0) }} kg</td>
                 <td class="p-3 text-right font-mono text-blue-900">{{ formatNumber(totalGeneralBilan, 0) }} kg</td>
-                <td class="p-3"><BadgeStatus status="Valide" /></td>
+                <td class="p-3 text-right font-mono">{{ formatNumber(totalGeneralStockFin, 0) }} kg</td>
+                <td class="p-3"></td>
               </tr>
             </tbody>
           </table>

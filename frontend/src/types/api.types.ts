@@ -145,24 +145,91 @@ export interface CalculateBilanRequest {
   dateFin?: IsoDateString;
 }
 
+/**
+ * Bilan Fonderie tel que consomme par les ecrans.
+ *
+ * Les composantes pouvant etre INCONNUES sont `number | null` : une donnee absente
+ * n'est jamais ramenee a zero (RM-COM-003). Un `null` se propage aux totaux qui en
+ * dependent, et la raison est listee dans `anomalies`.
+ * Le jeu de demonstration renseigne toutes les valeurs : il reste compatible.
+ */
 export interface BilanFonderieResponse {
   bilanKey: string;
   periode: string;
   typeMatiere: string;
+  encoursDebut: number | null;
+  sortiesX3: number | null;
+  inputTotal: number | null;
+  encoursFinReel: number | null;
+  dechetsFonderie: number;
+  receptionsUsinage2: number | null;
+  poidsNonReceptionne: number;
+  nombrePiecesNonReceptionnees: number;
+  outputTotal: number | null;
+  ecartKg: number | null;
+  tauxEcart: number | null;
+  statut: BilanStatus;
+  justification?: string;
+  dateCalcul: IsoDateString;
+  /** Codes d'anomalie renvoyes par l'API (vide en mode demonstration). */
+  anomalies?: string[];
+}
+
+/**
+ * Bilan Fonderie dont TOUTES les composantes sont connues.
+ *
+ * Le jeu de demonstration est complet par construction : les consommateurs qui ne
+ * lisent que lui (tableau de bord, export) gardent ainsi des nombres non-nullables,
+ * sans garde inutile. Seule la source API peut produire des composantes inconnues.
+ */
+export type BilanFonderieComplet = Omit<
+  BilanFonderieResponse,
+  | 'encoursDebut'
+  | 'sortiesX3'
+  | 'inputTotal'
+  | 'encoursFinReel'
+  | 'receptionsUsinage2'
+  | 'outputTotal'
+  | 'ecartKg'
+  | 'tauxEcart'
+> & {
   encoursDebut: number;
   sortiesX3: number;
   inputTotal: number;
   encoursFinReel: number;
-  dechetsFonderie: number;
   receptionsUsinage2: number;
-  poidsNonReceptionne: number;
-  nombrePiecesNonReceptionnees: number;
   outputTotal: number;
   ecartKg: number;
   tauxEcart: number;
-  statut: BilanStatus;
-  justification?: string;
-  dateCalcul: IsoDateString;
+};
+
+/** Contrat brut de `GET /v1/bilans/fonderie/{periode}`, avant adaptation a l'ecran. */
+export interface BilanFonderieApiLigne {
+  typeMatiereId: string;
+  codeTypeMatiere: string;
+  periode: string;
+  stockDebutKg: number | null;
+  sortiesMagasinX3Kg: number | null;
+  inputKg: number | null;
+  stockFinKg: number | null;
+  dechetsFonderieKg: number;
+  receptionsUsinage2Kg: number | null;
+  outputKg: number | null;
+  ecartKg: number | null;
+  tauxEcartPourcent: number | null;
+  anomalies: string[];
+  statut: string;
+}
+
+export interface BilanFonderieApiResponse {
+  periode: string;
+  lignes: BilanFonderieApiLigne[];
+  totalInputKg: number | null;
+  totalOutputKg: number | null;
+  totalEcartKg: number | null;
+  nombreLignes: number;
+  nombreLignesDonneesManquantes: number;
+  nombreAnomalies: number;
 }
 
 export interface BilanUsinage2Response {
@@ -274,6 +341,51 @@ export interface BilanUap2Response {
   statut: StatutControle | 'Cloture';
   observation?: string;
   dateCalcul: IsoDateString;
+}
+
+/**
+ * Contrat brut de `GET /v1/bilans/uap2/{periode}` (RM-UAP2-001 et RM-UAP2-002).
+ *
+ * ATTENTION AUX UNITES : l'ecart de la partie 2 est EN PIECES, pas en kilogrammes.
+ * Seule `sortieMpKg` est convertie, via le poids physique du Controle poids Fonderie.
+ * Le type de demonstration `BilanUap2Response` ci-dessus est l'ancien modele, tout en
+ * kg et avec un terme « entrees semi-finies » qui n'existe pas dans la regle reelle.
+ */
+export interface BilanUap2ApiLigne {
+  numeroOF: string;
+  codeArticle: string;
+  designationArticle: string | null;
+  codeTypeMatiere: string | null;
+  periode: string;
+  quantiteCtrlPieces: number;
+  rebutSciPieces: number;
+  rebutEmrPieces: number;
+  rebutTrnPieces: number;
+  quantiteSortieMpPieces: number;
+  poidsPhysiqueUnitaireKg: number | null;
+  sortieMpKg: number | null;
+  entreeOfPieces: number;
+  rebutUsinage2Pieces: number;
+  ecartUap2Pieces: number;
+  tauxEcartPourcent: number | null;
+  anomalies: string[];
+  statut: string;
+}
+
+export interface BilanUap2ApiResponse {
+  periode: string;
+  lignes: BilanUap2ApiLigne[];
+  totalQuantiteCtrlPieces: number;
+  totalEcartUap2Pieces: number;
+  totalSortieMpKg: number | null;
+  seuilEcartPourcent: number;
+  nombreLignes: number;
+  nombreLignesHorsSeuil: number;
+  nombreLignesDonneesManquantes: number;
+  nombreAnomalies: number;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface InventaireTotalsResponse {

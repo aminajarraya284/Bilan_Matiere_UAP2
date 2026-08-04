@@ -87,6 +87,7 @@ const usinageEmptyMessage = computed(() => {
 // UAP2 state
 const bilansUap2 = ref<BilanUap2ParOF[]>([]);
 const isLoadingUap2 = ref(true);
+const uap2Error = ref('');
 
 // Filters
 const filterMois = ref<string>(BUSINESS_RULES.periodeParDefaut);
@@ -96,8 +97,10 @@ const filterAlliage = ref<string>('TOUS');
 
 // Verification dialog (Usinage / UAP2)
 const showVerifyDialog = ref(false);
-const verifyTarget = ref<{ id: number; type: 'usinage' | 'uap2'; currentStatut: string; currentObs: string }>({
-  id: 0,
+// La cle d'un bilan est `bilanKey` (chaine « periode|type »), jamais un identifiant
+// numerique : aucun des contrats de bilan n'expose de champ `id`.
+const verifyTarget = ref<{ bilanKey: string; type: 'usinage' | 'uap2'; currentStatut: string; currentObs: string }>({
+  bilanKey: '',
   type: 'usinage',
   currentStatut: 'OK',
   currentObs: ''
@@ -146,7 +149,7 @@ const handleValiderAll = async () => {
   ) {
     try {
       const reportsToValidate = filteredReports.value.filter((r) => r.statut !== 'Valide' && r.statut !== 'Cloture');
-      await Promise.all(reportsToValidate.map((r) => bilanService.validerBilan(r.id)));
+      await Promise.all(reportsToValidate.map((r) => bilanService.validerBilan(r.bilanKey)));
       successMessage.value = 'Tous les bilans affichés ont été validés.';
       await loadBilans();
       setTimeout(() => (successMessage.value = ''), 4000);
@@ -169,38 +172,44 @@ const availableMatieres = computed(() => {
   return Array.from(new Set(reports.value.map((report) => report.typeMatiere))).sort();
 });
 
+/** Un ecart inconnu n'est pas un ecart acceptable : il ne doit pas s'afficher en neutre. */
+const depasseSeuilEcartKg = (valeur: number | null): boolean =>
+  valeur !== null && valeur > BUSINESS_RULES.seuilEcartKgHighlight;
+
+const depasseSeuilEcartPourcent = (valeur: number | null): boolean =>
+  valeur !== null && valeur > BUSINESS_RULES.seuilEcartPourcentage;
+
+/**
+ * Une seule ligne dont la composante est inconnue rend le total inconnu : afficher une
+ * somme partielle la ferait passer pour exhaustive (RM-COM-003).
+ */
+const sommeOuNull = (selecteur: (report: BilanMatiereReport) => number | null): number | null =>
+  filteredReports.value.some((report) => selecteur(report) === null)
+    ? null
+    : filteredReports.value.reduce((total, report) => total + (selecteur(report) ?? 0), 0);
+
 const totalReport = computed(() => {
-  const totals = filteredReports.value.reduce(
-    (acc, report) => {
-      acc.encoursDebut += report.encoursDebut;
-      acc.sortiesX3 += report.sortiesX3;
-      acc.inputTotal += report.inputTotal;
-      acc.encoursFinReel += report.encoursFinReel;
-      acc.dechetsFonderie += report.dechetsFonderie;
-      acc.receptionsUsinage2 += report.receptionsUsinage2;
-      acc.poidsNonReceptionne += report.poidsNonReceptionne || 0;
-      acc.nombrePiecesNonReceptionnees += report.nombrePiecesNonReceptionnees || 0;
-      acc.outputTotal += report.outputTotal;
-      acc.ecartKg += report.ecartKg;
-      return acc;
-    },
-    {
-      encoursDebut: 0,
-      sortiesX3: 0,
-      inputTotal: 0,
-      encoursFinReel: 0,
-      dechetsFonderie: 0,
-      receptionsUsinage2: 0,
-      poidsNonReceptionne: 0,
-      nombrePiecesNonReceptionnees: 0,
-      outputTotal: 0,
-      ecartKg: 0
-    }
-  );
+  const inputTotal = sommeOuNull((report) => report.inputTotal);
+  const ecartKg = sommeOuNull((report) => report.ecartKg);
 
   return {
-    ...totals,
-    tauxEcart: totals.inputTotal > 0 ? (totals.ecartKg / totals.inputTotal) * 100 : 0
+    encoursDebut: sommeOuNull((report) => report.encoursDebut),
+    sortiesX3: sommeOuNull((report) => report.sortiesX3),
+    inputTotal,
+    encoursFinReel: sommeOuNull((report) => report.encoursFinReel),
+    dechetsFonderie: filteredReports.value.reduce((total, report) => total + report.dechetsFonderie, 0),
+    receptionsUsinage2: sommeOuNull((report) => report.receptionsUsinage2),
+    poidsNonReceptionne: filteredReports.value.reduce(
+      (total, report) => total + (report.poidsNonReceptionne || 0),
+      0
+    ),
+    nombrePiecesNonReceptionnees: filteredReports.value.reduce(
+      (total, report) => total + (report.nombrePiecesNonReceptionnees || 0),
+      0
+    ),
+    outputTotal: sommeOuNull((report) => report.outputTotal),
+    ecartKg,
+    tauxEcart: ecartKg === null || inputTotal === null || inputTotal === 0 ? null : (ecartKg / inputTotal) * 100
   };
 });
 
@@ -378,10 +387,13 @@ const formatNullable = (value: number | null, decimals = 0): string =>
 // ===== UAP2 =====
 const loadBilansUap2 = async () => {
   isLoadingUap2.value = true;
+  uap2Error.value = '';
   try {
     bilansUap2.value = await bilanService.getBilansUap2(filterMois.value, filterDateDebut.value, filterDateFin.value);
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    // Un tableau vide sans explication se lit comme « aucun écart » : on affiche la cause.
+    uap2Error.value = error instanceof Error ? error.message : "Le Bilan UAP2 n'a pas pu être chargé.";
+    bilansUap2.value = [];
   } finally {
     isLoadingUap2.value = false;
   }
@@ -427,8 +439,13 @@ const totalUap2 = computed(() => {
 });
 
 // ===== VERIFY DIALOG =====
-const openVerifyDialog = (id: number, type: 'usinage' | 'uap2', currentStatut: string, currentObs: string) => {
-  verifyTarget.value = { id, type, currentStatut, currentObs };
+const openVerifyDialog = (
+  bilanKey: string,
+  type: 'usinage' | 'uap2',
+  currentStatut: string,
+  currentObs: string
+) => {
+  verifyTarget.value = { bilanKey, type, currentStatut, currentObs };
   verifyStatut.value = currentStatut;
   verifyObservation.value = currentObs;
   verifyJustification.value = '';
@@ -437,7 +454,7 @@ const openVerifyDialog = (id: number, type: 'usinage' | 'uap2', currentStatut: s
 
 const submitVerification = async () => {
   try {
-    await bilanService.verifierBilan(verifyTarget.value.id, verifyTarget.value.type, {
+    await bilanService.verifierBilan(verifyTarget.value.bilanKey, verifyTarget.value.type, {
       statutControle: verifyStatut.value,
       observation: verifyObservation.value,
       justification: verifyJustification.value
@@ -609,7 +626,7 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 text-xs font-medium">
-              <tr v-for="report in filteredReports" :key="report.id" class="hover:bg-slate-50/30 transition-colors">
+              <tr v-for="report in filteredReports" :key="report.bilanKey" class="hover:bg-slate-50/30 transition-colors">
                 <td class="p-3 font-bold text-slate-800 font-mono">{{ report.typeMatiere }}</td>
                 <td class="p-3 text-right font-semibold font-mono">{{ formatNumber(report.encoursDebut, 0) }}</td>
                 <td class="p-3 text-right font-semibold font-mono text-slate-600">
@@ -630,13 +647,13 @@ onMounted(() => {
                 </td>
                 <td
                   class="p-3 text-right font-black font-mono"
-                  :class="report.ecartKg > BUSINESS_RULES.seuilEcartKgHighlight ? 'text-rose-600' : 'text-slate-700'"
+                  :class="depasseSeuilEcartKg(report.ecartKg) ? 'text-rose-600' : 'text-slate-700'"
                 >
                   {{ formatNumber(report.ecartKg, 0) }} kg
                 </td>
                 <td
                   class="p-3 text-right font-bold font-mono"
-                  :class="report.tauxEcart > BUSINESS_RULES.seuilEcartPourcentage ? 'text-rose-600' : 'text-slate-600'"
+                  :class="depasseSeuilEcartPourcent(report.tauxEcart) ? 'text-rose-600' : 'text-slate-600'"
                 >
                   {{ formatNumber(report.tauxEcart, 2) }} %
                 </td>
@@ -673,7 +690,7 @@ onMounted(() => {
                 <td
                   class="p-3 text-right font-black font-mono"
                   :class="
-                    totalReport.ecartKg > BUSINESS_RULES.seuilEcartKgHighlight ? 'text-rose-600' : 'text-slate-700'
+                    depasseSeuilEcartKg(totalReport.ecartKg) ? 'text-rose-600' : 'text-slate-700'
                   "
                 >
                   {{ formatNumber(totalReport.ecartKg, 0) }} kg
@@ -681,7 +698,7 @@ onMounted(() => {
                 <td
                   class="p-3 text-right font-bold font-mono"
                   :class="
-                    totalReport.tauxEcart > BUSINESS_RULES.seuilEcartPourcentage ? 'text-rose-600' : 'text-slate-600'
+                    depasseSeuilEcartPourcent(totalReport.tauxEcart) ? 'text-rose-600' : 'text-slate-600'
                   "
                 >
                   {{ formatNumber(totalReport.tauxEcart, 2) }} %
@@ -1078,6 +1095,13 @@ onMounted(() => {
           <LoadingState />
         </div>
 
+        <div
+          v-else-if="uap2Error"
+          class="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
+        >
+          {{ uap2Error }}
+        </div>
+
         <div v-else class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-[11px]">
             <thead>
@@ -1138,7 +1162,7 @@ onMounted(() => {
                 <td class="p-2.5 text-right">
                   <button
                     v-if="isAdmin"
-                    @click="openVerifyDialog(item.id, 'uap2', item.statut, item.observation || '')"
+                    @click="openVerifyDialog(item.bilanKey, 'uap2', item.statut, item.observation || '')"
                     class="inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase"
                     :class="getUap2ResultatClass(item)"
                   >

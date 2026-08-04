@@ -66,13 +66,13 @@ const DEFAULTS: Readonly<Record<DataVertical, DataSourceMode>> = {
   bilanU2: 'api',
   sortiesX3: 'api',
   historiqueImports: 'api',
+  inventaire: 'api',
+  bilanFonderie: 'api',
+  bilanUap2: 'api',
 
   // Aucun endpoint backend : les routes appelees renverraient 404.
   // Les donnees de demonstration restent exploitables, d'ou `mock`.
   dashboard: 'mock',
-  bilanFonderie: 'mock',
-  bilanUap2: 'mock',
-  inventaire: 'api',
   rapports: 'mock',
   alertes: 'mock',
   audit: 'mock',

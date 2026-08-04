@@ -1,6 +1,10 @@
 import { BUSINESS_RULES } from '@/config/businessRules';
 import type { AlertesBilanAlert, AlertesWeightAlert } from '@/features/alertes/alertes.types';
-import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
+import type {
+  BilanFonderieComplet,
+  BilanUap2ParOF,
+  BilanUsinage2ParPiece
+} from '@/features/bilan-matiere/bilan.types';
 import type {
   DashboardAlert,
   DashboardBilanRow,
@@ -289,7 +293,7 @@ export const calculateInventoryBilanSummary = (dataset: SopalTestDataset, period
 export const calculateBilanFonderie = (
   dataset: SopalTestDataset,
   periode: string = dataset.periode
-): BilanMatiereReport[] => {
+): BilanFonderieComplet[] => {
   const nonReceived = calculateNonReceivedQuantities(dataset, periode);
 
   return dataset.refTypesMatiere.map((type) => {
