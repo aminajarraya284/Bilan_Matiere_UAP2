@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, History, Info, RefreshCw, Upload } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, History, Info, RefreshCw, Search, Table, Upload } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import { useAppToast } from '@/composables/useAppToast';
 import {
   x3ExcelImportService,
   type X3ClassificationResult,
   type X3ExcelFileType,
+  type X3ImportedSource,
   type X3ImportedSourceStatus
 } from '@/services/x3ExcelImportService';
+import { rapportMachineService } from '@/features/rapport-machine/rapportMachine.service';
+import type { ProcessusRapportMachine, RapportMachineItem } from '@/features/rapport-machine/rapportMachine.types';
+import { mouvementsStockService } from '@/features/mouvements-stock/mouvementsStock.service';
+import type { MouvementStockItem } from '@/features/mouvements-stock/mouvementsStock.types';
 import {
   AUCUNE_ENTREE_OF_MESSAGE,
   FORMULES,
@@ -34,15 +39,92 @@ const sourceStatuses = ref<Record<X3ExcelFileType, X3ImportedSourceStatus>>({
   YRJMCH: emptyX3Status('YRJMCH')
 });
 
+interface ImportResultSummary {
+  fileType: X3ExcelFileType;
+  fileName: string;
+  importedAt: string;
+  status: string;
+  rowsRead?: number;
+  rowsInserted?: number;
+  rowsUpdated?: number;
+  rowsIgnored?: number;
+  rowsRejected?: number;
+  rowCount?: number;
+  error?: string;
+}
+
 const importingFileType = ref<X3ExcelFileType | null>(null);
 const recalculatingClassification = ref(false);
 const classificationResult = ref<X3ClassificationResult | null>(null);
+const lastImportResult = ref<ImportResultSummary | null>(null);
+
+// Données et filtres du tableau YRJMCH
+const yrjmchItems = ref<RapportMachineItem[]>([]);
+const yrjmchTotal = ref(0);
+const yrjmchPage = ref(1);
+const yrjmchPageSize = ref(10);
+const yrjmchLoading = ref(false);
+const yrjmchSearchOF = ref('');
+const yrjmchSearchArticle = ref('');
+const yrjmchFilterProcessus = ref<ProcessusRapportMachine | ''>('');
+
+// Données et filtres du tableau MVTSTOTRSVCR
+const mvtItems = ref<MouvementStockItem[]>([]);
+const mvtTotal = ref(0);
+const mvtPage = ref(1);
+const mvtPageSize = ref(10);
+const mvtLoading = ref(false);
+const mvtSearchOF = ref('');
+const mvtSearchArticle = ref('');
 
 const refreshX3ExcelStatuses = async () => {
   await x3ExcelImportService.refreshStatuses();
   sourceCards.forEach(({ fileType }) => {
     sourceStatuses.value[fileType] = x3ExcelImportService.getStatus('USINAGE_2', fileType);
   });
+};
+
+const fetchYrjmchData = async () => {
+  yrjmchLoading.value = true;
+  try {
+    const res = await rapportMachineService.search({
+      page: yrjmchPage.value,
+      pageSize: yrjmchPageSize.value,
+      numeroOF: yrjmchSearchOF.value.trim() || undefined,
+      codeArticle: yrjmchSearchArticle.value.trim() || undefined,
+      processus: yrjmchFilterProcessus.value || undefined,
+      sortBy: 'date',
+      sortDirection: 'desc'
+    });
+    yrjmchItems.value = res.items;
+    yrjmchTotal.value = res.total;
+  } catch {
+    yrjmchItems.value = [];
+    yrjmchTotal.value = 0;
+  } finally {
+    yrjmchLoading.value = false;
+  }
+};
+
+const fetchMvtData = async () => {
+  mvtLoading.value = true;
+  try {
+    const res = await mouvementsStockService.search({
+      page: mvtPage.value,
+      pageSize: mvtPageSize.value,
+      numeroOF: mvtSearchOF.value.trim() || undefined,
+      codeArticle: mvtSearchArticle.value.trim() || undefined,
+      sortBy: 'date',
+      sortDirection: 'desc'
+    });
+    mvtItems.value = res.items;
+    mvtTotal.value = res.total;
+  } catch {
+    mvtItems.value = [];
+    mvtTotal.value = 0;
+  } finally {
+    mvtLoading.value = false;
+  }
 };
 
 const getX3ExcelStatusClass = (status: string): string => {
@@ -72,16 +154,47 @@ const handleImportX3Excel = async (event: Event, fileType: X3ExcelFileType) => {
 
   importingFileType.value = fileType;
   try {
+    let imported: X3ImportedSource;
     if (fileType === 'MVTSTOTRSVCR') {
-      await x3ExcelImportService.importMVTSTOTRSVCR(file, 'USINAGE_2');
+      imported = await x3ExcelImportService.importMVTSTOTRSVCR(file, 'USINAGE_2');
+      await fetchMvtData();
     } else {
-      await x3ExcelImportService.importYRJMCH(file, 'USINAGE_2');
+      imported = await x3ExcelImportService.importYRJMCH(file, 'USINAGE_2');
+      await fetchYrjmchData();
     }
     await refreshX3ExcelStatuses();
-    toast.success(`${fileType} importé pour les états X3 Usinage 2 et UAP2.`);
+    const updatedStatus = sourceStatuses.value[fileType];
+
+    lastImportResult.value = {
+      fileType,
+      fileName: file.name,
+      importedAt: new Date().toISOString(),
+      status: imported.status || updatedStatus.status || 'Importé',
+      rowsRead: imported.rowsRead ?? updatedStatus.rowsRead,
+      rowsInserted: imported.rowsInserted ?? updatedStatus.rowsInserted,
+      rowsUpdated: imported.rowsUpdated ?? updatedStatus.rowsUpdated,
+      rowsIgnored: imported.rowsIgnored ?? updatedStatus.rowsIgnored,
+      rowsRejected: imported.rowsRejected ?? updatedStatus.rowsRejected,
+      rowCount: imported.rowCount ?? updatedStatus.rowCount,
+      error: imported.error || updatedStatus.error
+    };
+
+    const insertedCount = lastImportResult.value.rowsInserted ?? 0;
+    const updatedCount = lastImportResult.value.rowsUpdated ?? 0;
+    const ignoredCount = lastImportResult.value.rowsIgnored ?? 0;
+    const summaryText = `${insertedCount} insérée(s), ${updatedCount} mise(s) à jour, ${ignoredCount} inchangée(s)`;
+    toast.success(`Import ${fileType} réussi (${file.name}) : ${summaryText}.`);
   } catch (error) {
     await refreshX3ExcelStatuses();
-    toast.error(error instanceof Error ? error.message : 'Import Excel X3 invalide.');
+    const errMsg = error instanceof Error ? error.message : 'Import Excel X3 invalide.';
+    lastImportResult.value = {
+      fileType,
+      fileName: file.name,
+      importedAt: new Date().toISOString(),
+      status: 'Erreur',
+      error: errMsg
+    };
+    toast.error(errMsg);
   } finally {
     importingFileType.value = null;
     input.value = '';
@@ -155,6 +268,105 @@ onMounted(() => {
             colonne B : SCI, EMR ou TRN. Les calculs sont ensuite regroupés par Numéro OF et Code article.
           </p>
         </div>
+      </div>
+    </div>
+
+    <!-- Bannière Résultat du dernier import -->
+    <div
+      v-if="lastImportResult"
+      class="rounded-2xl border p-5 shadow-sm transition-all"
+      :class="
+        lastImportResult.status === 'Erreur'
+          ? 'border-rose-200 bg-rose-50/80'
+          : 'border-emerald-200 bg-emerald-50/80'
+      "
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div
+            class="rounded-xl p-2.5"
+            :class="
+              lastImportResult.status === 'Erreur'
+                ? 'bg-rose-100 text-rose-800'
+                : 'bg-emerald-100 text-emerald-800'
+            "
+          >
+            <CheckCircle2 v-if="lastImportResult.status !== 'Erreur'" class="h-6 w-6" />
+            <AlertTriangle v-else class="h-6 w-6" />
+          </div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h3
+                class="text-sm font-black uppercase tracking-wider"
+                :class="lastImportResult.status === 'Erreur' ? 'text-rose-900' : 'text-emerald-950'"
+              >
+                Résultat de l'import — {{ lastImportResult.fileType }}
+              </h3>
+              <span
+                class="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase"
+                :class="
+                  lastImportResult.status === 'Erreur'
+                    ? 'bg-rose-200 text-rose-900'
+                    : 'bg-emerald-200 text-emerald-900'
+                "
+              >
+                {{ lastImportResult.status === 'Erreur' ? 'Échec de l\'import' : 'Import Réussi' }}
+              </span>
+            </div>
+            <p
+              class="mt-1 text-xs font-semibold"
+              :class="lastImportResult.status === 'Erreur' ? 'text-rose-700' : 'text-emerald-800'"
+            >
+              Fichier : <span class="font-bold">{{ lastImportResult.fileName }}</span>
+              <span class="mx-2 text-slate-300">•</span>
+              {{ formatX3ImportDate(lastImportResult.importedAt) }}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="text-xs font-bold text-slate-400 hover:text-slate-600"
+          @click="lastImportResult = null"
+        >
+          ✕ Masquer
+        </button>
+      </div>
+
+      <div
+        v-if="lastImportResult.status !== 'Erreur'"
+        class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+      >
+        <div class="rounded-xl border border-emerald-200/60 bg-white p-3 shadow-xs">
+          <span class="block text-[10px] font-black uppercase text-slate-400">Lignes lues</span>
+          <span class="text-base font-black text-slate-900">{{ formatOptionalCount(lastImportResult.rowsRead) }}</span>
+        </div>
+        <div class="rounded-xl border border-emerald-200/60 bg-white p-3 shadow-xs">
+          <span class="block text-[10px] font-black uppercase text-emerald-600">Insérées (Nouvelles)</span>
+          <span class="text-base font-black text-emerald-700">+{{ formatOptionalCount(lastImportResult.rowsInserted) }}</span>
+        </div>
+        <div class="rounded-xl border border-emerald-200/60 bg-white p-3 shadow-xs">
+          <span class="block text-[10px] font-black uppercase text-blue-600">Mises à jour</span>
+          <span class="text-base font-black text-blue-700">{{ formatOptionalCount(lastImportResult.rowsUpdated) }}</span>
+        </div>
+        <div class="rounded-xl border border-emerald-200/60 bg-white p-3 shadow-xs">
+          <span class="block text-[10px] font-black uppercase text-slate-400">Inchangées</span>
+          <span class="text-base font-black text-slate-600">{{ formatOptionalCount(lastImportResult.rowsIgnored) }}</span>
+        </div>
+        <div class="rounded-xl border border-emerald-200/60 bg-white p-3 shadow-xs">
+          <span class="block text-[10px] font-black uppercase text-rose-500">Erreurs / Rejetées</span>
+          <span class="text-base font-black text-rose-700">{{ formatOptionalCount(lastImportResult.rowsRejected) }}</span>
+        </div>
+        <div class="rounded-xl border border-emerald-200/60 bg-white p-3 shadow-xs">
+          <span class="block text-[10px] font-black uppercase text-slate-400">Total valides</span>
+          <span class="text-base font-black text-slate-900">{{ formatOptionalCount(lastImportResult.rowCount) }}</span>
+        </div>
+      </div>
+
+      <div
+        v-else-if="lastImportResult.error"
+        class="mt-3 rounded-xl border border-rose-200 bg-white p-3 text-xs font-semibold text-rose-800"
+      >
+        {{ lastImportResult.error }}
       </div>
     </div>
 
@@ -328,6 +540,240 @@ onMounted(() => {
               >
                 {{ sourceStatuses[card.fileType].error }}
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau des lignes importées YRJMCH -->
+        <div v-if="card.fileType === 'YRJMCH'" class="mt-4 border-t border-slate-100 pt-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div class="flex items-center gap-2">
+              <Table class="h-4 w-4 text-blue-900" />
+              <h4 class="text-xs font-black uppercase tracking-wider text-slate-900">
+                Lignes importées YRJMCH
+                <span v-if="yrjmchTotal > 0" class="ml-1 font-normal text-slate-400">({{ yrjmchTotal.toLocaleString('fr-FR') }} lignes)</span>
+              </h4>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="relative min-w-[110px]">
+                <Search class="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  v-model="yrjmchSearchOF"
+                  type="text"
+                  placeholder="N° OF..."
+                  class="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                  @input="yrjmchPage = 1; fetchYrjmchData()"
+                />
+              </div>
+              <div class="relative min-w-[110px]">
+                <input
+                  v-model="yrjmchSearchArticle"
+                  type="text"
+                  placeholder="Article..."
+                  class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                  @input="yrjmchPage = 1; fetchYrjmchData()"
+                />
+              </div>
+              <select
+                v-model="yrjmchFilterProcessus"
+                class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+                @change="yrjmchPage = 1; fetchYrjmchData()"
+              >
+                <option value="">Tous processus</option>
+                <option value="SCI">SCI</option>
+                <option value="EMR">EMR</option>
+                <option value="TRN">TRN</option>
+                <option value="CTRL">CTRL</option>
+                <option value="Inconnue">Inconnue</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+            <table class="w-full text-left text-xs font-semibold text-slate-700">
+              <thead class="bg-slate-50 text-[10px] font-black uppercase text-slate-500">
+                <tr>
+                  <th class="px-3 py-2">Date</th>
+                  <th class="px-3 py-2">N° OF</th>
+                  <th class="px-3 py-2">Article</th>
+                  <th class="px-3 py-2">Poste</th>
+                  <th class="px-3 py-2">Processus</th>
+                  <th class="px-3 py-2 text-right">Qté TOTALE</th>
+                  <th class="px-3 py-2 text-right">Qté Rebut</th>
+                  <th class="px-3 py-2 text-right">Qté Nette</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-if="yrjmchLoading">
+                  <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
+                    Chargement des rapports machine...
+                  </td>
+                </tr>
+                <tr v-else-if="!yrjmchItems.length">
+                  <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
+                    Aucun rapport machine importé.
+                  </td>
+                </tr>
+                <tr v-for="item in yrjmchItems" :key="item.id" class="hover:bg-slate-50/60">
+                  <td class="px-3 py-2 font-mono text-[11px] text-slate-600">{{ item.dateProduction }}</td>
+                  <td class="px-3 py-2 font-bold text-slate-900">{{ item.numeroOF }}</td>
+                  <td class="px-3 py-2">
+                    <span class="block font-bold text-blue-900">{{ item.codeArticle }}</span>
+                    <span v-if="item.designationArticle" class="block max-w-[130px] truncate text-[10px] font-medium text-slate-400">
+                      {{ item.designationArticle }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 font-mono text-slate-800">
+                    {{ item.codePoste }}
+                    <span v-if="item.numeroOperation" class="text-[10px] text-slate-400">({{ item.numeroOperation }})</span>
+                  </td>
+                  <td class="px-3 py-2">
+                    <span
+                      class="inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase"
+                      :class="{
+                        'border-emerald-200 bg-emerald-50 text-emerald-800': item.processus === 'SCI',
+                        'border-blue-200 bg-blue-50 text-blue-800': item.processus === 'EMR',
+                        'border-purple-200 bg-purple-50 text-purple-800': item.processus === 'TRN',
+                        'border-amber-200 bg-amber-50 text-amber-800': item.processus === 'CTRL',
+                        'border-slate-200 bg-slate-100 text-slate-600': item.processus === 'Inconnue'
+                      }"
+                    >
+                      {{ item.processus }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-right font-mono font-bold text-slate-900">{{ item.quantiteTotale.toLocaleString('fr-FR') }}</td>
+                  <td class="px-3 py-2 text-right font-mono text-rose-600">{{ item.quantiteRebut > 0 ? item.quantiteRebut.toLocaleString('fr-FR') : '0' }}</td>
+                  <td class="px-3 py-2 text-right font-mono font-bold text-emerald-700">{{ item.quantiteNette.toLocaleString('fr-FR') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-if="yrjmchTotal > 0" class="mt-3 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+            <span>Page {{ yrjmchPage }} / {{ Math.ceil(yrjmchTotal / yrjmchPageSize) }}</span>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1 hover:bg-slate-50 disabled:opacity-40"
+                :disabled="yrjmchPage <= 1 || yrjmchLoading"
+                @click="yrjmchPage--; fetchYrjmchData()"
+              >
+                <ChevronLeft class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1 hover:bg-slate-50 disabled:opacity-40"
+                :disabled="yrjmchPage * yrjmchPageSize >= yrjmchTotal || yrjmchLoading"
+                @click="yrjmchPage++; fetchYrjmchData()"
+              >
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau des mouvements MVTSTOTRSVCR -->
+        <div v-else-if="card.fileType === 'MVTSTOTRSVCR'" class="mt-4 border-t border-slate-100 pt-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div class="flex items-center gap-2">
+              <Table class="h-4 w-4 text-blue-900" />
+              <h4 class="text-xs font-black uppercase tracking-wider text-slate-900">
+                Lignes d'Entrées OF MVTSTOTRSVCR
+                <span v-if="mvtTotal > 0" class="ml-1 font-normal text-slate-400">({{ mvtTotal.toLocaleString('fr-FR') }} mouvements)</span>
+              </h4>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="relative min-w-[120px]">
+                <Search class="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  v-model="mvtSearchOF"
+                  type="text"
+                  placeholder="N° OF..."
+                  class="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                  @input="mvtPage = 1; fetchMvtData()"
+                />
+              </div>
+              <div class="relative min-w-[120px]">
+                <input
+                  v-model="mvtSearchArticle"
+                  type="text"
+                  placeholder="Article..."
+                  class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                  @input="mvtPage = 1; fetchMvtData()"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+            <table class="w-full text-left text-xs font-semibold text-slate-700">
+              <thead class="bg-slate-50 text-[10px] font-black uppercase text-slate-500">
+                <tr>
+                  <th class="px-3 py-2">Imputation</th>
+                  <th class="px-3 py-2">N° OF</th>
+                  <th class="px-3 py-2">Article</th>
+                  <th class="px-3 py-2">Désignation</th>
+                  <th class="px-3 py-2 text-right">Qté signée</th>
+                  <th class="px-3 py-2">Unité</th>
+                  <th class="px-3 py-2">Transaction</th>
+                  <th class="px-3 py-2">Nature</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-if="mvtLoading">
+                  <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
+                    Chargement des mouvements d'entrée OF...
+                  </td>
+                </tr>
+                <tr v-else-if="!mvtItems.length">
+                  <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
+                    Aucun mouvement d'entrée OF importé.
+                  </td>
+                </tr>
+                <tr v-for="item in mvtItems" :key="item.id" class="hover:bg-slate-50/60">
+                  <td class="px-3 py-2 font-mono text-[11px] text-slate-600">{{ item.dateImputation }}</td>
+                  <td class="px-3 py-2 font-bold text-slate-900">{{ item.numeroOF || '—' }}</td>
+                  <td class="px-3 py-2 font-bold text-blue-900">{{ item.codeArticle || '—' }}</td>
+                  <td class="px-3 py-2 max-w-[150px] truncate text-[11px] text-slate-600">{{ item.designation || '—' }}</td>
+                  <td class="px-3 py-2 text-right font-mono font-bold text-slate-900">{{ item.quantiteSignee.toLocaleString('fr-FR') }}</td>
+                  <td class="px-3 py-2 font-mono text-[11px] text-slate-500">{{ item.unite || '—' }}</td>
+                  <td class="px-3 py-2 font-mono text-[11px] text-slate-600">{{ item.transaction || '—' }}</td>
+                  <td class="px-3 py-2">
+                    <span
+                      class="inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase"
+                      :class="{
+                        'border-emerald-200 bg-emerald-50 text-emerald-800': item.nature === 'EntreeOF',
+                        'border-blue-200 bg-blue-50 text-blue-800': item.nature === 'SortieMP',
+                        'border-slate-200 bg-slate-100 text-slate-600': item.nature === 'NonClassee'
+                      }"
+                    >
+                      {{ item.nature }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-if="mvtTotal > 0" class="mt-3 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+            <span>Page {{ mvtPage }} / {{ Math.ceil(mvtTotal / mvtPageSize) }}</span>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1 hover:bg-slate-50 disabled:opacity-40"
+                :disabled="mvtPage <= 1 || mvtLoading"
+                @click="mvtPage--; fetchMvtData()"
+              >
+                <ChevronLeft class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1 hover:bg-slate-50 disabled:opacity-40"
+                :disabled="mvtPage * mvtPageSize >= mvtTotal || mvtLoading"
+                @click="mvtPage++; fetchMvtData()"
+              >
+                <ChevronRight class="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>

@@ -214,7 +214,9 @@ onMounted(() => {
                     </div>
                   </div>
                 </div>
-                <div class="mt-3 text-sm text-slate-700">Justification : {{ alert.justification }}</div>
+                <div v-if="alert.justification" class="mt-3 text-sm text-slate-700">
+                  Justification : {{ alert.justification }}
+                </div>
               </div>
             </div>
           </div>

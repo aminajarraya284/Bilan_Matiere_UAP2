@@ -168,12 +168,15 @@ describe('DechetsFonderieView', () => {
     await wrapper.get('[data-testid="waste-form"]').trigger('submit');
     await flushPromises();
 
+    // L'origine est obligatoire dans le contrat et vaut « Fonderie » sur cet écran :
+    // elle est envoyée explicitement plutôt que laissée au défaut du serveur.
     expect(mocks.createDechetFonderie).toHaveBeenCalledWith({
       dateDeclaration: '2026-07-22',
       typeMatiereId: material.id,
       typeDechet: 'Bavure',
       poidsKg: 125.5,
-      observation: 'Bavures triées'
+      observation: 'Bavures triées',
+      origine: 'Fonderie'
     });
     expect(wrapper.get('[data-testid="success-message"]').text()).toContain('enregistrée');
   });

@@ -29,7 +29,8 @@ export interface AlertesBilanAlert {
   ecartKg: number;
   tauxEcart: number;
   statut: string;
-  justification: string;
+  /** Absente tant que l'ecart n'a pas ete justifie : ce n'est pas une chaine vide. */
+  justification?: string;
 }
 
 export interface AlertesSummary {

@@ -287,10 +287,16 @@ async function previewMapped(sheetIndex: number) {
     await dialog.alert('Mapping introuvable.', { title: 'Apercu mapping', tone: 'warning' });
     return;
   }
+  // Les index sont extraits avant la fermeture : dans la callback, TypeScript perd
+  // l'affinement de type fait par la garde ci-dessus sur `m`.
+  const ofIndex = m.ofIndex;
+  const articleIndex = typeof m.articleIndex === 'number' ? m.articleIndex : null;
+  const poidsIndex = typeof m.poidsIndex === 'number' ? m.poidsIndex : null;
+
   const preview = p.rows.slice(0, 10).map((row: X3Cell[]) => {
-    const of = row[m.ofIndex] ? String(row[m.ofIndex]).trim() : '';
-    const article = typeof m.articleIndex === 'number' && row[m.articleIndex] ? String(row[m.articleIndex]).trim() : '';
-    const poids = typeof m.poidsIndex === 'number' && row[m.poidsIndex] !== undefined ? row[m.poidsIndex] : '';
+    const of = row[ofIndex] ? String(row[ofIndex]).trim() : '';
+    const article = articleIndex !== null && row[articleIndex] ? String(row[articleIndex]).trim() : '';
+    const poids = poidsIndex !== null && row[poidsIndex] !== undefined ? row[poidsIndex] : '';
     return { of, article, poids };
   });
   await dialog.alert('Apercu des 10 premieres lignes mappees.', {

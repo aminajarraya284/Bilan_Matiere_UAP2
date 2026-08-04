@@ -2,23 +2,28 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { hasPermission } from '@/utils/permissions';
 
+// RouteRecordRaw est une union : sans ce type de retour explicite, TypeScript tente de
+// resoudre l'objet vers la variante « redirect » et exige un champ `redirect` absent.
+type AppRouteRecord = RouteRecordRaw & { children: RouteRecordRaw[] };
+
 const appRoute = (
   path: string,
   name: string,
   component: RouteRecordRaw['component'],
   meta: RouteRecordRaw['meta']
-): RouteRecordRaw => ({
-  path,
-  component: () => import('@/components/layout/AppLayout.vue'),
-  children: [
-    {
-      path: '',
-      name,
-      component,
-      meta: { ...meta, requiresAuth: true }
-    }
-  ]
-});
+): AppRouteRecord =>
+  ({
+    path,
+    component: () => import('@/components/layout/AppLayout.vue'),
+    children: [
+      {
+        path: '',
+        name,
+        component,
+        meta: { ...meta, requiresAuth: true }
+      }
+    ]
+  }) as AppRouteRecord;
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -64,6 +69,10 @@ const routes: Array<RouteRecordRaw> = [
   appRoute('/bilan-matiere', 'BilanMatiere', () => import('@/features/bilan-matiere/BilanMatiereView.vue'), {
     title: 'Bilan matière',
     subtitle: 'Suivi par atelier'
+  }),
+  appRoute('/bilan-uap2', 'BilanUap2', () => import('@/features/bilan-matiere/BilanMatiereUap2View.vue'), {
+    title: 'Bilan UAP2 par OF',
+    subtitle: 'Sortie matière et écart par ordre de fabrication'
   }),
   appRoute('/inventaire', 'Inventaire', () => import('@/features/inventaire/InventaireView.vue'), {
     title: 'Inventaire Fonderie',
