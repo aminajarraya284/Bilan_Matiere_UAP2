@@ -1,3 +1,4 @@
+using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
 using BilanMatiereUAP2.Contracts.InventairesFonderie;
@@ -10,200 +11,400 @@ namespace BilanMatiereUAP2.Application.Features.InventairesFonderie;
 
 public interface IInventaireComptageService
 {
-    Task<InventaireComptagePeriodeResponse> GetPeriodeAsync(string periode, CancellationToken cancellationToken = default);
+    Task<InventaireComptagePeriodeResponse> GetPeriodeAsync(
+        string periode,
+        CancellationToken cancellationToken = default);
 
-    Task<InventaireConteneurResponse> CreerConteneurAsync(CreateInventaireConteneurRequest request, CancellationToken cancellationToken = default);
-    Task<InventaireCategorieResponse> CreerCategorieAsync(CreateInventaireCategorieRequest request, CancellationToken cancellationToken = default);
-    Task<InventaireFourResponse> CreerFourAsync(CreateInventaireFourRequest request, CancellationToken cancellationToken = default);
+    Task<InventaireComptageConteneurResponse> CreerConteneurAsync(
+        CreateInventaireComptageConteneurRequest request,
+        CancellationToken cancellationToken = default);
 
-    Task<InventaireConteneurResponse> ValiderConteneurAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<InventaireCategorieResponse> ValiderCategorieAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<InventaireFourResponse> ValiderFourAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<InventaireComptageCategorieResponse> CreerCategorieAsync(
+        CreateInventaireComptageCategorieRequest request,
+        CancellationToken cancellationToken = default);
 
-    Task<InventaireConteneurResponse> AnnulerConteneurAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<InventaireCategorieResponse> AnnulerCategorieAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<InventaireFourResponse> AnnulerFourAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<InventaireComptageFourResponse> CreerFourAsync(
+        CreateInventaireComptageFourRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<InventaireComptageConteneurResponse> ValiderConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<InventaireComptageCategorieResponse> ValiderCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<InventaireComptageFourResponse> ValiderFourAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<InventaireComptageConteneurResponse> AnnulerConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<InventaireComptageCategorieResponse> AnnulerCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<InventaireComptageFourResponse> AnnulerFourAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Comptage physique d'inventaire Fonderie.
-///
-/// Le total des parties 1 et 2 (lignes VALIDES) constitue le STOCK FIN de la periode.
-/// Les fours sont comptes et restitues, mais EXCLUS de ce stock. L'agregation elle-meme
-/// vit dans <see cref="InventaireComptageRules"/> : ce service ne fait qu'orchestrer.
+/// Orchestration du comptage physique et de la projection InventairesFonderie.
+/// Les créations restent des brouillons et ne touchent jamais la projection.
+/// Toute validation ou annulation modifie la ligne détaillée et recalcule sa
+/// projection dans la même transaction.
 /// </summary>
 public sealed class InventaireComptageService(
     IInventaireComptageRepository repository,
+    ITypeMatiereRepository typeMatiereRepository,
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider) : IInventaireComptageService
 {
-    private const string UniteKg = "KG";
-
-    public async Task<InventaireComptagePeriodeResponse> GetPeriodeAsync(string periode, CancellationToken cancellationToken = default)
+    public async Task<InventaireComptagePeriodeResponse> GetPeriodeAsync(
+        string periode,
+        CancellationToken cancellationToken = default)
     {
         var mois = ParsePeriode(periode);
         var conteneurs = await repository.GetConteneursAsync(mois, cancellationToken);
         var categories = await repository.GetCategoriesAsync(mois, cancellationToken);
         var fours = await repository.GetFoursAsync(mois, cancellationToken);
+        var types = await typeMatiereRepository.GetAllAsync(true, cancellationToken);
 
         var totaux = InventaireComptageRules.CalculerTotaux(conteneurs, categories, fours);
-        var libelles = conteneurs.Select(l => (l.TypeMatiereId, Code: l.TypeMatiere?.Code))
-            .Concat(categories.Select(l => (l.TypeMatiereId, Code: l.TypeMatiere?.Code)))
-            .Concat(fours.Select(l => (l.TypeMatiereId, Code: l.TypeMatiere?.Code)))
-            .Where(item => item.Code is not null)
-            .GroupBy(item => item.TypeMatiereId)
-            .ToDictionary(groupe => groupe.Key, groupe => groupe.First().Code!);
+        var totauxParType = new List<InventaireComptageTotalResponse>(types.Count);
+
+        foreach (var type in types)
+        {
+            var total = totaux.FirstOrDefault(item => item.TypeMatiereId == type.Id);
+            var projection = await repository.GetProjectionAsync(mois, type.Id, cancellationToken);
+            var projectionPrecedente = await repository.GetProjectionAsync(
+                InventaireComptageRules.PeriodePrecedente(mois),
+                type.Id,
+                cancellationToken);
+
+            var stockFin = projection?.StockFinKg ?? total?.StockFinKg ?? 0m;
+            var stockDebut = projection?.StockDebutKg ?? projectionPrecedente?.StockFinKg;
+            var totalFours = total?.TotalFoursKg ?? 0m;
+
+            totauxParType.Add(new InventaireComptageTotalResponse(
+                type.Id,
+                type.Code,
+                stockDebut,
+                stockFin,
+                totalFours,
+                stockFin,
+                stockFin + totalFours,
+                stockDebut is null
+                    ? ["STOCK_DEBUT_INTROUVABLE"]
+                    : Array.Empty<string>()));
+        }
 
         return new InventaireComptagePeriodeResponse(
-            $"{mois.Year:D4}-{mois.Month:D2}",
+            FormatPeriode(mois),
             conteneurs.Select(ToResponse).ToArray(),
             categories.Select(ToResponse).ToArray(),
             fours.Select(ToResponse).ToArray(),
             totaux.Select(total => new InventaireTotalParMatiereResponse(
                 total.TypeMatiereId,
-                libelles.TryGetValue(total.TypeMatiereId, out var code) ? code : string.Empty,
+                types.FirstOrDefault(type => type.Id == total.TypeMatiereId)?.Code ?? string.Empty,
                 total.TotalConteneursKg,
                 total.TotalCategoriesKg,
                 total.TotalFoursKg,
                 total.TotalRapportKg,
-                total.StockFinKg)).ToArray());
+                total.StockFinKg)).ToArray(),
+            totauxParType);
     }
 
-    // ------------------------------------------------------------- creation
-
-    public async Task<InventaireConteneurResponse> CreerConteneurAsync(CreateInventaireConteneurRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventaireComptageConteneurResponse> CreerConteneurAsync(
+        CreateInventaireComptageConteneurRequest request,
+        CancellationToken cancellationToken = default)
     {
+        await GarantirTypeActifAsync(request.TypeMatiereId, cancellationToken);
         var ligne = InventaireConteneur.Creer(
             request.DateInventaire,
             request.NumeroConteneur,
-            request.OfDestination,
+            request.NumeroOF,
             request.CodeArticle,
             request.DesignationArticle,
             request.TypeMatiereId,
-            request.QuantiteReelle,
+            request.QuantiteKg,
             request.Observation,
             currentUser.UserId,
             currentUser.UserName,
             dateTimeProvider.UtcNow);
+
         await repository.AddAsync(ligne, cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(await RechargerConteneurAsync(ligne.Id, cancellationToken));
     }
 
-    public async Task<InventaireCategorieResponse> CreerCategorieAsync(CreateInventaireCategorieRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventaireComptageCategorieResponse> CreerCategorieAsync(
+        CreateInventaireComptageCategorieRequest request,
+        CancellationToken cancellationToken = default)
     {
+        await GarantirTypeActifAsync(request.TypeMatiereId, cancellationToken);
         var ligne = InventaireCategorieComptage.Creer(
-            new DateOnly(request.Annee, request.Mois, 1),
+            request.Periode,
             request.Categorie,
             request.TypeMatiereId,
-            request.QuantiteReelle,
-            request.Commentaire,
+            request.QuantiteKg,
+            request.Observation,
             currentUser.UserId,
             currentUser.UserName,
             dateTimeProvider.UtcNow);
+
         await repository.AddAsync(ligne, cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(await RechargerCategorieAsync(ligne.Id, cancellationToken));
     }
 
-    public async Task<InventaireFourResponse> CreerFourAsync(CreateInventaireFourRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventaireComptageFourResponse> CreerFourAsync(
+        CreateInventaireComptageFourRequest request,
+        CancellationToken cancellationToken = default)
     {
+        await GarantirTypeActifAsync(request.TypeMatiereId, cancellationToken);
         var ligne = InventaireFourComptage.Creer(
             request.DateInventaire,
-            request.Four,
+            request.CodeFour,
             request.TypeMatiereId,
-            request.Quantite,
+            request.QuantiteKg,
             request.Observation,
             currentUser.UserId,
             currentUser.UserName,
             dateTimeProvider.UtcNow);
+
         await repository.AddAsync(ligne, cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(await RechargerFourAsync(ligne.Id, cancellationToken));
     }
 
-    // ------------------------------------------------------- cycle de vie
+    public Task<InventaireComptageConteneurResponse> ValiderConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => ChangerStatutConteneurAsync(id, valider: true, cancellationToken);
 
-    public async Task<InventaireConteneurResponse> ValiderConteneurAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task<InventaireComptageCategorieResponse> ValiderCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => ChangerStatutCategorieAsync(id, valider: true, cancellationToken);
+
+    public Task<InventaireComptageFourResponse> ValiderFourAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => ChangerStatutFourAsync(id, valider: true, cancellationToken);
+
+    public Task<InventaireComptageConteneurResponse> AnnulerConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => ChangerStatutConteneurAsync(id, valider: false, cancellationToken);
+
+    public Task<InventaireComptageCategorieResponse> AnnulerCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => ChangerStatutCategorieAsync(id, valider: false, cancellationToken);
+
+    public Task<InventaireComptageFourResponse> AnnulerFourAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => ChangerStatutFourAsync(id, valider: false, cancellationToken);
+
+    private async Task<InventaireComptageConteneurResponse> ChangerStatutConteneurAsync(
+        Guid id,
+        bool valider,
+        CancellationToken cancellationToken)
     {
-        var ligne = await RechargerConteneurAsync(id, cancellationToken);
-        ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
-        await repository.SaveChangesAsync(cancellationToken);
-        return ToResponse(ligne);
-    }
-
-    public async Task<InventaireCategorieResponse> ValiderCategorieAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var ligne = await RechargerCategorieAsync(id, cancellationToken);
-        ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
-        await repository.SaveChangesAsync(cancellationToken);
-        return ToResponse(ligne);
-    }
-
-    public async Task<InventaireFourResponse> ValiderFourAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var ligne = await RechargerFourAsync(id, cancellationToken);
-        ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
-        await repository.SaveChangesAsync(cancellationToken);
-        return ToResponse(ligne);
-    }
-
-    public async Task<InventaireConteneurResponse> AnnulerConteneurAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var ligne = await RechargerConteneurAsync(id, cancellationToken);
-        ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
-        await repository.SaveChangesAsync(cancellationToken);
-        return ToResponse(ligne);
-    }
-
-    public async Task<InventaireCategorieResponse> AnnulerCategorieAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var ligne = await RechargerCategorieAsync(id, cancellationToken);
-        ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
-        await repository.SaveChangesAsync(cancellationToken);
-        return ToResponse(ligne);
-    }
-
-    public async Task<InventaireFourResponse> AnnulerFourAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var ligne = await RechargerFourAsync(id, cancellationToken);
-        ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
-        await repository.SaveChangesAsync(cancellationToken);
-        return ToResponse(ligne);
-    }
-
-    // ------------------------------------------------------------- outils
-
-    private async Task<InventaireConteneur> RechargerConteneurAsync(Guid id, CancellationToken cancellationToken)
-        => await repository.GetConteneurAsync(id, cancellationToken)
-           ?? throw new NotFoundException($"Le conteneur d'inventaire {id} est introuvable.");
-
-    private async Task<InventaireCategorieComptage> RechargerCategorieAsync(Guid id, CancellationToken cancellationToken)
-        => await repository.GetCategorieAsync(id, cancellationToken)
-           ?? throw new NotFoundException($"La categorie d'inventaire {id} est introuvable.");
-
-    private async Task<InventaireFourComptage> RechargerFourAsync(Guid id, CancellationToken cancellationToken)
-        => await repository.GetFourAsync(id, cancellationToken)
-           ?? throw new NotFoundException($"Le four d'inventaire {id} est introuvable.");
-
-    private static DateOnly ParsePeriode(string periode)
-    {
-        var parties = (periode ?? string.Empty).Split('-');
-        if (parties.Length != 2 || !int.TryParse(parties[0], out var annee) || !int.TryParse(parties[1], out var mois)
-            || mois is < 1 or > 12)
+        await using var transaction = await repository.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new ValidationException([new ValidationFailure("periode", "La période doit être au format AAAA-MM.")]);
+            var ligne = await RechargerConteneurAsync(id, cancellationToken);
+            if (valider)
+            {
+                ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+            }
+            else
+            {
+                ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+            }
+
+            // Les agrégations sont relues depuis la base. Le premier flush rend le
+            // nouveau statut visible dans cette transaction; le second persiste la
+            // projection. Les deux écritures restent atomiques.
+            await repository.SaveChangesAsync(cancellationToken);
+            await RecalculerProjectionAsync(ligne.Periode, ligne.TypeMatiereId, cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return ToResponse(ligne);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<InventaireComptageCategorieResponse> ChangerStatutCategorieAsync(
+        Guid id,
+        bool valider,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await repository.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var ligne = await RechargerCategorieAsync(id, cancellationToken);
+            if (valider)
+            {
+                ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+            }
+            else
+            {
+                ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+            }
+
+            await repository.SaveChangesAsync(cancellationToken);
+            await RecalculerProjectionAsync(ligne.Periode, ligne.TypeMatiereId, cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return ToResponse(ligne);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<InventaireComptageFourResponse> ChangerStatutFourAsync(
+        Guid id,
+        bool valider,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await repository.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var ligne = await RechargerFourAsync(id, cancellationToken);
+            if (valider)
+            {
+                ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+            }
+            else
+            {
+                ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+            }
+
+            await repository.SaveChangesAsync(cancellationToken);
+            await RecalculerProjectionAsync(ligne.Periode, ligne.TypeMatiereId, cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return ToResponse(ligne);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task RecalculerProjectionAsync(
+        DateOnly periode,
+        Guid typeMatiereId,
+        CancellationToken cancellationToken)
+    {
+        var conteneurs = await repository.GetConteneursAsync(periode, cancellationToken);
+        var categories = await repository.GetCategoriesAsync(periode, cancellationToken);
+        var fours = await repository.GetFoursAsync(periode, cancellationToken);
+        var total = InventaireComptageRules.CalculerTotaux(conteneurs, categories, fours)
+            .FirstOrDefault(item => item.TypeMatiereId == typeMatiereId);
+        var stockFin = total?.StockFinKg ?? 0m;
+        var projectionPrecedente = await repository.GetProjectionAsync(
+            InventaireComptageRules.PeriodePrecedente(periode),
+            typeMatiereId,
+            cancellationToken);
+        var stockDebut = projectionPrecedente?.StockFinKg;
+        var projection = await repository.GetProjectionAsync(periode, typeMatiereId, cancellationToken);
+
+        if (projection is null)
+        {
+            await repository.AddProjectionAsync(
+                InventaireFonderie.Creer(
+                    periode,
+                    typeMatiereId,
+                    stockDebut,
+                    stockFin,
+                    observation: null,
+                    currentUser.UserId,
+                    currentUser.UserName,
+                    dateTimeProvider.UtcNow),
+                cancellationToken);
+        }
+        else
+        {
+            projection.RecalculerProjection(
+                periode,
+                typeMatiereId,
+                stockDebut,
+                stockFin,
+                observation: null,
+                currentUser.UserId,
+                currentUser.UserName,
+                dateTimeProvider.UtcNow);
+        }
+    }
+
+    private async Task GarantirTypeActifAsync(Guid typeMatiereId, CancellationToken cancellationToken)
+    {
+        var type = await typeMatiereRepository.GetByIdAsync(typeMatiereId, cancellationToken)
+            ?? throw new NotFoundException($"Le type matiere '{typeMatiereId}' est introuvable.");
+        if (!type.EstActif)
+        {
+            throw new ConflictException("Un type matiere desactive ne peut pas etre utilise.");
+        }
+    }
+
+    private async Task<InventaireConteneur> RechargerConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+        => await repository.GetConteneurAsync(id, cancellationToken)
+           ?? throw new NotFoundException($"Le conteneur de comptage {id} est introuvable.");
+
+    private async Task<InventaireCategorieComptage> RechargerCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+        => await repository.GetCategorieAsync(id, cancellationToken)
+           ?? throw new NotFoundException($"La categorie de comptage {id} est introuvable.");
+
+    private async Task<InventaireFourComptage> RechargerFourAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+        => await repository.GetFourAsync(id, cancellationToken)
+           ?? throw new NotFoundException($"Le four de comptage {id} est introuvable.");
+
+    private static DateOnly ParsePeriode(string value)
+    {
+        if (!DateOnly.TryParseExact(
+                value,
+                "yyyy-MM",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var periode))
+        {
+            throw new ValidationException([
+                new ValidationFailure("periode", "La période doit être au format AAAA-MM.")]);
         }
 
-        return new DateOnly(annee, mois, 1);
+        return new DateOnly(periode.Year, periode.Month, 1);
     }
 
-    private static InventaireConteneurResponse ToResponse(InventaireConteneur ligne)
+    private static string FormatPeriode(DateOnly periode) => $"{periode.Year:D4}-{periode.Month:D2}";
+
+    private static InventaireComptageConteneurResponse ToResponse(InventaireConteneur ligne)
         => new(
             ligne.Id,
+            ligne.Periode,
             ligne.DateInventaire,
-            ligne.Periode.Month,
-            ligne.Periode.Year,
             ligne.NumeroConteneur,
             ligne.NumeroOF,
             ligne.CodeArticle,
@@ -211,39 +412,45 @@ public sealed class InventaireComptageService(
             ligne.TypeMatiereId,
             ligne.TypeMatiere?.Code ?? string.Empty,
             ligne.QuantiteKg,
-            UniteKg,
             ligne.Observation,
-            ligne.Statut.ToString());
+            ligne.Statut.ToString(),
+            ligne.CreeLeUtc,
+            ligne.ModifieLeUtc,
+            ligne.ValideLeUtc,
+            ligne.ValideParNom);
 
-    private static InventaireCategorieResponse ToResponse(InventaireCategorieComptage ligne)
+    private static InventaireComptageCategorieResponse ToResponse(InventaireCategorieComptage ligne)
         => new(
             ligne.Id,
-            ligne.Periode.Month,
-            ligne.Periode.Year,
+            ligne.Periode,
             ligne.Categorie,
             ligne.TypeMatiereId,
             ligne.TypeMatiere?.Code ?? string.Empty,
             ligne.QuantiteKg,
-            UniteKg,
             ligne.Observation,
             ligne.Statut.ToString(),
-            InclusDansBilanFonderie: true,
-            VisibleDansRapportInventaire: true);
+            InclusBilanFonderie: true,
+            VisibleRapportInventaire: true,
+            ligne.CreeLeUtc,
+            ligne.ModifieLeUtc,
+            ligne.ValideLeUtc,
+            ligne.ValideParNom);
 
-    private static InventaireFourResponse ToResponse(InventaireFourComptage ligne)
+    private static InventaireComptageFourResponse ToResponse(InventaireFourComptage ligne)
         => new(
             ligne.Id,
+            ligne.Periode,
             ligne.DateInventaire,
-            ligne.Periode.Month,
-            ligne.Periode.Year,
             ligne.CodeFour,
             ligne.TypeMatiereId,
             ligne.TypeMatiere?.Code ?? string.Empty,
             ligne.QuantiteKg,
-            UniteKg,
             ligne.Observation,
             ligne.Statut.ToString(),
-            // Invariant : un four n'entre jamais dans le bilan.
-            InclusDansBilanFonderie: InventaireFourComptage.InclusDansBilanFonderie,
-            VisibleDansRapportInventaire: true);
+            InclusBilanFonderie: InventaireFourComptage.InclusDansBilanFonderie,
+            VisibleRapportInventaire: true,
+            ligne.CreeLeUtc,
+            ligne.ModifieLeUtc,
+            ligne.ValideLeUtc,
+            ligne.ValideParNom);
 }

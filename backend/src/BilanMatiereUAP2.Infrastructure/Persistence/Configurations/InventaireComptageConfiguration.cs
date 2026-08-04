@@ -4,11 +4,6 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace BilanMatiereUAP2.Infrastructure.Persistence.Configurations;
 
-/// <summary>
-/// Trois tables distinctes pour les trois parties du comptage d'inventaire.
-/// Elles partagent les colonnes communes de <see cref="LigneComptageInventaire"/>
-/// mais restent separees : leurs regles metier different (les fours sont hors bilan).
-/// </summary>
 internal static class ComptageCommun
 {
     public static void ConfigurerColonnesCommunes<T>(EntityTypeBuilder<T> builder)
@@ -32,7 +27,6 @@ internal static class ComptageCommun
             .HasForeignKey(entity => entity.TypeMatiereId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Index de lecture principal : totaux par periode et type matiere.
         builder.HasIndex(entity => new { entity.Periode, entity.TypeMatiereId });
         builder.HasIndex(entity => entity.Statut);
     }
@@ -42,7 +36,7 @@ public sealed class InventaireConteneurConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<InventaireConteneur> builder)
     {
-        builder.ToTable("InventairesConteneurs");
+        builder.ToTable("InventairesConteneursComptage");
         ComptageCommun.ConfigurerColonnesCommunes(builder);
         builder.Property(entity => entity.DateInventaire).IsRequired();
         builder.Property(entity => entity.NumeroConteneur).HasMaxLength(50).IsRequired();
@@ -57,7 +51,7 @@ public sealed class InventaireCategorieComptageConfiguration : IEntityTypeConfig
 {
     public void Configure(EntityTypeBuilder<InventaireCategorieComptage> builder)
     {
-        builder.ToTable("InventairesCategories");
+        builder.ToTable("InventairesCategoriesComptage");
         ComptageCommun.ConfigurerColonnesCommunes(builder);
         builder.Property(entity => entity.Categorie).HasMaxLength(100).IsRequired();
     }
@@ -67,7 +61,7 @@ public sealed class InventaireFourComptageConfiguration : IEntityTypeConfigurati
 {
     public void Configure(EntityTypeBuilder<InventaireFourComptage> builder)
     {
-        builder.ToTable("InventairesFours");
+        builder.ToTable("InventairesFoursComptage");
         ComptageCommun.ConfigurerColonnesCommunes(builder);
         builder.Property(entity => entity.DateInventaire).IsRequired();
         builder.Property(entity => entity.CodeFour).HasMaxLength(50).IsRequired();

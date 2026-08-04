@@ -1,91 +1,94 @@
 namespace BilanMatiereUAP2.Contracts.InventairesFonderie;
 
-/// <summary>
-/// Contrats du comptage physique d'inventaire, en KILOGRAMMES.
-/// Les noms de champs reprennent ceux deja affiches par l'ecran Inventaire Fonderie
-/// afin que sa disposition reste strictement inchangee.
-/// </summary>
-public sealed record InventaireConteneurResponse(
-    Guid Id,
+// Les contrats de comptage sont distincts des contrats historiques *Of/*Categorie/*Four.
+// Cette séparation rend explicite que les nouveaux endpoints écrivent dans les tables
+// InventairesConteneursComptage, InventairesCategoriesComptage et InventairesFoursComptage.
+public sealed record CreateInventaireComptageConteneurRequest(
     DateOnly DateInventaire,
-    int Mois,
-    int Annee,
     string NumeroConteneur,
-    string? OfDestination,
+    string? NumeroOF,
+    string? CodeArticle,
+    string? DesignationArticle,
+    Guid TypeMatiereId,
+    decimal QuantiteKg,
+    string? Observation);
+
+public sealed record CreateInventaireComptageCategorieRequest(
+    DateOnly Periode,
+    string Categorie,
+    Guid TypeMatiereId,
+    decimal QuantiteKg,
+    string? Observation);
+
+public sealed record CreateInventaireComptageFourRequest(
+    DateOnly DateInventaire,
+    string CodeFour,
+    Guid TypeMatiereId,
+    decimal QuantiteKg,
+    string? Observation);
+
+public sealed record InventaireComptageConteneurResponse(
+    Guid Id,
+    DateOnly Periode,
+    DateOnly DateInventaire,
+    string NumeroConteneur,
+    string? NumeroOF,
     string? CodeArticle,
     string? DesignationArticle,
     Guid TypeMatiereId,
     string CodeTypeMatiere,
-    decimal QuantiteReelle,
-    string Unite,
+    decimal QuantiteKg,
     string? Observation,
-    string Statut);
+    string Statut,
+    DateTime CreeLeUtc,
+    DateTime? ModifieLeUtc,
+    DateTime? ValideLeUtc,
+    string? ValidePar);
 
-public sealed record InventaireCategorieResponse(
+public sealed record InventaireComptageCategorieResponse(
     Guid Id,
-    int Mois,
-    int Annee,
+    DateOnly Periode,
     string Categorie,
     Guid TypeMatiereId,
     string CodeTypeMatiere,
-    decimal QuantiteReelle,
-    string Unite,
-    string? Commentaire,
-    string Statut,
-    /// <summary>Une categorie comptee entre dans le Stock fin.</summary>
-    bool InclusDansBilanFonderie,
-    bool VisibleDansRapportInventaire);
-
-public sealed record InventaireFourResponse(
-    Guid Id,
-    DateOnly DateInventaire,
-    int Mois,
-    int Annee,
-    string Four,
-    Guid TypeMatiereId,
-    string CodeTypeMatiere,
-    decimal Quantite,
-    string Unite,
+    decimal QuantiteKg,
     string? Observation,
     string Statut,
-    /// <summary>Toujours false : l'inventaire du four est exclu du bilan.</summary>
-    bool InclusDansBilanFonderie,
-    bool VisibleDansRapportInventaire);
+    bool InclusBilanFonderie,
+    bool VisibleRapportInventaire,
+    DateTime CreeLeUtc,
+    DateTime? ModifieLeUtc,
+    DateTime? ValideLeUtc,
+    string? ValidePar);
 
-// ----------------------------------------------------------------- requetes
-
-public sealed record CreateInventaireConteneurRequest(
+public sealed record InventaireComptageFourResponse(
+    Guid Id,
+    DateOnly Periode,
     DateOnly DateInventaire,
-    string NumeroConteneur,
-    string? OfDestination,
-    string? CodeArticle,
-    string? DesignationArticle,
+    string CodeFour,
     Guid TypeMatiereId,
-    decimal QuantiteReelle,
-    string? Observation);
+    string CodeTypeMatiere,
+    decimal QuantiteKg,
+    string? Observation,
+    string Statut,
+    bool InclusBilanFonderie,
+    bool VisibleRapportInventaire,
+    DateTime CreeLeUtc,
+    DateTime? ModifieLeUtc,
+    DateTime? ValideLeUtc,
+    string? ValidePar);
 
-public sealed record CreateInventaireCategorieRequest(
-    int Mois,
-    int Annee,
-    string Categorie,
+public sealed record InventaireComptageTotalResponse(
     Guid TypeMatiereId,
-    decimal QuantiteReelle,
-    string? Commentaire);
+    string CodeTypeMatiere,
+    decimal? StockDebutKg,
+    decimal StockFinKg,
+    decimal TotalFoursKg,
+    decimal TotalUtiliseBilanKg,
+    decimal TotalInventaireRapportKg,
+    IReadOnlyList<string> Anomalies);
 
-public sealed record CreateInventaireFourRequest(
-    DateOnly DateInventaire,
-    string Four,
-    Guid TypeMatiereId,
-    decimal Quantite,
-    string? Observation);
-
-// ----------------------------------------------------------------- totaux
-
-/// <summary>
-/// Totaux d'inventaire par type matiere, en kg.
-/// <paramref name="TotalUtiliseBilan"/> est le STOCK FIN de la periode : parties 1 + 2.
-/// <paramref name="TotalInventaireRapport"/> ajoute les fours, pour le rapport seulement.
-/// </summary>
+// Forme historique conservée pour les consommateurs qui lisaient déjà Totaux.
 public sealed record InventaireTotalParMatiereResponse(
     Guid TypeMatiereId,
     string CodeTypeMatiere,
@@ -97,7 +100,8 @@ public sealed record InventaireTotalParMatiereResponse(
 
 public sealed record InventaireComptagePeriodeResponse(
     string Periode,
-    IReadOnlyList<InventaireConteneurResponse> Conteneurs,
-    IReadOnlyList<InventaireCategorieResponse> Categories,
-    IReadOnlyList<InventaireFourResponse> Fours,
-    IReadOnlyList<InventaireTotalParMatiereResponse> Totaux);
+    IReadOnlyList<InventaireComptageConteneurResponse> Conteneurs,
+    IReadOnlyList<InventaireComptageCategorieResponse> Categories,
+    IReadOnlyList<InventaireComptageFourResponse> Fours,
+    IReadOnlyList<InventaireTotalParMatiereResponse> Totaux,
+    IReadOnlyList<InventaireComptageTotalResponse>? TotauxParTypeMatiere = null);

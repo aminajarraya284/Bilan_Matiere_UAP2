@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<IDechetFonderieService, DechetFonderieService>();
         services.AddScoped<IControlePoidsFonderieService, ControlePoidsFonderieService>();
         services.AddScoped<IInventaireFonderieService, InventaireFonderieService>();
+        services.AddScoped<IInventaireComptageService, InventaireComptageService>();
         services.AddScoped<IX3ImportService, X3ImportService>();
         services.AddScoped<IManufacturingReferencesService, ManufacturingReferencesService>();
         services.AddScoped<IReportMachineService, ReportMachineService>();
@@ -38,6 +39,8 @@ public static class DependencyInjection
         services.AddScoped<IRebutUsinage2Service, RebutUsinage2Service>();
         services.AddScoped<IAlerteNonReceptionService, AlerteNonReceptionService>();
         services.AddScoped<IBilanUsinage2Service, BilanUsinage2Service>();
+        services.AddScoped<IBilanFonderieService, BilanFonderieService>();
+        services.AddScoped<IBilanUap2Service, BilanUap2Service>();
         services.AddScoped<IImportDependencyRefreshService, ImportDependencyRefreshService>();
         services.AddScoped<IParametreApplicationService, ParametreApplicationService>();
         services.AddScoped<IParametreApplicationProvider>(provider =>

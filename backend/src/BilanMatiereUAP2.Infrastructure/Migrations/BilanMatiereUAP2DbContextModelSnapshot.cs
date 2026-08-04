@@ -655,6 +655,63 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.ToTable("ImportX3Files", (string)null);
                 });
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireCategorie", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AnnuleLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AnnulePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Categorie")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CodeTypeMatiere")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Commentaire")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly>("DateInventaire")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("PoidsReelKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<int>("Statut")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValidePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DateInventaire", "Categorie");
+
+                    b.HasIndex("DateInventaire", "CodeTypeMatiere", "Statut");
+
+                    b.ToTable("InventairesCategories", (string)null);
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireCategorieComptage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -723,7 +780,7 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
 
                     b.HasIndex("Periode", "TypeMatiereId");
 
-                    b.ToTable("InventairesCategories", (string)null);
+                    b.ToTable("InventairesCategoriesComptage", (string)null);
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireConteneur", b =>
@@ -811,7 +868,73 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
 
                     b.HasIndex("Periode", "TypeMatiereId");
 
-                    b.ToTable("InventairesConteneurs", (string)null);
+                    b.ToTable("InventairesConteneursComptage", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireConteneurOf", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AnnuleLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AnnulePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CodeTypeMatiere")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly>("DateInventaire")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NumeroConteneur")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("NumeroOF")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("PoidsReelKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<int>("Statut")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValidePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DateInventaire", "NumeroConteneur");
+
+                    b.HasIndex("NumeroOF", "CodeTypeMatiere");
+
+                    b.HasIndex("DateInventaire", "CodeTypeMatiere", "Statut");
+
+                    b.ToTable("InventairesConteneursOf", (string)null);
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFonderie", b =>
@@ -862,7 +985,7 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<decimal>("StockDebutKg")
+                    b.Property<decimal?>("StockDebutKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("decimal(18,3)");
 
@@ -889,9 +1012,115 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
 
                     b.HasIndex("TypeMatiereId");
 
-                    b.HasIndex("Periode", "TypeMatiereId");
+                    b.HasIndex("Periode", "TypeMatiereId")
+                        .IsUnique();
 
                     b.ToTable("InventairesFonderie", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFonderiePeriode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Annee")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ClotureLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CloturePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Mois")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Statut")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValidePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Annee", "Mois")
+                        .IsUnique();
+
+                    b.ToTable("InventairesFonderiePeriodes", (string)null);
+                });
+
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFour", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Annee")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("AnnuleLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AnnulePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CodeFour")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("CodeTypeMatiere")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly>("DateInventaire")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ModifieLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Mois")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("QuantiteKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<int>("Statut")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ValideLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValidePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Annee", "Mois", "CodeFour");
+
+                    b.HasIndex("DateInventaire", "CodeTypeMatiere", "Statut");
+
+                    b.ToTable("InventairesFours", (string)null);
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.InventaireFourComptage", b =>
@@ -965,7 +1194,7 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
 
                     b.HasIndex("Periode", "TypeMatiereId");
 
-                    b.ToTable("InventairesFours", (string)null);
+                    b.ToTable("InventairesFoursComptage", (string)null);
                 });
 
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.ParametreApplication", b =>

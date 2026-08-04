@@ -37,16 +37,22 @@ public sealed class DiagnosticsController(BilanMatiereUAP2DbContext dbContext) :
         var receptionsU2 = await dbContext.ReceptionsUsinage2.AsNoTracking()
             .Where(r => r.StatutReception == StatutReceptionUsinage2.Valide && r.DateReception >= debut && r.DateReception < fin)
             .ToListAsync(cancellationToken);
+        var projectionsInventaire = await dbContext.InventairesFonderie.AsNoTracking()
+            .Where(i => i.Periode == debut && i.Statut != StatutInventaireFonderie.Annule)
+            .ToListAsync(cancellationToken);
+        var stocksDebutConnus = projectionsInventaire.Count(i => i.StockDebutKg != null);
 
         var sourcesFonderie = new[]
         {
             new
             {
                 nom = "StockDebut",
-                disponible = false,
-                nombreLignes = (int?)null,
-                unites = Array.Empty<string>(),
-                ambiguites = new[] { "Aucune source d'inventaire début de période n'est actuellement importée dans l'application." }
+                disponible = stocksDebutConnus > 0,
+                nombreLignes = (int?)stocksDebutConnus,
+                unites = new[] { "KG" },
+                ambiguites = stocksDebutConnus == projectionsInventaire.Count
+                    ? Array.Empty<string>()
+                    : new[] { "Certains types matière n'ont pas de stock de début : la période précédente n'est pas clôturée (RM-INV-005)." }
             },
             new
             {
@@ -54,15 +60,19 @@ public sealed class DiagnosticsController(BilanMatiereUAP2DbContext dbContext) :
                 disponible = sortiesMagasinX3.Count > 0,
                 nombreLignes = (int?)sortiesMagasinX3.Count,
                 unites = sortiesMagasinX3.Select(c => c.Unite).Distinct().ToArray(),
-                ambiguites = Array.Empty<string>()
+                // Seules les lignes en KG entrent dans le bilan : aucune regle de conversion
+                // n'est confirmee pour les autres unites.
+                ambiguites = sortiesMagasinX3.Any(c => !string.Equals(c.Unite, "KG", StringComparison.OrdinalIgnoreCase))
+                    ? new[] { "Des consommations sont exprimées dans une unité autre que KG : elles sont exclues du bilan et signalées en anomalie." }
+                    : Array.Empty<string>()
             },
             new
             {
                 nom = "StockFin",
-                disponible = false,
-                nombreLignes = (int?)null,
-                unites = Array.Empty<string>(),
-                ambiguites = new[] { "Aucune source d'inventaire fin de période n'est actuellement importée dans l'application." }
+                disponible = projectionsInventaire.Count > 0,
+                nombreLignes = (int?)projectionsInventaire.Count,
+                unites = new[] { "KG" },
+                ambiguites = Array.Empty<string>()
             },
             new
             {

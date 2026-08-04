@@ -11,10 +11,14 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<DechetFonderie> DechetsFonderie => Set<DechetFonderie>();
     public DbSet<ControlePoidsFonderie> ControlesPoidsFonderie => Set<ControlePoidsFonderie>();
     public DbSet<InventaireFonderie> InventairesFonderie => Set<InventaireFonderie>();
-    // Comptage physique en trois parties. Parties 1 et 2 -> Stock fin ; fours exclus.
-    public DbSet<InventaireConteneur> InventairesConteneurs => Set<InventaireConteneur>();
-    public DbSet<InventaireCategorieComptage> InventairesCategories => Set<InventaireCategorieComptage>();
-    public DbSet<InventaireFourComptage> InventairesFours => Set<InventaireFourComptage>();
+    public DbSet<InventaireConteneur> InventairesConteneursComptage => Set<InventaireConteneur>();
+    public DbSet<InventaireCategorieComptage> InventairesCategoriesComptage => Set<InventaireCategorieComptage>();
+    public DbSet<InventaireFourComptage> InventairesFoursComptage => Set<InventaireFourComptage>();
+
+    public DbSet<InventaireConteneurOf> InventairesConteneursOf => Set<InventaireConteneurOf>();
+    public DbSet<InventaireCategorie> InventairesCategories => Set<InventaireCategorie>();
+    public DbSet<InventaireFour> InventairesFours => Set<InventaireFour>();
+    public DbSet<InventaireFonderiePeriode> InventairesFonderiePeriodes => Set<InventaireFonderiePeriode>();
     public DbSet<ImportX3Batch> ImportX3Batches => Set<ImportX3Batch>();
     public DbSet<ImportX3File> ImportX3Files => Set<ImportX3File>();
     public DbSet<ImportX3Anomaly> ImportX3Anomalies => Set<ImportX3Anomaly>();

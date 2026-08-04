@@ -24,6 +24,122 @@ public sealed record AnnulerInventaireFonderieCommand(Guid Id);
 
 public interface IInventaireFonderieService
 {
+    // --- Partie 1 : Conteneurs / OF ---
+    Task<PagedInventairesConteneursResponse> SearchConteneursAsync(
+        int? mois,
+        int? annee,
+        string? codeTypeMatiere,
+        string? statut,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
+    Task<InventaireConteneurResponse> GetConteneurByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<InventaireConteneurResponse> CreateConteneurAsync(
+        CreateInventaireConteneurRequest request,
+        CancellationToken cancellationToken);
+
+    Task<InventaireConteneurResponse> UpdateConteneurAsync(
+        Guid id,
+        UpdateInventaireConteneurRequest request,
+        CancellationToken cancellationToken);
+
+    Task<InventaireConteneurResponse> ValidateConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<InventaireConteneurResponse> CancelConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task DeleteConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    // --- Partie 2 : Catégories ---
+    Task<PagedInventairesCategoriesResponse> SearchCategoriesAsync(
+        int? mois,
+        int? annee,
+        string? codeTypeMatiere,
+        string? statut,
+        string? categorie,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
+    Task<InventaireCategorieResponse> GetCategorieByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<InventaireCategorieResponse> CreateCategorieAsync(
+        CreateInventaireCategorieRequest request,
+        CancellationToken cancellationToken);
+
+    Task<InventaireCategorieResponse> UpdateCategorieAsync(
+        Guid id,
+        UpdateInventaireCategorieRequest request,
+        CancellationToken cancellationToken);
+
+    Task<InventaireCategorieResponse> ValidateCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<InventaireCategorieResponse> CancelCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task DeleteCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    // --- Partie 3 : Fours ---
+    Task<PagedInventairesFoursResponse> SearchFoursAsync(
+        int? mois,
+        int? annee,
+        string? codeTypeMatiere,
+        string? statut,
+        string? codeFour,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
+    Task<InventaireFourResponse> GetFourByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<InventaireFourResponse> CreateFourAsync(
+        CreateInventaireFourRequest request,
+        CancellationToken cancellationToken);
+
+    Task<InventaireFourResponse> UpdateFourAsync(
+        Guid id,
+        UpdateInventaireFourRequest request,
+        CancellationToken cancellationToken);
+
+    Task<InventaireFourResponse> ValidateFourAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<InventaireFourResponse> CancelFourAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task DeleteFourAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    // --- Synthèse ---
+    Task<InventaireSyntheseDto> GetSyntheseAsync(
+        int mois,
+        int annee,
+        string? codeTypeMatiere,
+        CancellationToken cancellationToken);
+
+    // --- Legacy / Ancien modèle ---
     Task<PagedInventairesFonderieResponse> GetAllAsync(GetInventairesFonderieQuery query, CancellationToken cancellationToken);
     Task<InventaireFonderieResponse> GetByIdAsync(GetInventaireFonderieByIdQuery query, CancellationToken cancellationToken);
     Task<InventaireFonderieResponse> CreateAsync(CreateInventaireFonderieCommand command, CancellationToken cancellationToken);
@@ -38,9 +154,436 @@ public sealed class InventaireFonderieService(
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
-    IValidator<CreateInventaireFonderieRequest> createValidator,
-    IValidator<UpdateInventaireFonderieRequest> updateValidator) : IInventaireFonderieService
+    IValidator<CreateInventaireConteneurRequest> createConteneurValidator,
+    IValidator<UpdateInventaireConteneurRequest> updateConteneurValidator,
+    IValidator<CreateInventaireCategorieRequest> createCategorieValidator,
+    IValidator<UpdateInventaireCategorieRequest> updateCategorieValidator,
+    IValidator<CreateInventaireFourRequest> createFourValidator,
+    IValidator<UpdateInventaireFourRequest> updateFourValidator,
+    IValidator<CreateInventaireFonderieRequest> createLegacyValidator,
+    IValidator<UpdateInventaireFonderieRequest> updateLegacyValidator) : IInventaireFonderieService
 {
+    // ==========================================
+    // PARTIE 1 : CONTENEURS / OF
+    // ==========================================
+    public async Task<PagedInventairesConteneursResponse> SearchConteneursAsync(
+        int? mois,
+        int? annee,
+        string? codeTypeMatiere,
+        string? statut,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        ValidatePagination(page, pageSize);
+        var criteria = new InventaireConteneurCriteria(
+            mois,
+            annee,
+            codeTypeMatiere,
+            ParseOptionalStatutInventaire(statut),
+            search);
+
+        var paged = await repository.SearchConteneursAsync(criteria, page, pageSize, cancellationToken);
+        return new PagedInventairesConteneursResponse(
+            paged.Items.Select(ToResponse).ToList(),
+            paged.Total,
+            page,
+            pageSize);
+    }
+
+    public async Task<InventaireConteneurResponse> GetConteneurByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire conteneur introuvable.");
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireConteneurResponse> CreateConteneurAsync(
+        CreateInventaireConteneurRequest request,
+        CancellationToken cancellationToken)
+    {
+        await createConteneurValidator.ValidateAndThrowAsync(request, cancellationToken);
+        await EnsureValidActiveTypeMatiereAsync(request.CodeTypeMatiere, cancellationToken);
+
+        var entity = InventaireConteneurOf.Creer(
+            request.DateInventaire,
+            request.NumeroConteneur,
+            request.NumeroOF,
+            request.CodeTypeMatiere,
+            request.PoidsReelKg,
+            request.Observation,
+            dateTimeProvider.UtcNow);
+
+        await repository.AddConteneurAsync(entity, cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireConteneurResponse> UpdateConteneurAsync(
+        Guid id,
+        UpdateInventaireConteneurRequest request,
+        CancellationToken cancellationToken)
+    {
+        await updateConteneurValidator.ValidateAndThrowAsync(request, cancellationToken);
+        await EnsureValidActiveTypeMatiereAsync(request.CodeTypeMatiere, cancellationToken);
+
+        var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire conteneur introuvable.");
+
+        entity.Modifier(
+            request.DateInventaire,
+            request.NumeroConteneur,
+            request.NumeroOF,
+            request.CodeTypeMatiere,
+            request.PoidsReelKg,
+            request.Observation,
+            dateTimeProvider.UtcNow);
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireConteneurResponse> ValidateConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire conteneur introuvable.");
+
+        entity.Valider(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireConteneurResponse> CancelConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire conteneur introuvable.");
+
+        entity.Annuler(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task DeleteConteneurAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire conteneur introuvable.");
+
+        if (entity.Statut != StatutInventaire.Brouillon)
+        {
+            throw new ConflictException("Seule une ligne Brouillon peut etre supprimee physiquement.");
+        }
+
+        await repository.RemoveConteneurAsync(entity, cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
+    }
+
+    // ==========================================
+    // PARTIE 2 : CATÉGORIES
+    // ==========================================
+    public async Task<PagedInventairesCategoriesResponse> SearchCategoriesAsync(
+        int? mois,
+        int? annee,
+        string? codeTypeMatiere,
+        string? statut,
+        string? categorie,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        ValidatePagination(page, pageSize);
+        var criteria = new InventaireCategorieCriteria(
+            mois,
+            annee,
+            codeTypeMatiere,
+            ParseOptionalStatutInventaire(statut),
+            ParseOptionalCategorie(categorie));
+
+        var paged = await repository.SearchCategoriesAsync(criteria, page, pageSize, cancellationToken);
+        return new PagedInventairesCategoriesResponse(
+            paged.Items.Select(ToResponse).ToList(),
+            paged.Total,
+            page,
+            pageSize);
+    }
+
+    public async Task<InventaireCategorieResponse> GetCategorieByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire categorie introuvable.");
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireCategorieResponse> CreateCategorieAsync(
+        CreateInventaireCategorieRequest request,
+        CancellationToken cancellationToken)
+    {
+        await createCategorieValidator.ValidateAndThrowAsync(request, cancellationToken);
+        await EnsureValidActiveTypeMatiereAsync(request.CodeTypeMatiere, cancellationToken);
+
+        var entity = InventaireCategorie.Creer(
+            request.DateInventaire,
+            request.Categorie,
+            request.CodeTypeMatiere,
+            request.PoidsReelKg,
+            request.Commentaire,
+            dateTimeProvider.UtcNow);
+
+        await repository.AddCategorieAsync(entity, cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireCategorieResponse> UpdateCategorieAsync(
+        Guid id,
+        UpdateInventaireCategorieRequest request,
+        CancellationToken cancellationToken)
+    {
+        await updateCategorieValidator.ValidateAndThrowAsync(request, cancellationToken);
+        await EnsureValidActiveTypeMatiereAsync(request.CodeTypeMatiere, cancellationToken);
+
+        var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire categorie introuvable.");
+
+        entity.Modifier(
+            request.DateInventaire,
+            request.Categorie,
+            request.CodeTypeMatiere,
+            request.PoidsReelKg,
+            request.Commentaire,
+            dateTimeProvider.UtcNow);
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireCategorieResponse> ValidateCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire categorie introuvable.");
+
+        entity.Valider(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireCategorieResponse> CancelCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire categorie introuvable.");
+
+        entity.Annuler(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task DeleteCategorieAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire categorie introuvable.");
+
+        if (entity.Statut != StatutInventaire.Brouillon)
+        {
+            throw new ConflictException("Seule une ligne Brouillon peut etre supprimee physiquement.");
+        }
+
+        await repository.RemoveCategorieAsync(entity, cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
+    }
+
+    // ==========================================
+    // PARTIE 3 : FOURS
+    // ==========================================
+    public async Task<PagedInventairesFoursResponse> SearchFoursAsync(
+        int? mois,
+        int? annee,
+        string? codeTypeMatiere,
+        string? statut,
+        string? codeFour,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        ValidatePagination(page, pageSize);
+        var criteria = new InventaireFourCriteria(
+            mois,
+            annee,
+            codeTypeMatiere,
+            ParseOptionalStatutInventaire(statut),
+            codeFour);
+
+        var paged = await repository.SearchFoursAsync(criteria, page, pageSize, cancellationToken);
+        return new PagedInventairesFoursResponse(
+            paged.Items.Select(ToResponse).ToList(),
+            paged.Total,
+            page,
+            pageSize);
+    }
+
+    public async Task<InventaireFourResponse> GetFourByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetFourByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire four introuvable.");
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireFourResponse> CreateFourAsync(
+        CreateInventaireFourRequest request,
+        CancellationToken cancellationToken)
+    {
+        await createFourValidator.ValidateAndThrowAsync(request, cancellationToken);
+        await EnsureValidActiveTypeMatiereAsync(request.CodeTypeMatiere, cancellationToken);
+
+        var entity = InventaireFour.Creer(
+            request.DateInventaire,
+            request.CodeFour,
+            request.CodeTypeMatiere,
+            request.QuantiteKg,
+            request.Observation,
+            dateTimeProvider.UtcNow);
+
+        await repository.AddFourAsync(entity, cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireFourResponse> UpdateFourAsync(
+        Guid id,
+        UpdateInventaireFourRequest request,
+        CancellationToken cancellationToken)
+    {
+        await updateFourValidator.ValidateAndThrowAsync(request, cancellationToken);
+        await EnsureValidActiveTypeMatiereAsync(request.CodeTypeMatiere, cancellationToken);
+
+        var entity = await repository.GetFourByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire four introuvable.");
+
+        entity.Modifier(
+            request.DateInventaire,
+            request.CodeFour,
+            request.CodeTypeMatiere,
+            request.QuantiteKg,
+            request.Observation,
+            dateTimeProvider.UtcNow);
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireFourResponse> ValidateFourAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetFourByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire four introuvable.");
+
+        entity.Valider(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task<InventaireFourResponse> CancelFourAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetFourByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire four introuvable.");
+
+        entity.Annuler(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToResponse(entity);
+    }
+
+    public async Task DeleteFourAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var entity = await repository.GetFourByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Inventaire four introuvable.");
+
+        if (entity.Statut != StatutInventaire.Brouillon)
+        {
+            throw new ConflictException("Seule une ligne Brouillon peut etre supprimee physiquement.");
+        }
+
+        await repository.RemoveFourAsync(entity, cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
+    }
+
+    // ==========================================
+    // SYNTHÈSE MENSUELLE
+    // ==========================================
+    public async Task<InventaireSyntheseDto> GetSyntheseAsync(
+        int mois,
+        int annee,
+        string? codeTypeMatiere,
+        CancellationToken cancellationToken)
+    {
+        if (mois is < 1 or > 12)
+        {
+            throw Validation("mois", "Le mois doit etre compris entre 1 et 12.");
+        }
+
+        if (annee is < 2000 or > 2100)
+        {
+            throw Validation("annee", "L'annee est invalide.");
+        }
+
+        var rows = await repository.GetSyntheseAsync(mois, annee, codeTypeMatiere, cancellationToken);
+
+        var lignes = rows.Select(r =>
+        {
+            var totalRapport = r.Partie1Kg + r.Partie2Kg + r.Partie3FourKg;
+            var totalBilan = r.Partie1Kg + r.Partie2Kg;
+            return new InventaireSyntheseLigneDto(
+                r.CodeTypeMatiere,
+                r.Partie1Kg,
+                r.Partie2Kg,
+                r.Partie3FourKg,
+                totalRapport,
+                totalBilan,
+                "Valide");
+        }).ToList();
+
+        var totalPartie1 = lignes.Sum(l => l.Partie1Kg);
+        var totalPartie2 = lignes.Sum(l => l.Partie2Kg);
+        var totalPartie3 = lignes.Sum(l => l.Partie3FourKg);
+        var totalRapportGen = totalPartie1 + totalPartie2 + totalPartie3;
+        var totalBilanGen = totalPartie1 + totalPartie2;
+
+        return new InventaireSyntheseDto(
+            mois,
+            annee,
+            lignes,
+            new InventaireSyntheseTotauxDto(
+                totalPartie1,
+                totalPartie2,
+                totalPartie3,
+                totalRapportGen,
+                totalBilanGen));
+    }
+
+    // ==========================================
+    // ANCIEN MODÈLE / RÉTROCOMPATIBILITÉ
+    // ==========================================
     public async Task<PagedInventairesFonderieResponse> GetAllAsync(
         GetInventairesFonderieQuery query,
         CancellationToken cancellationToken)
@@ -50,12 +593,12 @@ public sealed class InventaireFonderieService(
             new InventairesFonderieFilter(
                 ParseOptionalPeriod(query.Periode),
                 query.TypeMatiereId,
-                ParseOptionalStatut(query.Statut),
+                ParseOptionalLegacyStatut(query.Statut),
                 query.Page,
                 query.PageSize),
             cancellationToken);
         return new PagedInventairesFonderieResponse(
-            result.Items.Select(item => ToResponse(item)).ToArray(),
+            result.Items.Select(item => ToLegacyResponse(item)).ToArray(),
             result.Total,
             query.Page,
             query.PageSize);
@@ -64,16 +607,16 @@ public sealed class InventaireFonderieService(
     public async Task<InventaireFonderieResponse> GetByIdAsync(
         GetInventaireFonderieByIdQuery query,
         CancellationToken cancellationToken)
-        => ToResponse(await GetRequiredAsync(query.Id, cancellationToken));
+        => ToLegacyResponse(await GetRequiredLegacyAsync(query.Id, cancellationToken));
 
     public async Task<InventaireFonderieResponse> CreateAsync(
         CreateInventaireFonderieCommand command,
         CancellationToken cancellationToken)
     {
-        await createValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
+        await createLegacyValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
         var periode = ParsePeriod(command.Request.Periode);
-        var typeMatiere = await GetRequiredActiveTypeMatiereAsync(command.Request.TypeMatiereId, cancellationToken);
-        await EnsureNoDuplicateAsync(periode, typeMatiere.Id, null, cancellationToken);
+        var typeMatiere = await GetRequiredActiveTypeMatiereByIdAsync(command.Request.TypeMatiereId, cancellationToken);
+        await EnsureNoDuplicateLegacyAsync(periode, typeMatiere.Id, null, cancellationToken);
         var entity = InventaireFonderie.Creer(
             periode,
             typeMatiere.Id,
@@ -85,18 +628,18 @@ public sealed class InventaireFonderieService(
             dateTimeProvider.UtcNow);
         await repository.AddAsync(entity, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToResponse(entity, typeMatiere);
+        return ToLegacyResponse(entity, typeMatiere);
     }
 
     public async Task<InventaireFonderieResponse> UpdateAsync(
         UpdateInventaireFonderieCommand command,
         CancellationToken cancellationToken)
     {
-        await updateValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
-        var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        await updateLegacyValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
+        var entity = await GetRequiredLegacyAsync(command.Id, cancellationToken);
         var periode = ParsePeriod(command.Request.Periode);
-        var typeMatiere = await GetRequiredActiveTypeMatiereAsync(command.Request.TypeMatiereId, cancellationToken);
-        await EnsureNoDuplicateAsync(periode, typeMatiere.Id, entity.Id, cancellationToken);
+        var typeMatiere = await GetRequiredActiveTypeMatiereByIdAsync(command.Request.TypeMatiereId, cancellationToken);
+        await EnsureNoDuplicateLegacyAsync(periode, typeMatiere.Id, entity.Id, cancellationToken);
         entity.Modifier(
             periode,
             typeMatiere.Id,
@@ -107,31 +650,63 @@ public sealed class InventaireFonderieService(
             currentUser.UserName,
             dateTimeProvider.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToResponse(entity, typeMatiere);
+        return ToLegacyResponse(entity, typeMatiere);
     }
 
     public async Task<InventaireFonderieResponse> ValiderAsync(
         ValiderInventaireFonderieCommand command,
         CancellationToken cancellationToken)
     {
-        var entity = await GetRequiredAsync(command.Id, cancellationToken);
-        await EnsureNoDuplicateAsync(entity.Periode, entity.TypeMatiereId, entity.Id, cancellationToken);
+        var entity = await GetRequiredLegacyAsync(command.Id, cancellationToken);
+        await EnsureNoDuplicateLegacyAsync(entity.Periode, entity.TypeMatiereId, entity.Id, cancellationToken);
         entity.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToResponse(entity);
+        return ToLegacyResponse(entity);
     }
 
     public async Task<InventaireFonderieResponse> AnnulerAsync(
         AnnulerInventaireFonderieCommand command,
         CancellationToken cancellationToken)
     {
-        var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var entity = await GetRequiredLegacyAsync(command.Id, cancellationToken);
         entity.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToResponse(entity);
+        return ToLegacyResponse(entity);
     }
 
-    private async Task EnsureNoDuplicateAsync(
+    // ==========================================
+    // HELPERS
+    // ==========================================
+    private async Task EnsureValidActiveTypeMatiereAsync(string codeTypeMatiere, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(codeTypeMatiere))
+        {
+            throw Validation("codeTypeMatiere", "Le code type matiere est obligatoire.");
+        }
+
+        var normalizedCode = codeTypeMatiere.Trim().ToUpperInvariant();
+        var typeMatiere = await typeMatiereRepository.GetByCodeAsync(normalizedCode, cancellationToken)
+            ?? throw new NotFoundException($"Le type matiere '{codeTypeMatiere}' est introuvable.");
+
+        if (!typeMatiere.EstActif)
+        {
+            throw new ConflictException($"Le type matiere '{codeTypeMatiere}' est desactive.");
+        }
+    }
+
+    private async Task<TypeMatiere> GetRequiredActiveTypeMatiereByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var typeMatiere = await typeMatiereRepository.GetByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Type matiere introuvable.");
+        if (!typeMatiere.EstActif)
+        {
+            throw new ConflictException("Un type matiere desactive ne peut pas etre utilise.");
+        }
+
+        return typeMatiere;
+    }
+
+    private async Task EnsureNoDuplicateLegacyAsync(
         DateOnly periode,
         Guid typeMatiereId,
         Guid? excludeId,
@@ -144,20 +719,20 @@ public sealed class InventaireFonderieService(
         }
     }
 
-    private async Task<InventaireFonderie> GetRequiredAsync(Guid id, CancellationToken cancellationToken)
+    private async Task<InventaireFonderie> GetRequiredLegacyAsync(Guid id, CancellationToken cancellationToken)
         => await repository.GetByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire Fonderie introuvable.");
 
-    private async Task<TypeMatiere> GetRequiredActiveTypeMatiereAsync(Guid id, CancellationToken cancellationToken)
+    private static StatutInventaire? ParseOptionalStatutInventaire(string? value)
     {
-        var typeMatiere = await typeMatiereRepository.GetByIdAsync(id, cancellationToken)
-            ?? throw new NotFoundException("Type matiere introuvable.");
-        if (!typeMatiere.EstActif)
-        {
-            throw new ConflictException("Un type matiere desactive ne peut pas etre utilise.");
-        }
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Enum.TryParse<StatutInventaire>(value, true, out var result) ? result : null;
+    }
 
-        return typeMatiere;
+    private static CategorieInventaireFonderie? ParseOptionalCategorie(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Enum.TryParse<CategorieInventaireFonderie>(value, true, out var result) ? result : null;
     }
 
     private static DateOnly? ParseOptionalPeriod(string? value)
@@ -178,19 +753,10 @@ public sealed class InventaireFonderieService(
         return new DateOnly(parsed.Year, parsed.Month, 1);
     }
 
-    private static StatutInventaireFonderie? ParseOptionalStatut(string? value)
+    private static StatutInventaireFonderie? ParseOptionalLegacyStatut(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        if (!Enum.TryParse<StatutInventaireFonderie>(value, true, out var parsed) || !Enum.IsDefined(parsed))
-        {
-            throw Validation("statut", "Le statut doit etre Brouillon, Valide ou Annule.");
-        }
-
-        return parsed;
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Enum.TryParse<StatutInventaireFonderie>(value, true, out var parsed) && Enum.IsDefined(parsed) ? parsed : null;
     }
 
     private static void ValidatePagination(int page, int pageSize)
@@ -209,7 +775,62 @@ public sealed class InventaireFonderieService(
     private static ValidationException Validation(string propertyName, string message)
         => new([new ValidationFailure(propertyName, message)]);
 
-    private static InventaireFonderieResponse ToResponse(
+    private static InventaireConteneurResponse ToResponse(InventaireConteneurOf entity)
+        => new(
+            entity.Id,
+            entity.DateInventaire,
+            entity.NumeroConteneur,
+            entity.NumeroOF,
+            entity.CodeTypeMatiere,
+            entity.PoidsReelKg,
+            entity.Observation,
+            entity.Statut.ToString(),
+            entity.CreeLeUtc,
+            entity.ModifieLeUtc,
+            entity.ValideLeUtc,
+            entity.ValidePar,
+            entity.AnnuleLeUtc,
+            entity.AnnulePar);
+
+    private static InventaireCategorieResponse ToResponse(InventaireCategorie entity)
+        => new(
+            entity.Id,
+            entity.DateInventaire,
+            entity.Categorie.ToString(),
+            entity.CodeTypeMatiere,
+            entity.PoidsReelKg,
+            entity.Commentaire,
+            entity.Statut.ToString(),
+            entity.InclusBilanFonderie,
+            entity.VisibleRapportInventaire,
+            entity.CreeLeUtc,
+            entity.ModifieLeUtc,
+            entity.ValideLeUtc,
+            entity.ValidePar,
+            entity.AnnuleLeUtc,
+            entity.AnnulePar);
+
+    private static InventaireFourResponse ToResponse(InventaireFour entity)
+        => new(
+            entity.Id,
+            entity.DateInventaire,
+            entity.Mois,
+            entity.Annee,
+            entity.CodeFour,
+            entity.CodeTypeMatiere,
+            entity.QuantiteKg,
+            entity.Observation,
+            entity.Statut.ToString(),
+            entity.InclusBilanFonderie,
+            entity.VisibleRapportInventaire,
+            entity.CreeLeUtc,
+            entity.ModifieLeUtc,
+            entity.ValideLeUtc,
+            entity.ValidePar,
+            entity.AnnuleLeUtc,
+            entity.AnnulePar);
+
+    private static InventaireFonderieResponse ToLegacyResponse(
         InventaireFonderie entity,
         TypeMatiere? typeMatiere = null)
     {

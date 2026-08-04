@@ -101,6 +101,32 @@ public sealed class InventaireFonderie
         ModifieLeUtc = modifieLeUtc;
     }
 
+    /// <summary>
+    /// Met à jour la projection calculée à partir du comptage physique.
+    /// Une projection n'est pas une saisie manuelle : elle peut donc être recalculée
+    /// même si son statut historique n'est plus Brouillon.
+    /// </summary>
+    public void RecalculerProjection(
+        DateOnly periode,
+        Guid typeMatiereId,
+        decimal? stockDebutKg,
+        decimal stockFinKg,
+        string? observation,
+        Guid? modifieParUtilisateurId,
+        string? modifieParNom,
+        DateTime modifieLeUtc)
+    {
+        ValiderDonnees(periode, typeMatiereId, stockDebutKg, stockFinKg, observation);
+        Periode = NormaliserPeriode(periode);
+        TypeMatiereId = typeMatiereId;
+        StockDebutKg = stockDebutKg;
+        StockFinKg = stockFinKg;
+        Observation = NormaliserTexte(observation);
+        ModifieParUtilisateurId = modifieParUtilisateurId;
+        ModifieParNom = NormaliserTexte(modifieParNom);
+        ModifieLeUtc = modifieLeUtc;
+    }
+
     public void Valider(Guid? utilisateurId, string? utilisateurNom, DateTime valideLeUtc)
     {
         GarantirBrouillon("valide");

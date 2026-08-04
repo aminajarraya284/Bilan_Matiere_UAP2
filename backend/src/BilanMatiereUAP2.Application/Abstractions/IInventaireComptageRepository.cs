@@ -20,5 +20,26 @@ public interface IInventaireComptageRepository
     Task AddAsync(InventaireCategorieComptage ligne, CancellationToken cancellationToken = default);
     Task AddAsync(InventaireFourComptage ligne, CancellationToken cancellationToken = default);
 
+    Task<InventaireFonderie?> GetProjectionAsync(
+        DateOnly periode,
+        Guid typeMatiereId,
+        CancellationToken cancellationToken = default);
+
+    Task AddProjectionAsync(
+        InventaireFonderie projection,
+        CancellationToken cancellationToken = default);
+
+    Task<IInventaireComptageTransaction> BeginTransactionAsync(
+        CancellationToken cancellationToken = default);
+
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Transaction applicative couvrant la ligne détaillée et sa projection mensuelle.
+/// </summary>
+public interface IInventaireComptageTransaction : IAsyncDisposable
+{
+    Task CommitAsync(CancellationToken cancellationToken = default);
+    Task RollbackAsync(CancellationToken cancellationToken = default);
 }

@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IDechetFonderieRepository, DechetFonderieRepository>();
         services.AddScoped<IControlePoidsFonderieRepository, ControlePoidsFonderieRepository>();
         services.AddScoped<IInventaireFonderieRepository, InventaireFonderieRepository>();
+        services.AddScoped<IInventaireComptageRepository, InventaireComptageRepository>();
         services.AddScoped<IRebutUsinage2Repository, RebutUsinage2Repository>();
         services.AddScoped<IX3ImportRepository, X3ImportRepository>();
         services.AddScoped<IOfContextDataRepository, OfContextDataRepository>();
@@ -39,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<IGammeFabricationReader, GammeFabricationExcelReader>();
         services.AddScoped<INomenclatureReader, NomenclatureExcelReader>();
         services.AddScoped<ISortieMpMaterialRepository, SortieMpMaterialRepository>();
+        services.AddScoped<IBilanFonderieRepository, BilanFonderieRepository>();
+        services.AddScoped<IBilanUap2Repository, BilanUap2Repository>();
         services.AddScoped<IReportMachineRepository, ReportMachineRepository>();
         services.AddScoped<IReportMachineReader, RapportMachineExcelReader>();
         services.AddScoped<IImportSourceFileRepository, ImportSourceFileRepository>();

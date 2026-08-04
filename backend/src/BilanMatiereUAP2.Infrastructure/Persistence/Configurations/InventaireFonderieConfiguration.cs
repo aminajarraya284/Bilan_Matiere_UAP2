@@ -13,7 +13,7 @@ public sealed class InventaireFonderieConfiguration : IEntityTypeConfiguration<I
 
         builder.Property(entity => entity.Periode).IsRequired();
         builder.Property(entity => entity.TypeMatiereId).IsRequired();
-        builder.Property(entity => entity.StockDebutKg).HasPrecision(18, 3).IsRequired();
+        builder.Property(entity => entity.StockDebutKg).HasPrecision(18, 3).IsRequired(false);
         builder.Property(entity => entity.StockFinKg).HasPrecision(18, 3).IsRequired();
         builder.Property(entity => entity.Observation).HasMaxLength(500);
         builder.Property(entity => entity.Statut).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -31,7 +31,9 @@ public sealed class InventaireFonderieConfiguration : IEntityTypeConfiguration<I
             .HasForeignKey(entity => entity.TypeMatiereId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.Periode, entity.TypeMatiereId });
+        builder.HasIndex(entity => new { entity.Periode, entity.TypeMatiereId })
+            .HasDatabaseName("UX_InventairesFonderie_Periode_TypeMatiereId")
+            .IsUnique();
         builder.HasIndex(entity => entity.Statut);
     }
 }

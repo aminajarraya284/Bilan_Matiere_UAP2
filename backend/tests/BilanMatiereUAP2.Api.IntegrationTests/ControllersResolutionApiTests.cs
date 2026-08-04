@@ -35,6 +35,7 @@ public sealed class ControllersResolutionApiTests(ApiWebApplicationFactory facto
         "/api/v1/rapports-machine?page=1&pageSize=5",
         "/api/v1/mouvements-stock?page=1&pageSize=5",
         "/api/v1/inventaires-fonderie?periode=2026-06",
+        "/api/v1/inventaires-fonderie/comptage/2026-06",
         "/api/v1/dechets-fonderie?periode=2026-06"
     ];
 
