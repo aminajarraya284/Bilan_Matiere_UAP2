@@ -51,6 +51,23 @@ Ce projet est un tableau de bord interne construit avec Vue 3, Pinia, Vue Router
 - Vue Router
 - Tailwind CSS
 - axios
+- SheetJS (`xlsx`) — lecture des fichiers Excel importés
+
+### À propos de la dépendance `xlsx`
+
+Elle est installée depuis le CDN de l'éditeur, **et non depuis npm** :
+
+```jsonc
+"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+```
+
+C'est le mode d'installation **officiel** de SheetJS depuis la version 0.20 : l'éditeur
+ne publie plus sur npm. Le `package-lock.json` porte l'empreinte `sha512` de l'archive,
+donc l'intégrité est vérifiée à l'installation comme pour n'importe quel paquet.
+
+**Ne pas « corriger » cette ligne** en revenant au paquet npm `xlsx` : celui-ci est figé
+à la version 0.18.5, abandonnée, et porte des vulnérabilités connues (pollution de
+prototype, ReDoS). Ce serait une régression de sécurité.
 
 ## Structure principale
 

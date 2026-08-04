@@ -88,7 +88,8 @@ Pour les migrations EF Core, le projet cible est `BilanMatiereUAP2.Infrastructur
 
 ## Etat actuel
 
-- Le frontend reste principalement alimente par les donnees de test, tandis que les Types matiere et les Dechets Fonderie peuvent utiliser l'API reelle via `VITE_TYPES_MATIERE_SOURCE` et `VITE_DECHETS_SOURCE`.
-- Le backend fournit une premiere verticale metier operationnelle pour les Types matiere et les Dechets Fonderie sous `/api/v1` : validations, Entity Framework Core, migration SQL Server, seed des trois matieres `M3000L0`, `M3010L0` et `M3060L0`, suppression logique, resume et tests.
-- Les imports Excel, les bilans, la synchronisation X3 et les autres verticales metier ne sont pas encore connectes au backend. Les policies sont preparees, mais l'authentification JWT doit encore remplacer le mode de developpement avant la production.
-- La configuration et les commandes de cette premiere verticale sont documentees dans `docs/VerticaleTypesMatiereDechetsFonderie.md`.
+- **Connecte au backend** : Types matiere, Dechets Fonderie, Controle poids Fonderie, Receptions et Rebuts Usinage 2, Etats X3 et sorties magasin, References de fabrication, Historique des imports, Inventaire Fonderie, et les **trois bilans** (Fonderie, Usinage 2, UAP2).
+- **Encore en donnees de demonstration** : Tableau de bord, Rapports, Alertes, Journal d'audit, Administration. La synchronisation Sage X3 est `disabled` : ni endpoint, ni donnee de demonstration credible.
+- La source de chaque verticale est pilotee par `frontend/src/config/dataSources.ts` (variables `VITE_*_SOURCE`). Aucun repli silencieux : en mode `api`, une erreur reste une erreur. Le tableau complet est dans [`docs/Architecture.md`](docs/Architecture.md#etat-des-verticales).
+- Les regles metier sont le referentiel unique : [`docs/ReglesMetier.md`](docs/ReglesMetier.md). Deux arbitrages SOPAL restent ouverts sur les bilans livres (conversion des sorties X3 en unites non-KG, signe du rebut U2 dans l'ecart UAP2).
+- **Avant production** : l'authentification de developpement doit etre remplacee par Entra ID. Le demarrage hors `Development` est deja bloque tant que ce n'est pas configure (`RM-SEC-003`).

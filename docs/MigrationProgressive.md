@@ -395,20 +395,28 @@ Chaque calcul backend devra être comparé aux résultats du dataset et des test
 ## Ordre recommandé
 
 ```text
-0. Validation des règles métier et des contrats
-1. Configuration progressive des sources frontend
-2. Types matière minimaux + Déchets Fonderie
-3. Référentiels OF, gammes et nomenclatures
-4. Contrôle poids Fonderie
-5. Réceptions Usinage 2
-6. Inventaire
-7. Imports et synchronisation X3
-8. Bilan Usinage 2
-9. Bilan Fonderie
-10. Bilan UAP2
-11. Dashboard, alertes et rapports
-12. Administration et audit complet
+0. Validation des règles métier et des contrats          [fait]
+1. Configuration progressive des sources frontend        [fait]
+2. Types matière minimaux + Déchets Fonderie             [fait]
+3. Référentiels OF, gammes et nomenclatures              [fait]
+4. Contrôle poids Fonderie                               [fait]
+5. Réceptions Usinage 2                                  [fait]
+6. Inventaire                                            [fait]
+7. Imports et synchronisation X3                         [imports faits ; synchronisation disabled]
+8. Bilan Usinage 2                                       [fait]
+9. Bilan Fonderie                                        [fait]
+10. Bilan UAP2                                           [fait]
+11. Dashboard, alertes et rapports                       [à faire — mock]
+12. Administration et audit complet                      [à faire — mock]
 ```
+
+L'état détaillé, verticale par verticale, est tenu à jour dans
+[`Architecture.md`](Architecture.md#etat-des-verticales).
+
+Deux points d'arbitrage métier restent ouverts sur les bilans déjà livrés
+(voir [`ReglesMetier.md`](ReglesMetier.md#index-des-règles-à-valider)) :
+conversion des sorties X3 en unités non-KG (`RM-FON-003`) et signe du rebut U2
+dans l'écart UAP2 (`RM-UAP2-002`).
 
 L'authentification et les autorisations backend sont obligatoires avant toute mise en production avec de vrais utilisateurs. Elles peuvent être développées parallèlement aux premières verticales, mais aucun endpoint métier ne doit être exposé en production sans contrôle d'accès serveur.
 

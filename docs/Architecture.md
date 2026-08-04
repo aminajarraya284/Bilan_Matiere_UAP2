@@ -42,7 +42,35 @@ SQL Server
 
 La couche API recoit les requetes du frontend sous `/api/v1`. La couche Application execute les cas d'usage, Infrastructure realise les acces techniques via Entity Framework Core et Domain porte les concepts et invariants metier.
 
-La verticale Types matiere / Dechets Fonderie est operationnelle de bout en bout. En environnement Development, elle utilise la base `BilanMatiereUAP2` sur l'instance `.\SQLEXPRESS` et initialise les matieres `M3000L0`, `M3010L0` et `M3060L0`. Les autres domaines restent au stade de prototype frontend ou de squelette backend.
+En environnement Development, l'application utilise la base `BilanMatiereUAP2` sur l'instance `.\SQLEXPRESS` et initialise les matieres `M3000L0`, `M3010L0` et `M3060L0`.
+
+### Etat des verticales
+
+La source de donnees de chaque verticale est pilotee par `frontend/src/config/dataSources.ts`, seul endroit autorise a lire les variables `VITE_*_SOURCE`. Une verticale en `mock` n'emet aucun appel reseau ; une verticale `disabled` affiche « Fonctionnalite non disponible ».
+
+| Verticale | Source | Endpoint backend |
+| --- | --- | --- |
+| Authentification | `api` | `/api/auth` |
+| Types matiere | `api` | `/api/v1/types-matiere` |
+| Dechets Fonderie | `api` | `/api/v1/dechets-fonderie` |
+| Controle poids Fonderie | `api` | `/api/v1/controles-poids-fonderie` |
+| Receptions Usinage 2 | `api` | `/api/v1/receptions-usinage2` |
+| Rebuts Usinage 2 | `api` | `/api/v1/rebuts-usinage2` |
+| Etats X3 / Sorties magasin | `api` | `/api/v1/mouvements-stock`, `/api/v1/consommations-composants` |
+| References fabrication | `api` | `/api/v1/references` |
+| Historique des imports | `api` | `/api/v1/imports` |
+| **Inventaire Fonderie** | `api` | `/api/v1/inventaires-fonderie/comptage` |
+| **Bilan Fonderie** | `api` | `/api/v1/bilans/fonderie/{periode}` |
+| **Bilan Usinage 2** | `api` | `/api/v1/bilans/usinage2/{periode}` |
+| **Bilan UAP2** | `api` | `/api/v1/bilans/uap2/{periode}` |
+| Tableau de bord | `mock` | aucun |
+| Rapports | `mock` | aucun |
+| Alertes | `mock` | aucun |
+| Journal d'audit | `mock` | aucun |
+| Administration | `mock` | aucun |
+| Synchronisation Sage X3 | `disabled` | aucun |
+
+Les verticales en `mock` conservent des appels vers des routes qui n'existent pas encore ; ces appels sont inaccessibles tant que la source reste `mock`, et documentes comme tels dans les services concernes.
 
 La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
 
