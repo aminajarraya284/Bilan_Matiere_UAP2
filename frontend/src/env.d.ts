@@ -2,9 +2,17 @@
 
 /** Modes autorises pour une source de donnees (voir src/config/dataSources.ts). */
 type ViteDataSourceMode = 'api' | 'mock' | 'disabled';
+type ViteAuthMode = 'development' | 'entra';
 
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
+  readonly VITE_AUTH_MODE?: ViteAuthMode;
+  readonly VITE_ENTRA_CLIENT_ID?: string;
+  readonly VITE_ENTRA_TENANT_ID?: string;
+  readonly VITE_ENTRA_AUTHORITY?: string;
+  readonly VITE_ENTRA_REDIRECT_URI?: string;
+  readonly VITE_ENTRA_POST_LOGOUT_REDIRECT_URI?: string;
+  readonly VITE_ENTRA_API_SCOPE?: string;
   readonly VITE_SEUIL_ECART_FONDERIE?: string;
   readonly VITE_SEUIL_ECART_UAP2?: string;
   readonly VITE_TYPES_MATIERE?: string;

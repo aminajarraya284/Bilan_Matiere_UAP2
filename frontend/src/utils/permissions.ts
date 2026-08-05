@@ -24,3 +24,9 @@ export const hasPermission = (userRole: UserRole | undefined, routeName: string)
   if (!allowedRoles) return false;
   return allowedRoles.includes(userRole);
 };
+
+export const hasAnyPermission = (userRoles: readonly UserRole[], routeName: string): boolean => {
+  const allowedRoles = routePermissions[routeName];
+  if (!allowedRoles) return false;
+  return userRoles.some((role) => allowedRoles.includes(role));
+};

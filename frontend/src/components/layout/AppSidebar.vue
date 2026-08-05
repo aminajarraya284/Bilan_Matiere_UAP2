@@ -21,7 +21,7 @@ import {
 } from 'lucide-vue-next';
 
 const authStore = useAuthStore();
-const role = computed(() => authStore.userRole);
+const roles = computed(() => authStore.roles);
 const environmentLabel = computed(() => GLOBAL_MODE_LABELS[getGlobalMode()]);
 
 const menuItems = [
@@ -72,8 +72,8 @@ const menuItems = [
 ];
 
 const groupedMenu = computed(() => {
-  if (!role.value) return [];
-  const visible = menuItems.filter((item) => item.roles.includes(role.value!));
+  if (roles.value.length === 0) return [];
+  const visible = menuItems.filter((item) => item.roles.some((role) => roles.value.includes(role)));
   return ['Pilotage', 'Opérations', 'Données X3', 'Administration']
     .map((label) => ({ label, items: visible.filter((item) => item.group === label) }))
     .filter((group) => group.items.length > 0);

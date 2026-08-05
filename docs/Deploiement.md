@@ -34,6 +34,8 @@ nécessaires au client MSAL :
 - `VITE_ENTRA_API_SCOPE`.
 
 Ne jamais mettre de client secret dans le frontend.
+Le scope est celui exposé par l'enregistrement de l'API ; il ne doit pas être confondu
+avec le Client ID frontend ni avec l'audience validée par le backend.
 
 ## Build et démarrage
 

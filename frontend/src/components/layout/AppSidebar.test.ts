@@ -18,11 +18,14 @@ describe('AppSidebar', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     useAuthStore().user = {
-      id: 1,
+      id: '1',
+      displayName: 'Administrateur SOPAL',
       fullName: 'Administrateur SOPAL',
       username: 'admin',
       email: 'admin@sopal.com',
+      roles: ['Admin'],
       role: 'Admin',
+      authenticationMode: 'development',
       status: 'Actif'
     };
 
