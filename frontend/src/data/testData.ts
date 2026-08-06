@@ -1,6 +1,5 @@
 import type { AlertesBilanAlert } from '@/features/alertes/alertes.types';
 import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
-import type { DashboardAlert, DashboardBilanRow, DashboardStats } from '@/features/dashboard/dashboard.types';
 import type { RapportsListType } from '@/features/rapports/rapports.types';
 import type { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
 import type { SortieX3Mouvement } from '@/features/sorties-x3/sortiesX3.types';
@@ -9,7 +8,6 @@ import {
   calculateBilanFonderie,
   calculateBilanUap2,
   calculateBilanUsinage2,
-  calculateDashboard,
   getActiveAlerts
 } from '@/services/bilanCalculation.service';
 
@@ -112,7 +110,6 @@ export const testReceptionsUsinage2: ReceptionUsinage2Mouvement[] = sopalTestDat
   creeLe: rec.creeLe
 }));
 
-const dashboard = calculateDashboard(sopalTestDataset);
 const activeAlerts = getActiveAlerts(sopalTestDataset);
 
 export const testBilans: {
@@ -126,12 +123,6 @@ export const testBilans: {
 };
 
 export const testAlertes: AlertesBilanAlert[] = activeAlerts.bilanAlerts;
-
-export const testDashboard: {
-  stats: DashboardStats;
-  alerts: DashboardAlert[];
-  rows: DashboardBilanRow[];
-} = dashboard;
 
 export const testRapports: RapportsListType[] = [
   {

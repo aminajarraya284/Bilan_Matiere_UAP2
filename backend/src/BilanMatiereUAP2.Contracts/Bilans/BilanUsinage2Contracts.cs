@@ -73,4 +73,10 @@ public sealed record BilanUsinage2Response(
     int NombreAnomalies = 0,
     int Total = 0,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    int NombreLignesOk = 0,
+    int NombreLignesAVerifier = 0,
+    int NombreLignesExclues = 0,
+    int NombreOf = 0,
+    int NombreOfNonReceptionnes = 0,
+    int NombreReferencesManquantes = 0);

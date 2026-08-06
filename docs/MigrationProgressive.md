@@ -2,9 +2,9 @@
 
 ## Objectif
 
-La migration progressive consiste à connecter les fonctionnalités au backend une par une, sans interrompre le fonctionnement des écrans qui utilisent encore les données de démonstration.
+La migration progressive consiste à connecter les fonctionnalités au backend une par une, sans interrompre le fonctionnement des écrans qui utilisent encore les données de démonstration. Le présent document conserve le point de départ historique puis décrit l'état atteint après le Lot 3.
 
-À ce jour, le frontend fonctionne principalement selon le flux suivant :
+Au démarrage de la migration, le frontend fonctionnait principalement selon le flux suivant :
 
 ```text
 Dataset de test
@@ -16,15 +16,15 @@ localStorage
 Écrans Vue
 ```
 
-Le backend ASP.NET Core est actif. Il expose le health check `/health` ainsi que la verticale métier Types matière / Déchets Fonderie sous `/api/v1`.
+Le backend ASP.NET Core est actif. Il expose le health check `/health` et les verticales métier décrites dans [`Architecture.md`](Architecture.md#etat-des-verticales) sous `/api/v1`.
 
-Le frontend possède actuellement un interrupteur global :
+Le frontend possédait initialement un interrupteur global :
 
 ```env
 VITE_USE_REAL_API=false
 ```
 
-Le passage direct à `true` demanderait encore à plusieurs modules non migrés d'appeler simultanément des endpoints qui n'existent pas :
+Une bascule directe à `true` aurait demandé aux modules non migrés d'appeler simultanément des endpoints qui n'existaient pas encore :
 
 - authentification ;
 - réceptions Usinage 2 ;
@@ -44,7 +44,7 @@ La stratégie recommandée est donc :
 
 > Connecter un module au backend, le tester de bout en bout, puis migrer le module suivant tout en conservant explicitement les autres modules en mode mock.
 
-## État actuel : première verticale Déchets Fonderie
+## Point de départ historique : première verticale Déchets Fonderie
 
 À l'issue de la première migration :
 
@@ -339,7 +339,37 @@ VITE_TYPES_MATIERE_SOURCE=api
 VITE_DECHETS_SOURCE=api
 ```
 
-Les autres modules restent explicitement en mode mock.
+À cette étape historique, les autres modules restaient explicitement en mode mock.
+
+## État actuel après le Lot 3 — Dashboard réel
+
+Le Dashboard a rejoint les verticales API. Sa configuration par défaut est :
+
+```env
+VITE_DASHBOARD_SOURCE=api
+```
+
+Son flux est volontairement réduit à un seul appel réseau :
+
+```text
+DashboardView.vue
+        ↓
+dashboard.store.ts
+        ↓
+dashboard.service.ts
+        ↓
+GET /api/v1/dashboard?periode=YYYY-MM
+        ↓
+DashboardService + services de bilan existants
+        ↓
+SQL Server
+```
+
+La période est obligatoire et strictement validée au format `YYYY-MM`. Une erreur HTTP efface la donnée précédente du store et reste visible ; elle ne déclenche aucun fallback mock. Le mock Dashboard restant est un état vide explicite, réservé au développement et aux tests, sans valeur métier fictive.
+
+Les écarts ne sont ni recalculés dans la vue ni additionnés entre unités : la Fonderie reste en kilogrammes, Usinage 2 et UAP2 restent en pièces. Les zéros retournés par un calcul réel sont affichés, tandis qu'une absence de source est conservée sous forme de `null` avec le statut `NonDisponible` ou `Partiel`.
+
+Le Dashboard ne nécessite ni nouvelle table ni migration EF Core. Il réutilise les bilans existants et ajoute des projections de lecture mensuelles sur les inventaires, les réceptions et les lots d'import.
 
 ## Migrations suivantes
 
@@ -406,8 +436,9 @@ Chaque calcul backend devra être comparé aux résultats du dataset et des test
 8. Bilan Usinage 2                                       [fait]
 9. Bilan Fonderie                                        [fait]
 10. Bilan UAP2                                           [fait]
-11. Dashboard, alertes et rapports                       [à faire — mock]
-12. Administration et audit complet                      [à faire — mock]
+11. Dashboard                                             [fait — API]
+12. Alertes et rapports                                   [à faire — mock]
+13. Administration et audit complet                      [à faire — mock]
 ```
 
 L'état détaillé, verticale par verticale, est tenu à jour dans
@@ -466,4 +497,4 @@ Infrastructure / SQL Server
 Tests et observabilité
 ```
 
-La première verticale **Types matière minimaux + Déchets Fonderie** est opérationnelle. Les prochaines migrations doivent conserver la même approche progressive, après stabilisation et validation métier de cette verticale.
+La verticale **Dashboard** est opérationnelle sur les données réelles des bilans et les compteurs SQL disponibles. Le prochain lot doit appliquer la même approche aux alertes persistantes, sans réintroduire de calcul ou de fallback mock dans le Dashboard.

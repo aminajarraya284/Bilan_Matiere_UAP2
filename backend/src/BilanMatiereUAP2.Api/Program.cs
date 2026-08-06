@@ -143,6 +143,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
     options.AddPolicy(AuthorizationPolicies.ManageInventairesFonderie, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
+    options.AddPolicy(DashboardAuthorizationPolicies.Read, policy =>
+        policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

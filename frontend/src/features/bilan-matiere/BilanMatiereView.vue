@@ -11,7 +11,7 @@ import {
   BarChart3,
   MessageSquare
 } from 'lucide-vue-next';
-import { RouterLink } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { bilanService } from './bilan.service';
 import { rebutsUsinage2Service } from './rebutsUsinage2.service';
@@ -27,21 +27,34 @@ import { BUSINESS_RULES } from '@/config/businessRules';
 import type { DataVertical } from '@/config/dataSources';
 
 const authStore = useAuthStore();
+const route = useRoute();
 const dialog = useAppDialog();
 const isAdmin = computed(() => authStore.userRole === 'Admin');
 
 // Tab state
 type TabId = 'fonderie' | 'usinage2' | 'uap2';
-const activeTab = ref<TabId>('fonderie');
+const canOpenTab = (tab: TabId): boolean => {
+  if (authStore.roles.includes('Admin')) return true;
+  if (tab === 'fonderie') return authStore.roles.includes('ResponsableFonderie');
+  return authStore.roles.includes('ResponsableUsinage2');
+};
+const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : '';
+const defaultTab: TabId = authStore.roles.includes('ResponsableUsinage2') ? 'usinage2' : 'fonderie';
+const activeTab = ref<TabId>(
+  (requestedTab === 'fonderie' || requestedTab === 'usinage2' || requestedTab === 'uap2') && canOpenTab(requestedTab)
+    ? requestedTab
+    : defaultTab
+);
 const activeBilanVertical = computed<DataVertical>(() =>
   activeTab.value === 'fonderie' ? 'bilanFonderie' : activeTab.value === 'uap2' ? 'bilanUap2' : 'bilanU2'
 );
 
-const tabs: { id: TabId; label: string; icon: Component }[] = [
+const allTabs: { id: TabId; label: string; icon: Component }[] = [
   { id: 'fonderie', label: 'Bilan Fonderie', icon: Scale },
   { id: 'usinage2', label: 'Bilan Usinage 2', icon: Wrench },
   { id: 'uap2', label: 'Bilan UAP2 Total', icon: BarChart3 }
 ];
+const tabs = computed(() => allTabs.filter((tab) => canOpenTab(tab.id)));
 
 // Fonderie state
 const reports = ref<BilanMatiereReport[]>([]);
@@ -471,6 +484,7 @@ const submitVerification = async () => {
 
 // ===== TAB SWITCH =====
 const switchTab = (tab: TabId) => {
+  if (!canOpenTab(tab)) return;
   activeTab.value = tab;
   if (tab === 'usinage2' && bilansUsinage.value.length === 0) loadBilansUsinage();
   // La saisie des rebuts vit dans cet onglet : sa liste doit suivre la meme periode.
@@ -480,9 +494,12 @@ const switchTab = (tab: TabId) => {
 
 // ===== INIT =====
 onMounted(() => {
-  loadBilans();
-  loadBilansUsinage();
-  loadBilansUap2();
+  if (activeTab.value === 'fonderie') loadBilans();
+  if (activeTab.value === 'usinage2') {
+    loadBilansUsinage();
+    loadRebuts();
+  }
+  if (activeTab.value === 'uap2') loadBilansUap2();
 });
 </script>
 

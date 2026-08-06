@@ -64,7 +64,7 @@ describe('dataSources', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.stubEnv('VITE_DASHBOARD_SOURCE', 'inconnu');
 
-    expect(getDataSourceMode('dashboard')).toBe('mock');
+    expect(getDataSourceMode('dashboard')).toBe('api');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('VITE_DASHBOARD_SOURCE="inconnu"'));
   });
 

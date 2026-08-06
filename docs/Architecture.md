@@ -63,14 +63,40 @@ La source de donnees de chaque verticale est pilotee par `frontend/src/config/da
 | **Bilan Fonderie** | `api` | `/api/v1/bilans/fonderie/{periode}` |
 | **Bilan Usinage 2** | `api` | `/api/v1/bilans/usinage2/{periode}` |
 | **Bilan UAP2** | `api` | `/api/v1/bilans/uap2/{periode}` |
-| Tableau de bord | `mock` | aucun |
+| **Tableau de bord** | `api` | `/api/v1/dashboard?periode=YYYY-MM` |
 | Rapports | `mock` | aucun |
 | Alertes | `mock` | aucun |
 | Journal d'audit | `mock` | aucun |
 | Administration | `mock` | aucun |
 | Synchronisation Sage X3 | `disabled` | aucun |
 
-Les verticales en `mock` conservent des appels vers des routes qui n'existent pas encore ; ces appels sont inaccessibles tant que la source reste `mock`, et documentes comme tels dans les services concernes.
+Les verticales qui restent en `mock` sont isolées du réseau. Une erreur d'une verticale en mode `api` est affichée telle quelle : aucun repli silencieux vers une donnée de démonstration n'est autorisé.
+
+### Agrégation du Dashboard
+
+Le Dashboard utilise un unique appel HTTP côté frontend :
+
+```text
+DashboardView.vue
+      |
+      v
+GET /api/v1/dashboard?periode=YYYY-MM
+      |
+      v
+DashboardService (Application)
+      |-- BilanFonderieService
+      |-- BilanUsinage2Service
+      |-- BilanUap2Service
+      `-- DashboardReadRepository (compteurs SQL mensuels)
+```
+
+L'agrégateur appelle directement les services applicatifs existants ; il ne réalise aucun appel HTTP interne et ne recalcule pas leurs écarts. Le contrat conserve trois résumés indépendants : Fonderie en kilogrammes, Usinage 2 et UAP2 en pièces. Une valeur inconnue ou non calculable reste `null`, accompagnée d'un statut et d'un avertissement ; elle n'est jamais remplacée par zéro.
+
+Les statuts possibles sont `OK`, `AVerifier`, `Anomalie`, `Partiel` et `NonDisponible`. La priorité globale est : `Anomalie`, puis `Partiel` (y compris lorsqu'une seule source est indisponible), puis `AVerifier`, puis `OK`. Si toutes les sources sont indisponibles, le statut global est `NonDisponible`.
+
+Les compteurs d'inventaires, de réceptions validées et d'imports sont calculés sur le mois demandé. Le nombre de contrôles poids ambigus n'étant pas disponible sous forme d'agrégat mensuel fiable dans le modèle actuel, le contrat expose explicitement `null` et un avertissement au lieu de fabriquer une valeur.
+
+L'endpoint est autorisé aux rôles `Admin`, `ResponsableFonderie` et `ResponsableUsinage2`. La vue limite en plus les liens de détail au périmètre métier du rôle, sans remplacer le contrôle d'accès du backend.
 
 La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
 

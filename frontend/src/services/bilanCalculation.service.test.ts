@@ -17,7 +17,6 @@ import {
   buildReceptionDefaults,
   calculateBilanFonderie,
   calculateBilanUap2,
-  calculateDashboard,
   calculateInventorySummary,
   calculateNonReceivedQuantities,
   calculateReceptionWeight,
@@ -246,14 +245,6 @@ describe('SOPAL coherent test dataset calculations', () => {
     expect(row?.rebutSciKg).toBe(3);
     expect(row?.rebutTrnKg).toBe(2);
     expect(row?.totalRebutEmrSciTrnKg).toBe(17);
-  });
-
-  it('dashboard rows are calculated from bilans and keep the requested material order', () => {
-    const dashboard = calculateDashboard(sopalTestDataset);
-    const bilans = calculateBilanFonderie(sopalTestDataset);
-    expect(dashboard.stats.inputMatiere).toBe(bilans.reduce((sum, row) => sum + row.inputTotal, 0));
-    expect(dashboard.rows.map((row) => row.typeMatiere)).toEqual(['M3000L0', 'M3010L0', 'M3060L0']);
-    expect(dashboard.alerts.some((alert) => alert.title.includes('M3060L0'))).toBe(true);
   });
 
   it('has complete OF/article/gamme/nomenclature/report/movement/reception relations and no orphan data', () => {

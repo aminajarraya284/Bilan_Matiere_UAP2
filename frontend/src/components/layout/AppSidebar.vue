@@ -25,8 +25,20 @@ const roles = computed(() => authStore.roles);
 const environmentLabel = computed(() => GLOBAL_MODE_LABELS[getGlobalMode()]);
 
 const menuItems = [
-  { group: 'Pilotage', name: 'Tableau de bord', path: '/dashboard', icon: LayoutDashboard, roles: ['Admin'] },
-  { group: 'Pilotage', name: 'Bilans matière', path: '/bilan-matiere', icon: Scale, roles: ['Admin'] },
+  {
+    group: 'Pilotage',
+    name: 'Tableau de bord',
+    path: '/dashboard',
+    icon: LayoutDashboard,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
+  {
+    group: 'Pilotage',
+    name: 'Bilans matière',
+    path: '/bilan-matiere',
+    icon: Scale,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
   { group: 'Pilotage', name: 'Alertes', path: '/alertes', icon: AlertTriangle, roles: ['Admin'] },
   { group: 'Opérations', name: 'Inventaire Fonderie', path: '/inventaire', icon: ClipboardList, roles: ['Admin'] },
   {

@@ -5,33 +5,41 @@ import { formatNumber } from '@/utils/formatters';
 const props = withDefaults(
   defineProps<{
     title: string;
-    value: number;
+    value: number | null;
     unit?: string;
     secondary: string;
     decimals?: number;
+    nullLabel?: string;
     tone?: 'default' | 'warning' | 'danger' | 'success';
   }>(),
   {
     unit: '',
     decimals: 0,
+    nullLabel: 'Non disponible',
     tone: 'default'
   }
 );
 
-const displayedValue = ref(0);
+const displayedValue = ref<number | null>(props.value);
 let animationFrame = 0;
 
-const formattedValue = computed(() => formatNumber(displayedValue.value, props.decimals));
+const formattedValue = computed(() =>
+  displayedValue.value === null ? props.nullLabel : formatNumber(displayedValue.value, props.decimals)
+);
 
-const animateValue = (target: number) => {
+const animateValue = (target: number | null) => {
   cancelAnimationFrame(animationFrame);
+  if (target === null) {
+    displayedValue.value = null;
+    return;
+  }
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduceMotion) {
     displayedValue.value = target;
     return;
   }
 
-  const startValue = displayedValue.value;
+  const startValue = displayedValue.value ?? 0;
   const startedAt = performance.now();
   const duration = 500;
   const tick = (now: number) => {
@@ -58,9 +66,10 @@ onBeforeUnmount(() => cancelAnimationFrame(animationFrame));
       <h2 class="dashboard-kpi__title">{{ title }}</h2>
       <p class="dashboard-kpi__value">
         <span>{{ formattedValue }}</span>
-        <small v-if="unit">{{ unit }}</small>
+        <small v-if="unit && displayedValue !== null">{{ unit }}</small>
       </p>
     </div>
+    <div v-if="$slots.default" class="dashboard-kpi__details"><slot /></div>
     <p class="dashboard-kpi__secondary">{{ secondary }}</p>
   </article>
 </template>
@@ -199,5 +208,10 @@ onBeforeUnmount(() => cancelAnimationFrame(animationFrame));
   color: var(--color-text-secondary);
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+.dashboard-kpi__details {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
 }
 </style>

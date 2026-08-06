@@ -1,8 +1,8 @@
 import { UserRole } from '@/types/common.types';
 
 export const routePermissions: Record<string, UserRole[]> = {
-  Dashboard: ['Admin'],
-  BilanMatiere: ['Admin'],
+  Dashboard: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
+  BilanMatiere: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   BilanUap2: ['Admin', 'ResponsableUsinage2'],
   Inventaire: ['Admin'],
   ControlePoidsFonderie: ['Admin', 'ResponsableFonderie'],

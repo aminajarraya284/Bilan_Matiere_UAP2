@@ -98,7 +98,13 @@ public sealed class BilanUsinage2Service(
             filtrees.Sum(ligne => ligne.Anomalies.Count),
             filtrees.Length,
             query.Page,
-            query.PageSize);
+            query.PageSize,
+            filtrees.Count(ligne => ligne.Statut == "OK"),
+            filtrees.Count(ligne => ligne.Statut == "AVerifier"),
+            filtrees.Count(ligne => ligne.Statut == "ExcluAtelier"),
+            filtrees.Select(ligne => ligne.NumeroOF).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+            filtrees.Count(ligne => ligne.QuantiteNonReceptionneePieces > 0m),
+            filtrees.Count(ligne => ligne.Anomalies.Contains("ARTICLE_OF_INTROUVABLE")));
     }
 
     public async Task<byte[]> ExportCsvAsync(
