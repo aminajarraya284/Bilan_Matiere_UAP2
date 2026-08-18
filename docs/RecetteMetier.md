@@ -19,6 +19,21 @@ résultat doit être renseigné pendant la recette SOPAL.
 | DASH-004 | Dashboard | API indisponible après un chargement réussi | Actualiser | Erreur visible et anciennes données effacées, sans fallback de démonstration | Couvert par tests automatisés | Recette SOPAL requise |
 | DASH-005 | Dashboard API | Jetons des trois rôles applicatifs | Appeler `GET /api/v1/dashboard?periode=YYYY-MM` | `200` pour Admin, Responsable Fonderie et Responsable Usinage 2 | Couvert par tests d'intégration | Recette Entra requise |
 | DASH-006 | Dashboard API | Période absente/invalide ou rôle non autorisé | Appeler l'endpoint | `400` pour la période ; `401/403` selon l'authentification et le rôle | Couvert par tests d'intégration | Recette Entra requise |
+| ALT-001 | Alertes | Période avec une anomalie source | Lancer le recalcul | Une nouvelle alerte persistante référence la source | Couvert par tests automatisés | Recette SOPAL requise |
+| ALT-002 | Alertes | Même période et même anomalie | Recalculer deux fois | Une seule alerte active ; première date conservée, dernière actualisée | Couvert par tests unitaires et HTTP | Recette SOPAL requise |
+| ALT-003 | Alertes | Alerte ouverte | Acquitter | Statut `Acquittee`, utilisateur et date UTC conservés | Couvert par tests unitaires et HTTP | Recette SOPAL requise |
+| ALT-004 | Alertes | Alerte ouverte ou acquittée | Résoudre | Statut `Resolue`, historique conservé, source non modifiée | Couvert par tests unitaires et HTTP | Recette SOPAL requise |
+| ALT-005 | Alertes | Alerte active | Ignorer avec puis sans commentaire | Commentaire obligatoire ; alerte ignorée toujours consultable | Couvert par tests unitaires, HTTP et Vue | Recette SOPAL requise |
+| ALT-006 | Alertes | Plusieurs périodes | Filtrer par `YYYY-MM` | Seule la période demandée est retournée | Couvert par tests HTTP | Recette SOPAL requise |
+| ALT-007 | Alertes | Plusieurs statuts | Filtrer par statut | Résultat et résumé cohérents | Couvert par tests HTTP/frontend | Recette SOPAL requise |
+| ALT-008 | Alertes | Plusieurs gravités | Filtrer par gravité | Seules les alertes de la gravité demandée sont retournées | Couvert par tests application/frontend | Recette SOPAL requise |
+| ALT-009 | Alertes | Source avec route existante | Ouvrir le détail puis la source | Route réelle construite selon source, période et OF | Couvert par tests frontend | Recette visuelle requise |
+| ALT-010 | Alertes | Responsable Fonderie et alerte U2 | Consulter ou traiter l'alerte | `403`, aucune modification | Couvert par tests application et HTTP | Recette Entra requise |
+| ALT-011 | Alertes | Condition sûre disparue | Recalculer la même période | Résolution automatique par `SYSTEME` uniquement si le code est éligible | Couvert par tests unitaires | Recette SOPAL requise |
+| ALT-012 | Alertes | Poids ou quantité source absent | Recalculer puis afficher | Valeur absente explicite, jamais remplacée par zéro | Couvert par tests unitaires/frontend | Recette SOPAL requise |
+| ALT-013 | Alertes | Import au statut `Echec` | Recalculer le mois | Alerte `X3_IMPORT_ECHEC`, gravité `Erreur`, non auto-résolue | Couvert par tests de détection à compléter | Recette SOPAL requise |
+| ALT-014 | Alertes | Ligne éligible sans poids physique | Recalculer | Alerte de poids manquant avec unité `kg/piece`, aucun zéro | Couvert par service source et catalogue | Recette SOPAL requise |
+| ALT-015 | Alertes | Quantité non réceptionnée positive du bilan U2 | Recalculer | Alerte en pièces, quantité et signe issus du bilan sans seuil ajouté | Couvert par tests générateur et services source | Recette SOPAL requise |
 | SEC-001 | Autorisations | Utilisateur non Admin | Ouvrir Administration/Audit | Accès refusé par le backend | — | Non exécuté |
 | OPS-001 | Synchronisation X3 | Aucun connecteur fourni | Vérifier le module | Fonctionnalité désactivée, aucune synchronisation simulée | — | Non exécuté |
 

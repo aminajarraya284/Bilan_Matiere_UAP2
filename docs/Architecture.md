@@ -64,8 +64,8 @@ La source de donnees de chaque verticale est pilotee par `frontend/src/config/da
 | **Bilan Usinage 2** | `api` | `/api/v1/bilans/usinage2/{periode}` |
 | **Bilan UAP2** | `api` | `/api/v1/bilans/uap2/{periode}` |
 | **Tableau de bord** | `api` | `/api/v1/dashboard?periode=YYYY-MM` |
+| **Alertes** | `api` | `/api/v1/alertes` |
 | Rapports | `mock` | aucun |
-| Alertes | `mock` | aucun |
 | Journal d'audit | `mock` | aucun |
 | Administration | `mock` | aucun |
 | Synchronisation Sage X3 | `disabled` | aucun |
@@ -97,6 +97,34 @@ Les statuts possibles sont `OK`, `AVerifier`, `Anomalie`, `Partiel` et `NonDispo
 Les compteurs d'inventaires, de réceptions validées et d'imports sont calculés sur le mois demandé. Le nombre de contrôles poids ambigus n'étant pas disponible sous forme d'agrégat mensuel fiable dans le modèle actuel, le contrat expose explicitement `null` et un avertissement au lieu de fabriquer une valeur.
 
 L'endpoint est autorisé aux rôles `Admin`, `ResponsableFonderie` et `ResponsableUsinage2`. La vue limite en plus les liens de détail au périmètre métier du rôle, sans remplacer le contrôle d'accès du backend.
+
+### Alertes métier persistantes
+
+Le module Alertes réutilise les sorties des services métier ; il ne duplique ni leurs formules ni leurs seuils :
+
+```text
+AlertesView.vue
+      |
+      v
+GET/POST /api/v1/alertes
+      |
+      v
+AlerteApplicationService
+      |-- AlerteGenerationService (déduplication et cycle de vie)
+      |-- AlerteDetectionService
+      |     |-- BilanFonderieService
+      |     |-- BilanUsinage2Service
+      |     |-- BilanUap2Service
+      |     `-- DashboardReadRepository (statuts d'import)
+      `-- AlerteRepository
+            |
+            v
+       SQL Server / AlertesMetier
+```
+
+La clé active combine le code, la période, l'OF, l'article, le type matière et la source. Un index unique filtré complète le contrôle applicatif. Les listes sont paginées et utilisent `AsNoTracking`; les actions chargent seulement l'entité ciblée. Les dates relues depuis SQL sont explicitement restaurées avec le type UTC.
+
+Les rôles `Admin`, `ResponsableFonderie` et `ResponsableUsinage2` passent les policies HTTP. Le service applicatif réduit ensuite les sources visibles et traitables au périmètre métier du rôle. La description complète est disponible dans [`AlertesMetier.md`](AlertesMetier.md).
 
 La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
 

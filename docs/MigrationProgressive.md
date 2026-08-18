@@ -371,6 +371,34 @@ Les écarts ne sont ni recalculés dans la vue ni additionnés entre unités : l
 
 Le Dashboard ne nécessite ni nouvelle table ni migration EF Core. Il réutilise les bilans existants et ajoute des projections de lecture mensuelles sur les inventaires, les réceptions et les lots d'import.
 
+## État actuel après le Lot 4 — Alertes persistantes
+
+La verticale Alertes a rejoint les sources API :
+
+```env
+VITE_ALERTES_SOURCE=api
+```
+
+Le flux complet est désormais :
+
+```text
+AlertesView.vue
+        ↓
+alertes.store.ts
+        ↓
+alertes.service.ts
+        ↓
+/api/v1/alertes
+        ↓
+services de détection et génération
+        ↓
+AlertesMetier / SQL Server
+```
+
+Le recalcul est explicite et dédupliqué. Il conserve la première date de détection, actualise la dernière, et ne résout automatiquement que les codes dont la condition courante est sûre. Les actions utilisateur sont persistées avec date UTC, utilisateur et commentaire. Une erreur API efface la liste courante et reste visible ; aucun mock n'est chargé en remplacement.
+
+La migration `AddPersistentBusinessAlerts` crée la table et les index nécessaires. Elle n'est pas appliquée automatiquement et ne doit jamais être exécutée sur une base distante sans autorisation.
+
 ## Migrations suivantes
 
 ### Référentiels et données OF
@@ -437,8 +465,9 @@ Chaque calcul backend devra être comparé aux résultats du dataset et des test
 9. Bilan Fonderie                                        [fait]
 10. Bilan UAP2                                           [fait]
 11. Dashboard                                             [fait — API]
-12. Alertes et rapports                                   [à faire — mock]
-13. Administration et audit complet                      [à faire — mock]
+12. Alertes                                               [fait — API persistante]
+13. Rapports                                              [à faire — mock]
+14. Administration et audit complet                      [à faire — mock]
 ```
 
 L'état détaillé, verticale par verticale, est tenu à jour dans
@@ -497,4 +526,4 @@ Infrastructure / SQL Server
 Tests et observabilité
 ```
 
-La verticale **Dashboard** est opérationnelle sur les données réelles des bilans et les compteurs SQL disponibles. Le prochain lot doit appliquer la même approche aux alertes persistantes, sans réintroduire de calcul ou de fallback mock dans le Dashboard.
+Les verticales **Dashboard** et **Alertes** sont opérationnelles sur les données réelles disponibles. Le prochain lot doit connecter les Rapports comme projections des services existants, sans dupliquer leurs calculs ni réintroduire de fallback mock.

@@ -18,6 +18,7 @@ renuméroté : il peut être marqué obsolète, mais reste en place.
 | `RM-FON` | Fonderie : déchets, contrôle poids, bilan |
 | `RM-INV` | Inventaire Fonderie |
 | `RM-UAP2` | Bilan matière UAP2 consolidé |
+| `RM-ALERT` | Alertes métier persistées |
 | `RM-VAL` | Validation, clôture et workflow mensuel |
 
 ### Statut d'une règle
@@ -816,6 +817,75 @@ en corrigeant au passage la formule documentée.
   qu'une fonctionnalité absente — même principe que le mode `disabled` de la
   synchronisation X3.
 - **Statut** : **Bloquée** — B1, B2 et B3 **À valider** par SOPAL.
+
+---
+
+## RM-ALERT — Alertes métier persistées
+
+### RM-ALERT-001 — Nature d'une alerte
+
+- **Principe** : une alerte **persiste une anomalie déjà calculée par un bilan**. Elle ne
+  crée aucune règle nouvelle : elle transforme une anomalie transitoire (recalculée à
+  chaque appel) en enregistrement traçable, acquittable et historisé.
+- **Correspondance** : les codes d'alerte reprennent les anomalies des bilans, par exemple
+  `FON_SORTIE_X3_UNITE_NON_CONVERTIBLE` pour l'anomalie homonyme de `RM-FON-003`, ou
+  `UAP2_CTRL_MANQUANT` pour celle de `RM-UAP2-001`.
+- **Consequence** : modifier un seuil ou une formule de bilan modifie mecaniquement les
+  alertes produites. Les deux ne doivent jamais diverger.
+- **Statut** : **Technique**.
+
+### RM-ALERT-002 — Cycle de vie
+
+- **Statuts** : `Ouverte → Acquittée → Résolue`, ou `Ouverte → Ignorée`.
+- **Regles** :
+  - seule une alerte **ouverte** peut être acquittée ;
+  - une alerte **ignorée** ne peut plus être résolue, et une alerte **résolue** ne peut
+    plus être ignorée ;
+  - **ignorer exige une justification** écrite ; acquitter et résoudre acceptent un
+    commentaire facultatif ;
+  - une date de traitement **ne peut pas précéder la détection** ;
+  - toutes les dates sont en **UTC**, refusé sinon.
+- **Idempotence** : réacquitter une alerte déjà acquittée est sans effet plutôt qu'une
+  erreur, ce qui rend l'action rejouable.
+- **Tests** : `AlerteMetierTests`.
+- **Statut** : **Technique**.
+
+### RM-ALERT-003 — Déduplication
+
+- **Clé** : concaténation de `Code | Periode | NumeroOF | CodeArticle | TypeMatiere | Source`,
+  normalisée en majuscules, `<NULL>` pour une composante absente, séparateur `|` échappé.
+- **Effet** : un recalcul de la même période **ne duplique pas** une alerte déjà ouverte ;
+  il met à jour sa sévérité, son libellé et sa date de dernière détection.
+- **Portée** : la période fait partie de la clé, donc une même anomalie sur deux mois
+  distincts produit bien deux alertes.
+- **Statut** : **Technique**.
+
+### RM-ALERT-004 — Résolution automatique
+
+- **Règle** : une alerte marquée `ResolutionAutomatique` et **non redétectée** lors du
+  recalcul de la **même période** est résolue par `SYSTEME`, avec le commentaire
+  « Condition non détectée lors du recalcul de la même période. ».
+- **Portée** : la résolution automatique n'agit **que** sur la période recalculée. Une
+  alerte d'une autre période n'est jamais fermée par ce mécanisme.
+- **Non couvert** : les alertes non marquées `ResolutionAutomatique` restent ouvertes
+  jusqu'à traitement humain, même si la condition disparaît.
+- **Statut** : **Technique**.
+
+### RM-ALERT-005 — Points d'arbitrage ouverts
+
+- **A1 — Sévérité par code** : l'affectation d'une sévérité (`Information`, `Avertissement`,
+  `Erreur`) à chaque code d'alerte reflète le choix d'implémentation, **non un arbitrage
+  SOPAL**. La liste des alertes qui doivent réellement bloquer une clôture reste à définir.
+- **A2 — Politique de purge** : aucune règle de rétention n'est définie pour les alertes
+  résolues ou ignorées. La table croît indéfiniment.
+- **A3 — Notification** : aucune notification (courriel, tableau de bord temps réel) n'est
+  prévue ; les alertes ne sont visibles qu'en consultant l'écran dédié.
+- **Statut** : **À valider** par SOPAL.
+
+Le catalogue exhaustif des codes réellement implémentés, avec condition, source, unité,
+gravité, résolution automatique et statut de validation, est maintenu dans
+[`AlertesMetier.md`](AlertesMetier.md#catalogue-livre). Aucun code non présent dans ce
+catalogue ne doit être émis par le générateur.
 
 ---
 
