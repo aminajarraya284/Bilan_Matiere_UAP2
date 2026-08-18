@@ -96,4 +96,8 @@ describe('dataSources', () => {
     vi.stubEnv('VITE_SYNCHRONISATION_X3_SOURCE', 'disabled');
     expect(getGlobalMode()).toBe('hybride');
   });
+
+  it('utilise l API reelle par defaut pour les alertes', () => {
+    expect(getDataSourceMode('alertes')).toBe('api');
+  });
 });
