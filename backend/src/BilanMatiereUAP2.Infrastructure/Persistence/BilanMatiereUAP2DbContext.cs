@@ -36,6 +36,7 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<EntreeOfComposant> EntreesOfComposants => Set<EntreeOfComposant>();
     public DbSet<X3MouvementStock> X3MouvementsStock => Set<X3MouvementStock>();
     public DbSet<ParametreApplication> ParametresApplication => Set<ParametreApplication>();
+    public DbSet<AlerteMetier> AlertesMetier => Set<AlerteMetier>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

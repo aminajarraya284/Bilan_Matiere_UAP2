@@ -1,5 +1,6 @@
 using BilanMatiereUAP2.Application.Features.Bilans;
 using BilanMatiereUAP2.Application.Features.Dashboard;
+using BilanMatiereUAP2.Application.Features.Alertes;
 using BilanMatiereUAP2.Application.Features.RebutsUsinage2;
 using BilanMatiereUAP2.Application.Features.DechetsFonderie;
 using BilanMatiereUAP2.Application.Features.ControlePoidsFonderie;
@@ -43,6 +44,9 @@ public static class DependencyInjection
         services.AddScoped<IBilanFonderieService, BilanFonderieService>();
         services.AddScoped<IBilanUap2Service, BilanUap2Service>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IAlerteDetectionService, AlerteDetectionService>();
+        services.AddScoped<IAlerteGenerationService, AlerteGenerationService>();
+        services.AddScoped<IAlerteApplicationService, AlerteApplicationService>();
         services.AddScoped<IImportDependencyRefreshService, ImportDependencyRefreshService>();
         services.AddScoped<IParametreApplicationService, ParametreApplicationService>();
         services.AddScoped<IParametreApplicationProvider>(provider =>

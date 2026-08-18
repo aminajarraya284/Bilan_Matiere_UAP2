@@ -30,6 +30,7 @@ public sealed class GlobalExceptionMiddleware(
                 DomainValidationException => (StatusCodes.Status400BadRequest, "Règle métier invalide"),
                 NotFoundException => (StatusCodes.Status404NotFound, "Ressource introuvable"),
                 ConflictException => (StatusCodes.Status409Conflict, "Conflit métier"),
+                ForbiddenException => (StatusCodes.Status403Forbidden, "Accès interdit"),
                 ImportFileException => (StatusCodes.Status400BadRequest, "Fichier d'import invalide"),
                 _ => (StatusCodes.Status500InternalServerError, "Une erreur interne est survenue.")
             };

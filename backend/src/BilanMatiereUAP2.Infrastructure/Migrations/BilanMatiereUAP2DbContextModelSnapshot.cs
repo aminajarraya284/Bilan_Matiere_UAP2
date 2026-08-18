@@ -22,6 +22,128 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.AlerteMetier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AcquitteeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AcquitteePar")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("CleDeduplication")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("nvarchar(600)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CodeArticle")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CommentaireTraitement")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("DerniereDetectionLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("DetecteeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DonneesAssocieesJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<bool>("EstActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("IgnoreeLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("IgnoreePar")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("NumeroOF")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Periode")
+                        .HasMaxLength(7)
+                        .HasColumnType("nvarchar(7)");
+
+                    b.Property<DateTime?>("ResolueLeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ResoluePar")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<bool>("ResolutionAutomatique")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Severite")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Titre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TypeMatiere")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CleDeduplication")
+                        .IsUnique()
+                        .HasFilter("[EstActive] = 1");
+
+                    b.HasIndex("CodeArticle");
+
+                    b.HasIndex("DetecteeLeUtc");
+
+                    b.HasIndex("NumeroOF");
+
+                    b.HasIndex("Periode", "Statut");
+
+                    b.HasIndex("Source", "Severite");
+
+                    b.ToTable("AlertesMetier", (string)null);
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.ConsommationComposant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1013,7 +1135,8 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                     b.HasIndex("TypeMatiereId");
 
                     b.HasIndex("Periode", "TypeMatiereId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("UX_InventairesFonderie_Periode_TypeMatiereId");
 
                     b.ToTable("InventairesFonderie", (string)null);
                 });
