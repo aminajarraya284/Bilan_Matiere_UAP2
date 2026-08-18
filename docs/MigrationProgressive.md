@@ -526,4 +526,4 @@ Infrastructure / SQL Server
 Tests et observabilité
 ```
 
-Les verticales **Dashboard** et **Alertes** sont opérationnelles sur les données réelles disponibles. Le prochain lot doit connecter les Rapports comme projections des services existants, sans dupliquer leurs calculs ni réintroduire de fallback mock.
+Les verticales **Dashboard**, **Alertes** et **Rapports** sont opérationnelles sur les données réelles disponibles. `rapports` utilise désormais `api` par défaut et n'a aucun fallback vers les anciennes cartes ou exports fictifs. Le prochain lot peut auditer puis persister le Journal d'audit sans modifier les projections de rapports.

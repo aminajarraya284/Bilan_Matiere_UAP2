@@ -34,6 +34,26 @@ résultat doit être renseigné pendant la recette SOPAL.
 | ALT-013 | Alertes | Import au statut `Echec` | Recalculer le mois | Alerte `X3_IMPORT_ECHEC`, gravité `Erreur`, non auto-résolue | Couvert par tests de détection à compléter | Recette SOPAL requise |
 | ALT-014 | Alertes | Ligne éligible sans poids physique | Recalculer | Alerte de poids manquant avec unité `kg/piece`, aucun zéro | Couvert par service source et catalogue | Recette SOPAL requise |
 | ALT-015 | Alertes | Quantité non réceptionnée positive du bilan U2 | Recalculer | Alerte en pièces, quantité et signe issus du bilan sans seuil ajouté | Couvert par tests générateur et services source | Recette SOPAL requise |
+| RPT-001 | Rapports | Période Fonderie complète | Ouvrir RPT-001 | Projection identique au service Fonderie, colonnes en kg | Couvert par tests HTTP/frontend | Recette SOPAL requise |
+| RPT-002 | Rapports | Période Fonderie partielle | Ouvrir RPT-001 | Badge partiel et avertissement, total inconnu conservé `null` | Couvert par tests service/frontend | Recette SOPAL requise |
+| RPT-003 | Rapports | Sortie X3 non-KG | Ouvrir RPT-001 | Anomalie source visible, aucune conversion inventée | Couvert par service Bilan Fonderie | Recette SOPAL requise |
+| RPT-004 | Rapports | Période U2 existante | Ouvrir RPT-002 | Quantités et écart en pièces, pagination cohérente | Couvert par tests HTTP | Recette SOPAL requise |
+| RPT-005 | Rapports | Période UAP2 existante | Ouvrir RPT-003 | CTRL de référence, écart en pièces et sortie MP kg séparée | Couvert par tests HTTP/frontend | Recette SOPAL requise |
+| RPT-006 | Rapports | OF existant | Ouvrir RPT-004 avec OF et période | Sections contexte, réceptions, processus, mouvements, poids, références, bilans et alertes | Couvert structurellement par tests HTTP | Recette avec données requise |
+| RPT-007 | Rapports | OF inconnu | Ouvrir RPT-004 | Rapport partiel et données manquantes explicites, aucun faux contexte | Couvert par tests HTTP | Recette SOPAL requise |
+| RPT-008 | Rapports | Alertes persistantes | Ouvrir RPT-005 et filtrer | Liste et compteurs issus de `/alertes`, aucun mock | Couvert par tests HTTP/frontend | Recette SOPAL requise |
+| RPT-009 | Rapports | Inventaire mensuel validé | Ouvrir RPT-006 | Synthèse par matière, fours séparés du total bilan | Couvert par tests HTTP | Recette SOPAL requise |
+| RPT-010 | Rapports | Imports SQL présents | Ouvrir RPT-007 | Historique paginé, compteurs et statut réels, aucun hash exposé | Couvert par tests HTTP | Recette avec imports requise |
+| RPT-011 | Rapports | Journée avec non-réceptions | Ouvrir RPT-008 | Quantités en pièces et données manquantes explicites | Couvert par tests HTTP | Recette SOPAL requise |
+| RPT-012 | Rapports | Rapport exportable | Exporter CSV | BOM UTF-8, `;`, guillemets échappés, nom sûr, mêmes filtres que l'aperçu | Couvert par tests unitaires/HTTP/frontend | Recette téléchargement requise |
+| RPT-013 | Rapports | Catalogue chargé | Rechercher l'export Excel | Excel non annoncé ; CSV est le seul format validé du Lot 5 | Couvert par catalogue HTTP/frontend | Non applicable tant qu'Excel n'est pas retenu |
+| RPT-014 | Rapports | Source avec valeur absente | Afficher puis exporter | `null` affiché « Non renseigné » et cellule CSV vide, jamais zéro | Couvert par tests service/frontend | Recette SOPAL requise |
+| RPT-015 | Rapports | Responsable Fonderie | Ouvrir le catalogue et appeler RPT-002 | Rapports Fonderie autorisés, rapport U2 refusé `403` | Couvert par tests HTTP | Recette Entra requise |
+| RPT-016 | Rapports | Responsable Usinage 2 | Ouvrir le catalogue | RPT-002, RPT-003 et RPT-008 disponibles ; Fonderie/Inventaire absents | Couvert par tests service/permissions | Recette Entra requise |
+| RPT-017 | Rapports | Admin | Ouvrir le catalogue | Les huit codes de rapport sont accessibles | Couvert par tests HTTP | Recette Entra requise |
+| RPT-018 | Rapports | API indisponible | Actualiser l'aperçu | Erreur visible, aperçu effacé, aucun fallback mock | Couvert par tests store/Vue | Recette locale requise |
+| RPT-019 | Rapports | Aperçu chargé | Inspecter les en-têtes | `kg`, `pièces` et `kg/pièce` sont affichés sur les colonnes concernées | Couvert par tests frontend | Recette visuelle requise |
+| RPT-020 | Rapports | Rapport UAP2 ou détail OF | Inspecter les résumés | Aucun total additionnant kilogrammes et pièces | Couvert par conception et tests bilans | Recette SOPAL requise |
 | SEC-001 | Autorisations | Utilisateur non Admin | Ouvrir Administration/Audit | Accès refusé par le backend | — | Non exécuté |
 | OPS-001 | Synchronisation X3 | Aucun connecteur fourni | Vérifier le module | Fonctionnalité désactivée, aucune synchronisation simulée | — | Non exécuté |
 

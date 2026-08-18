@@ -80,4 +80,8 @@ validation explicite de SOPAL et sauvegarde préalable.
 - lecture SQL ;
 - import Excel de test ;
 - calcul d'un bilan sur une période connue ;
+- `VITE_RAPPORTS_SOURCE=api`, lecture de `GET /api/v1/rapports/catalogue`, aperçu d'un rapport autorisé puis export CSV ;
+- contrôle du nom de fichier, du BOM UTF-8, des unités et des cellules vides pour les données manquantes ;
 - vérification des journaux et de la sauvegarde.
+
+Le Lot 5 n'ajoute aucune migration SQL. Il ne faut donc pas exécuter de migration spécifique aux Rapports. Les tables existantes de bilans, inventaires, imports, références et alertes restent les sources de lecture.

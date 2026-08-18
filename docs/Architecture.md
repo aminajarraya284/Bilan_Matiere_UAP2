@@ -126,6 +126,32 @@ La clé active combine le code, la période, l'OF, l'article, le type matière e
 
 Les rôles `Admin`, `ResponsableFonderie` et `ResponsableUsinage2` passent les policies HTTP. Le service applicatif réduit ensuite les sources visibles et traitables au périmètre métier du rôle. La description complète est disponible dans [`AlertesMetier.md`](AlertesMetier.md).
 
+### Rapports réels
+
+Le module Rapports est une couche de lecture et d'export. Il ne possède pas de table métier et ne recalcule aucun bilan :
+
+```text
+RapportsView.vue
+      |
+      v
+GET /api/v1/rapports/*
+      |
+      v
+RapportsService
+      |-- BilanFonderieService
+      |-- BilanUsinage2Service
+      |-- BilanUap2Service
+      |-- InventaireFonderieService
+      |-- AlerteApplicationService
+      |-- AlerteNonReceptionService
+      |-- OfContextResolver
+      `-- RapportsReadRepository (imports et sections OF)
+```
+
+Chaque réponse contient des métadonnées (`code`, date UTC, période, unité principale, caractère partiel et avertissements). Les exports CSV rappellent les unités dans les en-têtes et sont produits à partir des mêmes projections applicatives que l'aperçu. Les valeurs absentes restent vides dans le CSV et `null` dans le JSON.
+
+La policy HTTP autorise les trois rôles métier. `RapportsService` applique ensuite un périmètre par code : Fonderie/Inventaire pour `ResponsableFonderie`, U2/UAP2/non-réceptions pour `ResponsableUsinage2`, rapports transverses selon les sources déjà filtrées, et totalité pour `Admin`. Voir [`Rapports.md`](Rapports.md).
+
 La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
 
 La configuration de la verticale implementee est detaillee dans [`VerticaleTypesMatiereDechetsFonderie.md`](VerticaleTypesMatiereDechetsFonderie.md).

@@ -947,6 +947,19 @@ calculés côté serveur — voir le tableau ci-dessous.
 | `RM-UAP2-002` | `GET /api/v1/bilans/uap2/{periode}` (`ecartUap2Pieces`) | **pièces** |
 | `RM-U2-*` | `GET /api/v1/bilans/usinage2/{periode}` | pièces |
 
+## Règles de projection des rapports
+
+| Règle | Statut | Définition | Test principal |
+|---|---|---|---|
+| `RM-RPT-001` | Confirmée techniquement | Un rapport réutilise le service source existant ; aucune formule de bilan n'est copiée dans le contrôleur, le repository ou Vue. | `RapportsServiceTests`, `RapportsApiTests` |
+| `RM-RPT-002` | Confirmée techniquement | Les unités restent séparées : Fonderie en kg, écarts U2/UAP2 en pièces, sortie MP UAP2 en kg dans une colonne distincte. | tests HTTP et frontend Rapports |
+| `RM-RPT-003` | Confirmée techniquement | Une donnée source absente reste `null` en JSON et vide en CSV ; elle n'est jamais convertie en zéro. | tests service frontend et backend |
+| `RM-RPT-004` | Confirmée techniquement | CTRL reste la quantité de référence du bilan UAP2 et n'est pas additionné comme quatrième processus. | service `BilanUap2Service` réutilisé |
+| `RM-RPT-005` | Confirmée techniquement | Le signe du rebut U2 et les conversions X3 restent ceux des services de bilan ; le module Rapports ne les modifie pas. | tests des services de bilan existants |
+| `RM-RPT-006` | Confirmée techniquement | CSV : UTF-8 avec BOM, séparateur `;`, échappement des guillemets et neutralisation des cellules commençant par `=`, `+`, `-` ou `@`. | `RapportsServiceTests`, `RapportsApiTests` |
+| `RM-RPT-007` | Confirmée techniquement | L'aperçu et l'export traversent le même service applicatif et les mêmes filtres. | tests service/API/frontend |
+| `RM-RPT-008` | Confirmée techniquement | Aucun export PDF n'est annoncé : aucun moteur PDF fiable n'existe dans le dépôt. Excel n'est pas exposé ; CSV est le format supporté. | catalogue HTTP |
+
 ---
 
 ### Traçabilité
