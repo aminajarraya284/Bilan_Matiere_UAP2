@@ -80,7 +80,13 @@ const menuItems: { group: string; name: string; path: string; icon: Component; r
     icon: Layers3,
     roles: ['Admin']
   },
-  { group: 'Pilotage', name: 'Rapports', path: '/rapports', icon: FileText, roles: ['Admin'] },
+  {
+    group: 'Pilotage',
+    name: 'Rapports',
+    path: '/rapports',
+    icon: FileText,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
   {
     group: 'Administration',
     name: 'Historique des imports',

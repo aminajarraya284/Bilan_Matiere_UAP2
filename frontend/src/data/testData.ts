@@ -1,6 +1,5 @@
 import type { AlertesBilanAlert } from '@/features/alertes/alertes.legacy-mock.types';
 import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
-import type { RapportsListType } from '@/features/rapports/rapports.types';
 import type { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
 import type { SortieX3Mouvement } from '@/features/sorties-x3/sortiesX3.types';
 import { sopalTestDataset, type TypeMatiereCode } from '@/mocks/sopalTestDataset';
@@ -123,46 +122,3 @@ export const testBilans: {
 };
 
 export const testAlertes: AlertesBilanAlert[] = activeAlerts.bilanAlerts;
-
-export const testRapports: RapportsListType[] = [
-  {
-    id: 1,
-    titre: 'Rapport Bilan Fonderie',
-    description: 'Entrées, sorties et écarts par type matière.',
-    module: 'Bilan',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 2,
-    titre: 'Rapport Bilan Usinage 2',
-    description: 'Contrôle EMR et réceptions U2 par OF.',
-    module: 'Bilan',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 3,
-    titre: 'Rapport Bilan UAP2',
-    description: 'Bilan par OF avec entrées semi-finies.',
-    module: 'Bilan',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 4,
-    titre: 'Rapport Inventaire ESR',
-    description: 'Conteneurs, catégories et fours hors bilan.',
-    module: 'Inventaire',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 5,
-    titre: 'Rapport Alertes',
-    description: 'Alertes poids et alertes bilan.',
-    module: 'Alertes',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF']
-  }
-];

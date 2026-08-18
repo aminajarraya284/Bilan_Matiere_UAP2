@@ -18,6 +18,14 @@ export interface AlerteListItem {
   typeMatiere: string | null;
   detecteeLeUtc: string;
   derniereDetectionLeUtc: string;
+  description?: string | null;
+  acquitteeLeUtc?: string | null;
+  acquitteePar?: string | null;
+  resolueLeUtc?: string | null;
+  resoluePar?: string | null;
+  ignoreeLeUtc?: string | null;
+  ignoreePar?: string | null;
+  commentaireTraitement?: string | null;
 }
 
 export interface AlerteDetail extends AlerteListItem {
