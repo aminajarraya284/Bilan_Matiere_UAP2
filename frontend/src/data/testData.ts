@@ -1,4 +1,4 @@
-import type { AlertesBilanAlert } from '@/features/alertes/alertes.types';
+import type { AlertesBilanAlert } from '@/features/alertes/alertes.legacy-mock.types';
 import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
 import type { RapportsListType } from '@/features/rapports/rapports.types';
 import type { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';

@@ -1,10 +1,6 @@
 import { BUSINESS_RULES } from '@/config/businessRules';
-import type { AlertesBilanAlert, AlertesWeightAlert } from '@/features/alertes/alertes.types';
-import type {
-  BilanFonderieComplet,
-  BilanUap2ParOF,
-  BilanUsinage2ParPiece
-} from '@/features/bilan-matiere/bilan.types';
+import type { AlertesBilanAlert, AlertesWeightAlert } from '@/features/alertes/alertes.legacy-mock.types';
+import type { BilanFonderieComplet, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
 import {
   type ReceptionUsinage2Test,
   type RefGammeFabrication,

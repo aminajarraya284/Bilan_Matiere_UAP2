@@ -13,7 +13,7 @@ export const routePermissions: Record<string, UserRole[]> = {
   ReceptionsUsinage2: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Rapports: ['Admin'],
   ImportsHistorique: ['Admin'],
-  Alertes: ['Admin'],
+  Alertes: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Admin: ['Admin'],
   Audit: ['Admin']
 };

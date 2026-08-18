@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, type Component } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
 import logoUrl from '@/assets/sopal-logo-mark-hd.png?url';
 import { getGlobalMode, GLOBAL_MODE_LABELS } from '@/config/dataSources';
+import type { UserRole } from '@/types/common.types';
 import {
   LayoutDashboard,
   Scale,
@@ -24,7 +25,9 @@ const authStore = useAuthStore();
 const roles = computed(() => authStore.roles);
 const environmentLabel = computed(() => GLOBAL_MODE_LABELS[getGlobalMode()]);
 
-const menuItems = [
+// `roles` doit rester typé : sans cela il est inféré `string[]` et la comparaison
+// avec les rôles de la session ne compile plus.
+const menuItems: { group: string; name: string; path: string; icon: Component; roles: UserRole[] }[] = [
   {
     group: 'Pilotage',
     name: 'Tableau de bord',
@@ -39,7 +42,13 @@ const menuItems = [
     icon: Scale,
     roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
   },
-  { group: 'Pilotage', name: 'Alertes', path: '/alertes', icon: AlertTriangle, roles: ['Admin'] },
+  {
+    group: 'Pilotage',
+    name: 'Alertes',
+    path: '/alertes',
+    icon: AlertTriangle,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
   { group: 'Opérations', name: 'Inventaire Fonderie', path: '/inventaire', icon: ClipboardList, roles: ['Admin'] },
   {
     group: 'Opérations',
