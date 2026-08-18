@@ -234,10 +234,13 @@ public sealed class InventaireFonderieRepository(BilanMatiereUAP2DbContext dbCon
             p1Query = p1Query.Where(x => x.CodeTypeMatiere == filterCode);
         }
 
-        var p1List = await p1Query
+        var p1Rows = await p1Query
+            .Select(x => new { x.CodeTypeMatiere, x.PoidsReelKg })
+            .ToListAsync(cancellationToken);
+        var p1List = p1Rows
             .GroupBy(x => x.CodeTypeMatiere)
             .Select(g => new { CodeTypeMatiere = g.Key, TotalKg = g.Sum(x => x.PoidsReelKg) })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         // Partie 2 : Catégories Valides
         var p2Query = dbContext.InventairesCategories
@@ -249,10 +252,13 @@ public sealed class InventaireFonderieRepository(BilanMatiereUAP2DbContext dbCon
             p2Query = p2Query.Where(x => x.CodeTypeMatiere == filterCode);
         }
 
-        var p2List = await p2Query
+        var p2Rows = await p2Query
+            .Select(x => new { x.CodeTypeMatiere, x.PoidsReelKg })
+            .ToListAsync(cancellationToken);
+        var p2List = p2Rows
             .GroupBy(x => x.CodeTypeMatiere)
             .Select(g => new { CodeTypeMatiere = g.Key, TotalKg = g.Sum(x => x.PoidsReelKg) })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         // Partie 3 : Fours Valides
         var p3Query = dbContext.InventairesFours
@@ -264,10 +270,13 @@ public sealed class InventaireFonderieRepository(BilanMatiereUAP2DbContext dbCon
             p3Query = p3Query.Where(x => x.CodeTypeMatiere == filterCode);
         }
 
-        var p3List = await p3Query
+        var p3Rows = await p3Query
+            .Select(x => new { x.CodeTypeMatiere, x.QuantiteKg })
+            .ToListAsync(cancellationToken);
+        var p3List = p3Rows
             .GroupBy(x => x.CodeTypeMatiere)
             .Select(g => new { CodeTypeMatiere = g.Key, TotalKg = g.Sum(x => x.QuantiteKg) })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var allCodes = p1List.Select(x => x.CodeTypeMatiere)
             .Union(p2List.Select(x => x.CodeTypeMatiere))

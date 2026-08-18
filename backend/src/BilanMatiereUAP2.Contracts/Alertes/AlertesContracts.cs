@@ -13,7 +13,15 @@ public sealed record AlerteListItemResponse(
     string? CodeArticle,
     string? TypeMatiere,
     DateTime DetecteeLeUtc,
-    DateTime DerniereDetectionLeUtc);
+    DateTime DerniereDetectionLeUtc,
+    string? Description = null,
+    DateTime? AcquitteeLeUtc = null,
+    string? AcquitteePar = null,
+    DateTime? ResolueLeUtc = null,
+    string? ResoluePar = null,
+    DateTime? IgnoreeLeUtc = null,
+    string? IgnoreePar = null,
+    string? CommentaireTraitement = null);
 
 public sealed record AlerteDetailResponse(
     Guid Id,

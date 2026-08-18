@@ -207,7 +207,15 @@ public sealed class AlerteApplicationService(
             alerte.CodeArticle,
             alerte.TypeMatiere,
             alerte.DetecteeLeUtc,
-            alerte.DerniereDetectionLeUtc);
+            alerte.DerniereDetectionLeUtc,
+            alerte.Description,
+            alerte.AcquitteeLeUtc,
+            alerte.AcquitteePar,
+            alerte.ResolueLeUtc,
+            alerte.ResoluePar,
+            alerte.IgnoreeLeUtc,
+            alerte.IgnoreePar,
+            alerte.CommentaireTraitement);
 
     private static AlerteDetailResponse ToDetail(AlerteMetier alerte)
         => new(

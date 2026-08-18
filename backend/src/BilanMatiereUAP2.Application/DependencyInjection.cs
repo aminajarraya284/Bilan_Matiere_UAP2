@@ -11,6 +11,7 @@ using BilanMatiereUAP2.Application.Features.InventairesFonderie;
 using BilanMatiereUAP2.Application.Features.Parametres;
 using BilanMatiereUAP2.Application.Features.PostesProcessus;
 using BilanMatiereUAP2.Application.Features.ReceptionsUsinage2;
+using BilanMatiereUAP2.Application.Features.Rapports;
 using BilanMatiereUAP2.Application.Features.TypesMatiere;
 using BilanMatiereUAP2.Application.Services;
 using BilanMatiereUAP2.Application.Abstractions;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IAlerteDetectionService, AlerteDetectionService>();
         services.AddScoped<IAlerteGenerationService, AlerteGenerationService>();
         services.AddScoped<IAlerteApplicationService, AlerteApplicationService>();
+        services.AddScoped<IRapportsService, RapportsService>();
         services.AddScoped<IImportDependencyRefreshService, ImportDependencyRefreshService>();
         services.AddScoped<IParametreApplicationService, ParametreApplicationService>();
         services.AddScoped<IParametreApplicationProvider>(provider =>
