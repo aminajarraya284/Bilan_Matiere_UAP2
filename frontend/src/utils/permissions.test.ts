@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { hasPermission } from './permissions';
 
 describe('route permissions', () => {
+  it('autorise les trois rôles métier à ouvrir le catalogue Rapports', () => {
+    expect(hasPermission('Admin', 'Rapports')).toBe(true);
+    expect(hasPermission('ResponsableFonderie', 'Rapports')).toBe(true);
+    expect(hasPermission('ResponsableUsinage2', 'Rapports')).toBe(true);
+  });
   it('reserve les ecrans Admin au role Admin', () => {
     expect(hasPermission('Admin', 'ImportsX3')).toBe(false);
     expect(hasPermission('Admin', 'Dashboard')).toBe(true);
