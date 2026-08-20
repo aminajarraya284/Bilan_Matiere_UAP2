@@ -111,10 +111,18 @@ const cardDetails = (summary: DashboardBilanSummary): string => {
 const statusDistribution = computed(() => {
   const summaries = bilanCards.value.map((card) => card.summary);
   const statuses: DashboardStatus[] = ['OK', 'AVerifier', 'Anomalie', 'Partiel', 'NonDisponible'];
+  const counts: Record<DashboardStatus, number> = {
+    OK: summaries.reduce((total, summary) => total + summary.nombreOk, 0),
+    AVerifier: summaries.reduce((total, summary) => total + summary.nombreAVerifier, 0),
+    Anomalie: summaries.reduce((total, summary) => total + summary.nombreAnomalies, 0),
+    Partiel: 0,
+    NonDisponible: 0
+  };
+  const total = counts.OK + counts.AVerifier + counts.Anomalie;
   return statuses.map((status) => ({
     status,
-    count: summaries.filter((summary) => summary.statut === status).length,
-    width: summaries.length ? (summaries.filter((summary) => summary.statut === status).length / summaries.length) * 100 : 0
+    count: counts[status],
+    width: total ? (counts[status] / total) * 100 : 0
   }));
 });
 
@@ -220,7 +228,7 @@ onMounted(() => dashboardStore.load());
       <section v-if="isEmpty" class="dashboard-state surface-card" role="status">
         <Boxes class="h-7 w-7" aria-hidden="true" />
         <div>
-          <h2>Aucune donnée exploitable pour {{ data.periode }}</h2>
+          <h2>Aucune donnée disponible pour cette période.</h2>
           <p>Les valeurs restent « Non disponible » ; aucun zéro n’est substitué à un écart absent.</p>
         </div>
       </section>
@@ -263,9 +271,9 @@ onMounted(() => dashboardStore.load());
       <div class="dashboard-two-columns">
         <DashboardChartCard
           title="Répartition des statuts"
-          :description="`Période ${data.periode} · unité : nombre de bilans`"
+            :description="`Période ${data.periode} · unité : nombre de lignes`"
         >
-          <div class="status-chart" role="img" aria-label="Répartition des statuts des trois bilans">
+          <div class="status-chart" role="img" aria-label="Répartition des statuts des lignes des trois bilans">
             <div v-for="item in statusDistribution" :key="item.status" class="status-chart__row">
               <span>{{ statusLabels[item.status] }}</span>
               <div class="status-chart__track">

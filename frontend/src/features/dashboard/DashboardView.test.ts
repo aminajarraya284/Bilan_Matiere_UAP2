@@ -91,7 +91,7 @@ describe('DashboardView', () => {
     const wrapper = mountView();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Aucune donnée exploitable');
+    expect(wrapper.text()).toContain('Aucune donnée disponible pour cette période.');
     expect(wrapper.text()).toContain('Non disponible');
   });
 
@@ -158,5 +158,22 @@ describe('DashboardView', () => {
     expect(wrapper.text()).not.toContain('Sorties magasin X3');
     expect(wrapper.html()).not.toContain('/dashboard/summary');
     expect(wrapper.html()).not.toContain('/dashboard/bilan-par-matiere');
+  });
+
+  it('aggregates real line counters in the status distribution', async () => {
+    const base = createDashboardResponse();
+    mocks.getDashboard.mockResolvedValue(createDashboardResponse({
+      fonderie: { ...base.fonderie, nombreOk: 4, nombreAVerifier: 1, nombreAnomalies: 2 },
+      usinage2: { ...base.usinage2, nombreOk: 3, nombreAVerifier: 2, nombreAnomalies: 0 },
+      uap2: { ...base.uap2, nombreOk: 1, nombreAVerifier: 0, nombreAnomalies: 1 }
+    }));
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    const chart = wrapper.get('.status-chart');
+    expect(chart.text()).toContain('8');
+    expect(chart.text()).toContain('3');
+    expect(chart.text()).toContain('3');
   });
 });
