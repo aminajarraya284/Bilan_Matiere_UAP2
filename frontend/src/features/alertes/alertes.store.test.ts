@@ -22,6 +22,43 @@ describe('useAlertesStore', () => {
     service.search.mockResolvedValue(createPagedAlertes());
   });
 
+  it("n'impose aucune période par défaut afin de ne pas masquer les alertes existantes", async () => {
+    const store = useAlertesStore();
+
+    // Le mois courant n'est pas nécessairement une période portant des données :
+    // filtrer d'office dessus ferait passer une page peuplée pour une page vide.
+    expect(store.filters.periode).toBe('');
+
+    await store.load();
+
+    expect(service.search).toHaveBeenCalledWith({
+      filters: expect.objectContaining({ periode: '' }),
+      page: 1,
+      pageSize: 50
+    });
+  });
+
+  it('refuse un recalcul sans période et n’appelle pas l’API', async () => {
+    const store = useAlertesStore();
+
+    const ok = await store.recalculer();
+
+    expect(ok).toBe(false);
+    expect(service.recalculer).not.toHaveBeenCalled();
+    expect(store.error).toBe('Sélectionnez une période avant de lancer un recalcul.');
+  });
+
+  it('réinitialise les filtres vers « toutes périodes »', async () => {
+    const store = useAlertesStore();
+    store.filters.periode = '2026-07';
+    store.filters.statut = 'Ouverte';
+
+    await store.resetFilters();
+
+    expect(store.filters.periode).toBe('');
+    expect(store.filters.statut).toBe('');
+  });
+
   it('charge la liste, le résumé et la dernière détection', async () => {
     const store = useAlertesStore();
     store.filters.periode = '2026-01';

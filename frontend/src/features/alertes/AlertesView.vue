@@ -124,7 +124,12 @@ onMounted(() => alertesStore.load());
           <template #icon><RefreshCw class="h-4 w-4" aria-hidden="true" /></template>
           Actualiser
         </AppButton>
-        <AppButton :loading="recalculating" :disabled="loading" @click="alertesStore.recalculer">
+        <AppButton
+          :loading="recalculating"
+          :disabled="loading || !filters.periode"
+          :title="filters.periode ? `Recalculer les alertes de ${filters.periode}` : 'Sélectionnez une période pour recalculer'"
+          @click="alertesStore.recalculer"
+        >
           <template #icon><ShieldCheck class="h-4 w-4" aria-hidden="true" /></template>
           Recalculer
         </AppButton>
@@ -136,7 +141,7 @@ onMounted(() => alertesStore.load());
     <section class="alertes-context surface-card" aria-label="Contexte des alertes">
       <div>
         <span>Période active</span>
-        <strong>{{ filters.periode }}</strong>
+        <strong>{{ filters.periode || 'Toutes périodes' }}</strong>
       </div>
       <div>
         <span>Dernière détection</span>
@@ -153,7 +158,12 @@ onMounted(() => alertesStore.load());
     <form class="alertes-filters surface-card" aria-label="Filtres des alertes" @submit.prevent="applyFilters">
       <label>
         <span>Période</span>
-        <input v-model="draftFilters.periode" type="month" required :disabled="loading" />
+        <input
+          v-model="draftFilters.periode"
+          type="month"
+          :disabled="loading"
+          title="Laisser vide pour afficher toutes les périodes"
+        />
       </label>
       <label>
         <span>Statut</span>

@@ -9,13 +9,14 @@ import type {
   AlertesFilters
 } from './alertes.types';
 
-const currentPeriod = (): string => {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-};
-
+/**
+ * Aucune période par défaut : les alertes persistantes couvrent plusieurs mois et
+ * le mois courant n'est pas nécessairement celui qui porte des données. Filtrer
+ * d'office sur le mois courant masquerait toutes les alertes existantes et ferait
+ * passer une page peuplée pour une page vide. La période reste un filtre explicite.
+ */
 const defaultFilters = (): AlertesFilters => ({
-  periode: currentPeriod(),
+  periode: '',
   statut: '',
   severite: '',
   source: '',
@@ -118,6 +119,13 @@ export const useAlertesStore = defineStore('alertes', () => {
 
   const recalculer = async (): Promise<boolean> => {
     if (recalculating.value) return false;
+    // Le recalcul backend porte sur une période précise : sans période sélectionnée,
+    // il n'y a rien à recalculer. On le dit explicitement plutôt que de laisser
+    // partir un appel voué à un 400.
+    if (!filters.value.periode.trim()) {
+      error.value = 'Sélectionnez une période avant de lancer un recalcul.';
+      return false;
+    }
     recalculating.value = true;
     error.value = null;
     try {
