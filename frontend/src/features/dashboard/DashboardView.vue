@@ -141,6 +141,24 @@ const statusDonutStyle = computed(() => {
   return { background: stops.length ? `conic-gradient(${stops.join(', ')})` : '#e2e8f0' };
 });
 
+const materialQuantityChart = computed(() => {
+  const types = data.value?.fonderieDetail.types ?? [];
+  const values = types.flatMap((type) => [type.inputKg ?? 0, type.outputKg ?? 0, Math.abs(type.ecartKg ?? 0)]);
+  const maximum = Math.max(...values, 0);
+  return types.map((type) => ({
+    code: type.codeTypeMatiere,
+    input: type.inputKg,
+    output: type.outputKg,
+    ecart: type.ecartKg,
+    inputWidth: maximum ? ((type.inputKg ?? 0) / maximum) * 100 : 0,
+    outputWidth: maximum ? ((type.outputKg ?? 0) / maximum) * 100 : 0,
+    ecartWidth: maximum ? (Math.abs(type.ecartKg ?? 0) / maximum) * 100 : 0
+  }));
+});
+
+const formatQuantity = (value: number | null): string =>
+  value === null ? 'N/D' : `${formatNumber(value, 2)} kg`;
+
 const fonderieValue = (value: number | null, decimals = 2): string =>
   value === null ? '—' : `${formatNumber(value, decimals)} kg`;
 
@@ -333,6 +351,29 @@ onMounted(() => dashboardStore.load());
             </div>
           </div>
           <template #legend>Source : GET /api/v1/dashboard · aucune période antérieure fabriquée.</template>
+        </DashboardChartCard>
+
+        <DashboardChartCard
+          title="Répartition des quantités de matières"
+          :description="`Période ${data.periode} · Fonderie · échelle relative au plus grand flux`"
+        >
+          <div v-if="materialQuantityChart.length" class="material-chart" role="img" aria-label="Répartition des quantités de matières par type">
+            <div class="material-chart__legend">
+              <span><i class="material-chart__swatch material-chart__swatch--input"></i>Input</span>
+              <span><i class="material-chart__swatch material-chart__swatch--output"></i>Output</span>
+              <span><i class="material-chart__swatch material-chart__swatch--ecart"></i>Écart</span>
+            </div>
+            <div v-for="item in materialQuantityChart" :key="item.code" class="material-chart__row">
+              <strong>{{ item.code }}</strong>
+              <div class="material-chart__bars">
+                <div class="material-chart__bar-line"><span>IN</span><i class="material-chart__bar material-chart__bar--input" :style="{ width: `${item.inputWidth}%` }"></i><em>{{ formatQuantity(item.input) }}</em></div>
+                <div class="material-chart__bar-line"><span>OUT</span><i class="material-chart__bar material-chart__bar--output" :style="{ width: `${item.outputWidth}%` }"></i><em>{{ formatQuantity(item.output) }}</em></div>
+                <div class="material-chart__bar-line"><span>ÉC</span><i class="material-chart__bar material-chart__bar--ecart" :style="{ width: `${item.ecartWidth}%` }"></i><em>{{ formatQuantity(item.ecart) }}</em></div>
+              </div>
+            </div>
+          </div>
+          <p v-else class="dashboard-chart-empty">Aucune quantité matière disponible pour cette période.</p>
+          <template #legend>Les couleurs permettent de comparer rapidement les flux par type matière.</template>
         </DashboardChartCard>
 
         <DashboardSection title="Synthèse opérationnelle" description="Compteurs SQL de la période sélectionnée.">
@@ -729,6 +770,72 @@ onMounted(() => dashboardStore.load());
 .status-chart__track .status-badge--partiel { background: #f59e0b; }
 .status-chart__track .status-badge--anomalie { background: #e11d48; }
 .status-chart__track .status-badge--nondisponible { background: #94a3b8; }
+
+.material-chart {
+  display: grid;
+  gap: 1rem;
+}
+
+.material-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.material-chart__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.material-chart__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 0.2rem;
+}
+
+.material-chart__swatch--input,
+.material-chart__bar--input { background: #2563eb; }
+.material-chart__swatch--output,
+.material-chart__bar--output { background: #16a34a; }
+.material-chart__swatch--ecart,
+.material-chart__bar--ecart { background: #f97316; }
+
+.material-chart__row {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.material-chart__row > strong {
+  padding-top: 0.18rem;
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.material-chart__bars {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.material-chart__bar-line {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(2rem, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+}
+
+.material-chart__bar-line > span { font-weight: 800; }
+.material-chart__bar-line > em { min-width: 4.8rem; font-style: normal; text-align: right; }
+.material-chart__bar { display: block; min-width: 0.15rem; height: 0.55rem; border-radius: 999px; }
+.dashboard-chart-empty { color: var(--color-text-secondary); font-size: 0.8rem; }
 
 .summary-grid {
   display: grid;
