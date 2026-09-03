@@ -158,7 +158,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AlertesAuthorizationPolicies.Manage, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
     options.AddPolicy(RapportsAuthorizationPolicies.Read, policy =>
-        policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
+        policy.RequireRole("Admin"));
     options.AddPolicy(AuditAuthorizationPolicies.Read, policy =>
         policy.RequireRole("Admin"));
 });
