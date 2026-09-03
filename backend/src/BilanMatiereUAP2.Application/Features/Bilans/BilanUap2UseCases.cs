@@ -13,6 +13,7 @@ public sealed record GetBilanUap2Query(string Periode);
 
 public interface IBilanUap2Service
 {
+    Task<IReadOnlyList<string>> GetPeriodesDisponiblesAsync(CancellationToken cancellationToken = default);
     Task<BilanUap2Response> GetAsync(string periode, CancellationToken cancellationToken = default);
 }
 
@@ -35,6 +36,9 @@ public sealed class BilanUap2Service(
     IBilanUap2Repository repository,
     IParametreApplicationProvider parametres) : IBilanUap2Service
 {
+    public Task<IReadOnlyList<string>> GetPeriodesDisponiblesAsync(CancellationToken cancellationToken = default)
+        => repository.GetPeriodesDisponiblesAsync(cancellationToken);
+
     /// <summary>Seuil de repli si <c>SEUIL_ECART_UAP2</c> n'est pas parametre (note SOPAL : 1,5 %).</summary>
     public const decimal SeuilEcartParDefautPourcent = 1.5m;
 

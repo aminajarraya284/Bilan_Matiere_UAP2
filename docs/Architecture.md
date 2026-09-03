@@ -65,8 +65,8 @@ La source de donnees de chaque verticale est pilotee par `frontend/src/config/da
 | **Bilan UAP2** | `api` | `/api/v1/bilans/uap2/{periode}` |
 | **Tableau de bord** | `api` | `/api/v1/dashboard?periode=YYYY-MM` |
 | **Alertes** | `api` | `/api/v1/alertes` |
-| Rapports | `mock` | aucun |
-| Journal d'audit | `mock` | aucun |
+| Rapports | `api` | `/api/v1/rapports` |
+| Journal d'audit | `api` | `/api/v1/audit` |
 | Administration | `mock` | aucun |
 | Synchronisation Sage X3 | `disabled` | aucun |
 
@@ -151,6 +151,28 @@ RapportsService
 Chaque réponse contient des métadonnées (`code`, date UTC, période, unité principale, caractère partiel et avertissements). Les exports CSV rappellent les unités dans les en-têtes et sont produits à partir des mêmes projections applicatives que l'aperçu. Les valeurs absentes restent vides dans le CSV et `null` dans le JSON.
 
 La policy HTTP autorise les trois rôles métier. `RapportsService` applique ensuite un périmètre par code : Fonderie/Inventaire pour `ResponsableFonderie`, U2/UAP2/non-réceptions pour `ResponsableUsinage2`, rapports transverses selon les sources déjà filtrées, et totalité pour `Admin`. Voir [`Rapports.md`](Rapports.md).
+
+### Journal d'audit persistant
+
+Le Journal d'audit est une verticale transversale en écriture depuis les services métier et en lecture depuis l'écran Admin :
+
+```text
+Mutation / validation / annulation / import / action d'alerte
+      |
+      v
+IAuditService -> AuditDataSanitizer -> TraceAudit -> AuditRepository
+                                                   |
+                                                   v
+                                            SQL / AuditTraces
+
+AuditView.vue -> audit.store.ts -> GET /api/v1/audit -> AuditQueryService
+```
+
+Les événements sont immuables. Aucun endpoint ne permet leur création libre, leur modification ou leur suppression. Les snapshots contiennent uniquement des champs explicitement sélectionnés, avec des noms d'unité comme `poidsKg`, `poidsUnitaireKg` et `quantitePieces`. Les secrets sont filtrés récursivement avant sérialisation.
+
+Le middleware `X-Correlation-ID` propage un identifiant de 100 caractères au maximum vers `HttpContext`, Serilog, la réponse HTTP et toutes les traces de la requête. `HttpAuditContext` réutilise le principal authentifié en Development ou avec Entra ; une tâche non interactive est identifiée par `SYSTEM/System` et jamais par un faux Admin.
+
+La consultation est paginée, triée par `DateUtc DESC` et utilise `AsNoTracking`. La policy `Audit.Read` est limitée à `Admin`. Voir [`JournalAudit.md`](JournalAudit.md).
 
 La strategie de connexion progressive des fonctionnalites est detaillee dans [`MigrationProgressive.md`](MigrationProgressive.md).
 

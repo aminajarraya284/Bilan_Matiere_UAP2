@@ -27,6 +27,7 @@ public interface IManufacturingReferencesRepository
     Task<int> DisableMissingGammesAsync(string sourceSystem, IEnumerable<string> existingCleMetiers, CancellationToken cancellationToken = default);
     Task<int> DisableMissingNomenclaturesAsync(string sourceSystem, IEnumerable<string> existingCleMetiers, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    void ClearChangeTracker();
     Task<IReadOnlyList<RefGammeFabrication>> QueryGammesAsync(string? codeArticle = null, string? atelier = null, string? numeroOperation = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RefNomenclature>> QueryNomenclaturesAsync(string? codeArticleParent = null, string? codeComposant = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
     Task<PagedResult<RefGammeFabrication>> QueryGammesPagedAsync(string? codeArticle = null, string? atelier = null, string? numeroOperation = null, bool? actif = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);

@@ -399,6 +399,20 @@ Le recalcul est explicite et dédupliqué. Il conserve la première date de dét
 
 La migration `AddPersistentBusinessAlerts` crée la table et les index nécessaires. Elle n'est pas appliquée automatiquement et ne doit jamais être exécutée sur une base distante sans autorisation.
 
+## État actuel après le Lot 6 — Journal d'audit persistant
+
+La verticale Audit utilise désormais :
+
+```env
+VITE_AUDIT_SOURCE=api
+```
+
+Le frontend interroge uniquement `GET /api/v1/audit` et `GET /api/v1/audit/{id}`. La liste est paginée et filtrée côté serveur ; le détail restitue des valeurs ciblées avant/après sans afficher un JSON brut. Une panne API reste visible et n'active aucun mock ou `localStorage`.
+
+La production des traces est transverse : les services Application d'inventaire, déchets, contrôle poids, réceptions, rebuts, imports X3 et alertes appellent `IAuditService`. Les lectures Dashboard, Bilans et Rapports ne créent aucune trace. La migration `AddPersistentAuditTrail` crée uniquement `AuditTraces` et ses index ; elle n'est pas appliquée automatiquement.
+
+La page et l'API sont limitées à `Admin`. Les étapes suivantes concernent l'Administration réelle, puis la recette et le déploiement SOPAL ; elles ne doivent pas réintroduire de fallback Audit.
+
 ## Migrations suivantes
 
 ### Référentiels et données OF
@@ -466,8 +480,9 @@ Chaque calcul backend devra être comparé aux résultats du dataset et des test
 10. Bilan UAP2                                           [fait]
 11. Dashboard                                             [fait — API]
 12. Alertes                                               [fait — API persistante]
-13. Rapports                                              [à faire — mock]
-14. Administration et audit complet                      [à faire — mock]
+13. Rapports                                              [fait — API réelle]
+14. Journal d'audit                                      [fait — API persistante, Admin]
+15. Administration                                       [à faire — mock]
 ```
 
 L'état détaillé, verticale par verticale, est tenu à jour dans
@@ -526,4 +541,4 @@ Infrastructure / SQL Server
 Tests et observabilité
 ```
 
-Les verticales **Dashboard**, **Alertes** et **Rapports** sont opérationnelles sur les données réelles disponibles. `rapports` utilise désormais `api` par défaut et n'a aucun fallback vers les anciennes cartes ou exports fictifs. Le prochain lot peut auditer puis persister le Journal d'audit sans modifier les projections de rapports.
+Les verticales **Dashboard**, **Alertes**, **Rapports** et **Journal d'audit** sont opérationnelles sur les données réelles disponibles. `audit` utilise `api` par défaut, ne lit plus `localStorage` et n'a aucun fallback vers les anciennes traces fictives. L'API Audit est en lecture seule et réservée à `Admin`; les événements sont produits par les services métier instrumentés. La prochaine verticale est l'Administration réelle et sécurisée.

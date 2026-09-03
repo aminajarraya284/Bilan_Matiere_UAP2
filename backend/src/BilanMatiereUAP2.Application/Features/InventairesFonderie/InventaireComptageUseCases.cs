@@ -1,8 +1,10 @@
 using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Contracts.InventairesFonderie;
 using BilanMatiereUAP2.Domain.Entities;
+using BilanMatiereUAP2.Domain.Enums;
 using BilanMatiereUAP2.Domain.Services;
 using FluentValidation;
 using FluentValidation.Results;
@@ -62,7 +64,8 @@ public sealed class InventaireComptageService(
     IInventaireComptageRepository repository,
     ITypeMatiereRepository typeMatiereRepository,
     ICurrentUserService currentUser,
-    IDateTimeProvider dateTimeProvider) : IInventaireComptageService
+    IDateTimeProvider dateTimeProvider,
+    IAuditService? auditService = null) : IInventaireComptageService
 {
     public async Task<InventaireComptagePeriodeResponse> GetPeriodeAsync(
         string periode,
@@ -138,6 +141,7 @@ public sealed class InventaireComptageService(
             dateTimeProvider.UtcNow);
 
         await repository.AddAsync(ligne, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, ligne, null, Snapshot(ligne), "Creation d'un comptage inventaire conteneur.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(await RechargerConteneurAsync(ligne.Id, cancellationToken));
     }
@@ -158,6 +162,7 @@ public sealed class InventaireComptageService(
             dateTimeProvider.UtcNow);
 
         await repository.AddAsync(ligne, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, ligne, null, Snapshot(ligne), "Creation d'un comptage inventaire categorie.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(await RechargerCategorieAsync(ligne.Id, cancellationToken));
     }
@@ -178,6 +183,7 @@ public sealed class InventaireComptageService(
             dateTimeProvider.UtcNow);
 
         await repository.AddAsync(ligne, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, ligne, null, Snapshot(ligne), "Creation d'un comptage inventaire four.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(await RechargerFourAsync(ligne.Id, cancellationToken));
     }
@@ -221,6 +227,7 @@ public sealed class InventaireComptageService(
         try
         {
             var ligne = await RechargerConteneurAsync(id, cancellationToken);
+            var avant = Snapshot(ligne);
             if (valider)
             {
                 ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
@@ -229,6 +236,14 @@ public sealed class InventaireComptageService(
             {
                 ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
             }
+
+            await AuditerAsync(
+                valider ? ActionAudit.Validation : ActionAudit.Annulation,
+                ligne,
+                avant,
+                Snapshot(ligne),
+                valider ? "Validation d'un comptage inventaire conteneur." : "Annulation d'un comptage inventaire conteneur.",
+                cancellationToken);
 
             // Les agrégations sont relues depuis la base. Le premier flush rend le
             // nouveau statut visible dans cette transaction; le second persiste la
@@ -255,6 +270,7 @@ public sealed class InventaireComptageService(
         try
         {
             var ligne = await RechargerCategorieAsync(id, cancellationToken);
+            var avant = Snapshot(ligne);
             if (valider)
             {
                 ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
@@ -263,6 +279,14 @@ public sealed class InventaireComptageService(
             {
                 ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
             }
+
+            await AuditerAsync(
+                valider ? ActionAudit.Validation : ActionAudit.Annulation,
+                ligne,
+                avant,
+                Snapshot(ligne),
+                valider ? "Validation d'un comptage inventaire categorie." : "Annulation d'un comptage inventaire categorie.",
+                cancellationToken);
 
             await repository.SaveChangesAsync(cancellationToken);
             await RecalculerProjectionAsync(ligne.Periode, ligne.TypeMatiereId, cancellationToken);
@@ -286,6 +310,7 @@ public sealed class InventaireComptageService(
         try
         {
             var ligne = await RechargerFourAsync(id, cancellationToken);
+            var avant = Snapshot(ligne);
             if (valider)
             {
                 ligne.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
@@ -294,6 +319,14 @@ public sealed class InventaireComptageService(
             {
                 ligne.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
             }
+
+            await AuditerAsync(
+                valider ? ActionAudit.Validation : ActionAudit.Annulation,
+                ligne,
+                avant,
+                Snapshot(ligne),
+                valider ? "Validation d'un comptage inventaire four." : "Annulation d'un comptage inventaire four.",
+                cancellationToken);
 
             await repository.SaveChangesAsync(cancellationToken);
             await RecalculerProjectionAsync(ligne.Periode, ligne.TypeMatiereId, cancellationToken);
@@ -399,6 +432,61 @@ public sealed class InventaireComptageService(
     }
 
     private static string FormatPeriode(DateOnly periode) => $"{periode.Year:D4}-{periode.Month:D2}";
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        LigneComptageInventaire ligne,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => auditService is null
+            ? Task.CompletedTask
+            : auditService.EnregistrerAsync(
+                new AuditEntry(
+                    action,
+                    DomaineAudit.InventaireFonderie,
+                    ligne.GetType().Name,
+                    ligne.Id.ToString(),
+                    $"{ligne.Periode:yyyy-MM}|{ligne.TypeMatiereId}|{ligne.Id}",
+                    nameof(InventaireComptageService),
+                    resume,
+                    avant,
+                    apres),
+                cancellationToken);
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireConteneur ligne)
+        => SnapshotBase(ligne, new Dictionary<string, object?>
+        {
+            ["date"] = ligne.DateInventaire,
+            ["numeroConteneur"] = ligne.NumeroConteneur,
+            ["numeroOF"] = ligne.NumeroOF,
+            ["codeArticle"] = ligne.CodeArticle
+        });
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireCategorieComptage ligne)
+        => SnapshotBase(ligne, new Dictionary<string, object?>
+        {
+            ["categorie"] = ligne.Categorie
+        });
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireFourComptage ligne)
+        => SnapshotBase(ligne, new Dictionary<string, object?>
+        {
+            ["date"] = ligne.DateInventaire,
+            ["codeFour"] = ligne.CodeFour
+        });
+
+    private static IReadOnlyDictionary<string, object?> SnapshotBase(
+        LigneComptageInventaire ligne,
+        Dictionary<string, object?> values)
+    {
+        values["periode"] = FormatPeriode(ligne.Periode);
+        values["typeMatiereId"] = ligne.TypeMatiereId;
+        values["poidsKg"] = ligne.QuantiteKg;
+        values["statut"] = ligne.Statut.ToString();
+        return values;
+    }
 
     private static InventaireComptageConteneurResponse ToResponse(InventaireConteneur ligne)
         => new(

@@ -40,7 +40,7 @@ public sealed class DevelopmentAuthenticationTests(ApiWebApplicationFactory fact
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(LoginUrl, new { username = "admin", password = "admin" });
+        var response = await client.PostAsJsonAsync(LoginUrl, new { username = "admin", password = ApiWebApplicationFactory.DevelopmentPassword });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
@@ -93,7 +93,7 @@ public sealed class DevelopmentAuthenticationTests(ApiWebApplicationFactory fact
     {
         await factory.ResetDatabaseAsync();
         var client = factory.CreateClient();
-        var login = await LoginAsync(client, "admin", "admin");
+        var login = await LoginAsync(client, "admin", ApiWebApplicationFactory.DevelopmentPassword);
 
         var request = new HttpRequestMessage(HttpMethod.Get, AdminOrUsinage2Url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", login.Token);
@@ -108,7 +108,7 @@ public sealed class DevelopmentAuthenticationTests(ApiWebApplicationFactory fact
     {
         await factory.ResetDatabaseAsync();
         var client = factory.CreateClient();
-        var login = await LoginAsync(client, "fonderie", "fonderie");
+        var login = await LoginAsync(client, "fonderie", ApiWebApplicationFactory.DevelopmentPassword);
         Assert.Equal("ResponsableFonderie", login.User.Role);
 
         var request = new HttpRequestMessage(HttpMethod.Get, AdminOrUsinage2Url);
@@ -130,6 +130,7 @@ public sealed class DevelopmentAuthenticationTests(ApiWebApplicationFactory fact
     {
         var controller = new AuthController(
             new StubTokenService(),
+            new ConfigurationDevelopmentAccountAuthenticator(new ConfigurationBuilder().Build()),
             new StubHostEnvironment(environmentName),
             new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
@@ -150,7 +151,7 @@ public sealed class DevelopmentAuthenticationTests(ApiWebApplicationFactory fact
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(LoginUrl, new { username = "usinage2", password = "usinage2" });
+        var response = await client.PostAsJsonAsync(LoginUrl, new { username = "usinage2", password = ApiWebApplicationFactory.DevelopmentPassword });
         var raw = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -171,7 +172,7 @@ public sealed class DevelopmentAuthenticationTests(ApiWebApplicationFactory fact
     {
         await factory.ResetDatabaseAsync();
         var client = factory.CreateClient();
-        var login = await LoginAsync(client, "admin", "admin");
+        var login = await LoginAsync(client, "admin", ApiWebApplicationFactory.DevelopmentPassword);
 
         // On remplace la signature par une autre valeur base64url valide.
         var tampered = string.Concat(login.Token.AsSpan(0, login.Token.IndexOf('.') + 1), "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");

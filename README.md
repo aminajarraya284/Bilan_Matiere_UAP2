@@ -88,11 +88,12 @@ Pour les migrations EF Core, le projet cible est `BilanMatiereUAP2.Infrastructur
 
 ## Etat actuel
 
-- **Connecté au backend** : Types matière, Déchets Fonderie, Contrôle poids Fonderie, Réceptions et Rebuts Usinage 2, États X3 et sorties magasin, Références de fabrication, Historique des imports, Inventaire Fonderie, les **trois bilans** (Fonderie, Usinage 2, UAP2), le **Dashboard mensuel**, les **Alertes métier persistantes** (`/api/v1/alertes`) et les **Rapports réels** (`/api/v1/rapports`).
+- **Connecté au backend** : Types matière, Déchets Fonderie, Contrôle poids Fonderie, Réceptions et Rebuts Usinage 2, États X3 et sorties magasin, Références de fabrication, Historique des imports, Inventaire Fonderie, les **trois bilans** (Fonderie, Usinage 2, UAP2), le **Dashboard mensuel**, les **Alertes métier persistantes** (`/api/v1/alertes`), les **Rapports réels** (`/api/v1/rapports`) et le **Journal d'audit persistant** (`/api/v1/audit`).
 - Le Dashboard orchestre les trois services de bilan existants et complète leur résultat avec des compteurs SQL d'inventaires, réceptions et imports. Il conserve séparément l'écart Fonderie en `kg` et les écarts Usinage 2/UAP2 en `pièces` ; aucune somme inter-unités n'est produite et une donnée absente reste `null`.
-- **Encore en données de démonstration** : Journal d'audit et Administration. La synchronisation Sage X3 est `disabled` : ni endpoint, ni donnée de démonstration crédible.
+- **Encore en données de démonstration** : Administration uniquement. La synchronisation Sage X3 est `disabled` : ni endpoint, ni donnée de démonstration crédible.
 - La source de chaque verticale est pilotee par `frontend/src/config/dataSources.ts` (variables `VITE_*_SOURCE`). Aucun repli silencieux : en mode `api`, une erreur reste une erreur. Le tableau complet est dans [`docs/Architecture.md`](docs/Architecture.md#etat-des-verticales).
 - Les regles metier sont le referentiel unique : [`docs/ReglesMetier.md`](docs/ReglesMetier.md). Deux arbitrages SOPAL restent ouverts sur les bilans livres (conversion des sorties X3 en unites non-KG, signe du rebut U2 dans l'ecart UAP2).
 - Le modèle, le catalogue, les statuts, la déduplication et les endpoints Alertes sont détaillés dans [`docs/AlertesMetier.md`](docs/AlertesMetier.md).
 - Le catalogue RPT-001 à RPT-008, les projections, les filtres, les droits et l'export CSV sont détaillés dans [`docs/Rapports.md`](docs/Rapports.md).
+- Le modèle immuable, les actions tracées, le sanitizer, le Correlation ID, les droits et la migration Audit sont détaillés dans [`docs/JournalAudit.md`](docs/JournalAudit.md).
 - **Authentification** : le frontend prend en charge le mode local `development` et le mode Microsoft Entra ID `entra` via MSAL. Le démarrage backend hors `Development` reste bloqué tant que l'autorité et l'audience Entra ne sont pas configurées (`RM-SEC-003`).

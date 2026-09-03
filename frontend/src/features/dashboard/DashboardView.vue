@@ -126,6 +126,50 @@ const statusDistribution = computed(() => {
   }));
 });
 
+const statusTotal = computed(() => statusDistribution.value.reduce((total, item) => total + item.count, 0));
+const statusOkPercent = computed(() =>
+  statusTotal.value ? Math.round(((statusDistribution.value.find((item) => item.status === 'OK')?.count ?? 0) / statusTotal.value) * 100) : 0
+);
+const statusDonutStyle = computed(() => {
+  const colors = ['#16a34a', '#f59e0b', '#e11d48', '#fb923c', '#94a3b8'];
+  let cursor = 0;
+  const stops = statusDistribution.value.map((item, index) => {
+    const start = cursor;
+    cursor += item.width;
+    return `${colors[index]} ${start}% ${cursor}%`;
+  });
+  return { background: stops.length ? `conic-gradient(${stops.join(', ')})` : '#e2e8f0' };
+});
+
+const fonderieValue = (value: number | null, decimals = 2): string =>
+  value === null ? '—' : `${formatNumber(value, decimals)} kg`;
+
+const fonderieSummaryItems = computed(() => {
+  const detail = data.value?.fonderieDetail;
+  return [
+    { label: 'Total input', value: fonderieValue(detail?.totalInputKg ?? null) },
+    { label: 'Total output', value: fonderieValue(detail?.totalOutputKg ?? null) },
+    { label: 'Écart Fonderie', value: fonderieValue(detail?.totalEcartKg ?? null) },
+    { label: "Taux d'écart", value: detail?.tauxEcartPourcent == null ? '—' : `${formatNumber(detail.tauxEcartPourcent, 2)} %` },
+    { label: 'Types complets', value: formatNumber(detail?.nombreTypesComplets ?? 0, 0) },
+    { label: 'Types avec anomalie ou donnée manquante', value: formatNumber(detail?.nombreTypesAvecDonneesManquantesOuAnomalies ?? 0, 0) }
+  ];
+});
+
+const fonderieColumns = [
+  { key: 'stockDebutKg', label: 'Stock début' },
+  { key: 'sortiesMagasinX3Kg', label: 'Sorties magasin X3' },
+  { key: 'inputKg', label: 'INPUT' },
+  { key: 'stockFinKg', label: 'Stock fin' },
+  { key: 'dechetsFonderieKg', label: 'Déchets' },
+  { key: 'receptionsUsinage2Kg', label: 'Réceptions U2' },
+  { key: 'outputKg', label: 'OUTPUT' },
+  { key: 'ecartKg', label: 'Écart' }
+] as const;
+
+const fonderieCell = (type: (typeof fonderieColumns)[number]['key'] extends never ? never : NonNullable<typeof data.value>['fonderieDetail']['types'][number], key: (typeof fonderieColumns)[number]['key']): string =>
+  fonderieValue(type[key]);
+
 const operationalItems = computed(() =>
   data.value
     ? [
@@ -273,13 +317,19 @@ onMounted(() => dashboardStore.load());
           title="Répartition des statuts"
             :description="`Période ${data.periode} · unité : nombre de lignes`"
         >
-          <div class="status-chart" role="img" aria-label="Répartition des statuts des lignes des trois bilans">
-            <div v-for="item in statusDistribution" :key="item.status" class="status-chart__row">
-              <span>{{ statusLabels[item.status] }}</span>
-              <div class="status-chart__track">
-                <i :class="statusClass(item.status)" :style="{ width: `${item.width}%` }"></i>
+          <div class="status-visual" role="img" aria-label="Répartition des statuts des lignes des trois bilans">
+            <div class="status-donut" :style="statusDonutStyle">
+              <div class="status-donut__center">
+                <strong>{{ statusOkPercent }}%</strong>
+                <span>conformes</span>
               </div>
-              <strong>{{ item.count }}</strong>
+            </div>
+            <div class="status-chart">
+              <div v-for="item in statusDistribution" :key="item.status" class="status-chart__row">
+                <span class="status-chart__label"><i :class="statusClass(item.status)"></i>{{ statusLabels[item.status] }}</span>
+                <div class="status-chart__track"><i :class="statusClass(item.status)" :style="{ width: `${item.width}%` }"></i></div>
+                <strong>{{ item.count }}</strong>
+              </div>
             </div>
           </div>
           <template #legend>Source : GET /api/v1/dashboard · aucune période antérieure fabriquée.</template>
@@ -296,6 +346,44 @@ onMounted(() => dashboardStore.load());
           </dl>
         </DashboardSection>
       </div>
+
+      <DashboardSection title="Résumé Bilan Fonderie" description="Totaux réels du bilan Fonderie, exclusivement en kilogrammes.">
+        <div class="summary-grid" data-testid="fonderie-summary">
+          <div v-for="item in fonderieSummaryItems" :key="item.label">
+            <dt>{{ item.label }}</dt>
+            <dd>{{ item.value }}</dd>
+          </div>
+        </div>
+      </DashboardSection>
+
+      <DashboardSection title="Analyse Fonderie par type matière" description="INPUT = stock début + sorties X3 · OUTPUT = stock fin + déchets + réceptions U2.">
+        <div class="table-wrapper" data-testid="fonderie-by-type">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Type matière</th>
+                <th v-for="column in fonderieColumns" :key="column.key">{{ column.label }} (kg)</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="type in data.fonderieDetail.types" :key="type.codeTypeMatiere">
+                <th>{{ type.codeTypeMatiere }}</th>
+                <td v-for="column in fonderieColumns" :key="column.key">{{ fonderieCell(type, column.key) }}</td>
+                <td>
+                  <span class="status-badge" :class="statusClass(type.statut === 'Complet' ? 'OK' : 'Partiel')">
+                    {{ type.statut === 'Complet' ? 'Complet' : 'Calcul partiel' }}
+                  </span>
+                  <small v-if="type.anomalies.length" class="dashboard-table-anomalies">{{ type.anomalies.join(', ') }}</small>
+                </td>
+              </tr>
+              <tr v-if="!data.fonderieDetail.types.length">
+                <td :colspan="fonderieColumns.length + 2">Aucune donnée disponible pour cette période.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </DashboardSection>
 
       <div class="dashboard-two-columns">
         <DashboardSection title="Imports" description="Lots créés pendant la même période mensuelle.">
@@ -551,6 +639,47 @@ onMounted(() => dashboardStore.load());
   gap: 0.8rem;
 }
 
+.status-visual {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.status-donut {
+  display: grid;
+  width: 9rem;
+  height: 9rem;
+  padding: 0.85rem;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(15 23 42 / 0.06), 0 12px 28px -20px rgb(15 23 42 / 0.7);
+}
+
+.status-donut__center {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  justify-items: center;
+  border-radius: 50%;
+  background: white;
+}
+
+.status-donut__center strong {
+  color: #0f2742;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.status-donut__center span {
+  margin-top: 0.3rem;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .status-chart__row {
   display: grid;
   grid-template-columns: 7rem minmax(0, 1fr) 1.5rem;
@@ -559,6 +688,25 @@ onMounted(() => dashboardStore.load());
   color: var(--color-text-secondary);
   font-size: 0.78rem;
 }
+
+.status-chart__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-chart__label i {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.status-chart__label .status-badge--ok { background: #22c55e; }
+.status-chart__label .status-badge--averifier,
+.status-chart__label .status-badge--partiel { background: #f59e0b; }
+.status-chart__label .status-badge--anomalie { background: #e11d48; }
 
 .status-chart__track {
   overflow: hidden;
@@ -586,6 +734,43 @@ onMounted(() => dashboardStore.load());
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+  text-align: left;
+}
+
+.data-table thead th {
+  color: #475569;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.dashboard-table-anomalies {
+  display: block;
+  max-width: 220px;
+  color: #be123c;
+  white-space: normal;
 }
 
 .summary-grid div,
@@ -699,6 +884,15 @@ onMounted(() => dashboardStore.load());
   .summary-grid,
   .import-grid {
     grid-template-columns: 1fr;
+  }
+
+  .status-visual {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .status-chart {
+    width: 100%;
   }
 }
 </style>

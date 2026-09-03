@@ -54,6 +54,26 @@ résultat doit être renseigné pendant la recette SOPAL.
 | RPT-018 | Rapports | API indisponible | Actualiser l'aperçu | Erreur visible, aperçu effacé, aucun fallback mock | Couvert par tests store/Vue | Recette locale requise |
 | RPT-019 | Rapports | Aperçu chargé | Inspecter les en-têtes | `kg`, `pièces` et `kg/pièce` sont affichés sur les colonnes concernées | Couvert par tests frontend | Recette visuelle requise |
 | RPT-020 | Rapports | Rapport UAP2 ou détail OF | Inspecter les résumés | Aucun total additionnant kilogrammes et pièces | Couvert par conception et tests bilans | Recette SOPAL requise |
+| AUD-001 | Audit | Comptage d'inventaire brouillon | Valider le comptage puis consulter Audit | Trace `Validation/InventaireFonderie`, utilisateur, période, avant/après et Correlation ID | Couvert par test d'intégration | Recette SOPAL requise |
+| AUD-002 | Audit | Réception U2 validée | Annuler la réception puis consulter Audit | Trace `Annulation/ReceptionUsinage2`, réception conservée et valeurs ciblées | Couvert par test d'intégration | Recette SOPAL requise |
+| AUD-003 | Audit | Fichier X3 valide | Importer puis filtrer le domaine `ImportX3` | Une trace globale `ImportReussi`, compteurs et nom du fichier, aucune ligne détaillée | Couvert par test unitaire | Recette avec fichier anonymisé requise |
+| AUD-004 | Audit | Même fichier X3 déjà importé | Réimporter le fichier | Une trace `ImportDuplicate`, aucune duplication métier et aucun contenu de fichier dans l'audit | Couvert par test unitaire | Recette avec fichier anonymisé requise |
+| AUD-005 | Audit | Alerte ouverte | Acquitter puis consulter Audit | Trace `Acquittement/Alerte` avec utilisateur et transition de statut | Couvert par tests HTTP | Recette SOPAL requise |
+| AUD-006 | Audit | Alerte ouverte ou acquittée | Résoudre puis consulter Audit | Trace `Resolution/Alerte`, historique et source métier inchangés | Couvert par tests HTTP | Recette SOPAL requise |
+| AUD-007 | Audit | Mutation comportant un avant/après | Ouvrir le détail de la trace | Tableau lisible Champ/Avant/Après, sans JSON brut | Couvert par tests Application et Vue | Recette visuelle requise |
+| AUD-008 | Audit | Données contenant `Password`, token ou clé imbriquée | Produire puis consulter la trace | Aucun nom ni valeur sensible dans le JSON ou la réponse HTTP | Couvert par tests sanitizer et HTTP | Recette sécurité requise |
+| AUD-009 | Audit | Authentification locale Development | Effectuer une mutation | Identifiant, nom et rôle du compte Development enregistrés | Couvert par tests Application/HTTP | Recette locale requise |
+| AUD-010 | Audit | Compte Entra de recette | Effectuer une mutation | Claims Entra (ID, nom, email éventuel, rôles) enregistrés sans jeton | Couvert au niveau Application | Recette Entra requise |
+| AUD-011 | Audit | Traitement sans utilisateur interactif | Produire une trace système | `UtilisateurId=SYSTEM`, nom `Système`, rôle `System`, jamais Admin | Couvert par test Application | Recette d'exploitation requise |
+| AUD-012 | Audit | Requête avec `X-Correlation-ID` valide | Acquitter une alerte puis lire la trace | Même identifiant dans réponse HTTP, logs de requête et trace SQL | Couvert par test HTTP | Recette locale requise |
+| AUD-013 | Audit | Plus de traces que `pageSize` | Parcourir les pages | Total, page et taille cohérents, aucune table chargée intégralement | Couvert par tests Application/HTTP/frontend | Recette avec volume requise |
+| AUD-014 | Audit | Traces de plusieurs utilisateurs | Filtrer par utilisateur | Seules les traces correspondant à l'ID, au nom ou à l'email sont retournées | Couvert par tests Application | Recette Entra requise |
+| AUD-015 | Audit | Traces de plusieurs domaines | Filtrer par domaine | Seul le domaine demandé est retourné, ordre UTC décroissant | Couvert par tests Application/HTTP | Recette locale requise |
+| AUD-016 | Audit | Compte Admin authentifié | Ouvrir `/audit` et appeler les deux endpoints | Page visible, liste et détail HTTP `200` | Couvert par tests HTTP/frontend | Recette Entra requise |
+| AUD-017 | Audit | Responsable Fonderie authentifié | Appeler `GET /api/v1/audit` | `403`, aucune donnée du journal exposée | Couvert par test HTTP | Recette Entra requise |
+| AUD-018 | Audit | Responsable Usinage 2 authentifié | Appeler `GET /api/v1/audit` | `403`, aucune donnée du journal exposée | Couvert par test HTTP | Recette Entra requise |
+| AUD-019 | Audit | Trace persistée | Rechercher une action de modification/suppression Audit | Aucun endpoint d'écriture et aucun mécanisme Domain/Repository de mutation | Couvert par tests Domain/HTTP | Revue sécurité requise |
+| AUD-020 | Audit | Snapshot contenant une valeur absente et un vrai zéro | Ouvrir le détail | La valeur absente reste `null`; le zéro reste `0` | Couvert par tests Domain/Application/Vue | Recette SOPAL requise |
 | SEC-001 | Autorisations | Utilisateur non Admin | Ouvrir Administration/Audit | Accès refusé par le backend | — | Non exécuté |
 | OPS-001 | Synchronisation X3 | Aucun connecteur fourni | Vérifier le module | Fonctionnalité désactivée, aucune synchronisation simulée | — | Non exécuté |
 

@@ -276,6 +276,9 @@ public sealed class BilanUap2ServiceTests
 
     private sealed class FakeRepository(FakeSources sources) : IBilanUap2Repository
     {
+        public Task<IReadOnlyList<string>> GetPeriodesDisponiblesAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<string>>([]);
+
         public Task<IReadOnlyList<X3RapportMachine>> GetRapportsMachineAsync(int annee, int mois, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<X3RapportMachine>>(sources.Rapports);
 

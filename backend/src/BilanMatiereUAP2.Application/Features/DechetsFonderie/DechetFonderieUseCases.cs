@@ -1,6 +1,7 @@
 using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Contracts.DechetsFonderie;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
@@ -47,7 +48,8 @@ public sealed class DechetFonderieService(
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
     IValidator<CreateDechetFonderieRequest> createValidator,
-    IValidator<UpdateDechetFonderieRequest> updateValidator) : IDechetFonderieService
+    IValidator<UpdateDechetFonderieRequest> updateValidator,
+    IAuditService? auditService = null) : IDechetFonderieService
 {
     public async Task<PagedDechetsFonderieResponse> GetAllAsync(
         GetDechetsFonderieQuery query,
@@ -102,6 +104,7 @@ public sealed class DechetFonderieService(
             dateTimeProvider.UtcNow);
 
         await dechetRepository.AddAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, Snapshot(entity), "Creation d'un dechet Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity, typeMatiere);
     }
@@ -113,6 +116,7 @@ public sealed class DechetFonderieService(
         await updateValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
         var typeMatiere = await GetRequiredActiveTypeMatiereAsync(command.Request.TypeMatiereId, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Modifier(
             command.Request.DateDeclaration,
             typeMatiere.Id,
@@ -121,6 +125,7 @@ public sealed class DechetFonderieService(
             command.Request.PoidsKg,
             command.Request.Observation,
             dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Modification, entity, avant, Snapshot(entity), "Modification d'un dechet Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity, typeMatiere);
     }
@@ -128,7 +133,9 @@ public sealed class DechetFonderieService(
     public async Task DeleteAsync(DeleteDechetFonderieCommand command, CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'un dechet Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
@@ -137,7 +144,9 @@ public sealed class DechetFonderieService(
         CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Validation, entity, avant, Snapshot(entity), "Validation d'un dechet Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -147,7 +156,9 @@ public sealed class DechetFonderieService(
         CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'un dechet Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -273,6 +284,39 @@ public sealed class DechetFonderieService(
     {
         return new ValidationException([new ValidationFailure(propertyName, message)]);
     }
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        DechetFonderie entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => auditService is null
+            ? Task.CompletedTask
+            : auditService.EnregistrerAsync(
+                new AuditEntry(
+                    action,
+                    DomaineAudit.DechetFonderie,
+                    nameof(DechetFonderie),
+                    entity.Id.ToString(),
+                    $"{entity.DateDeclaration:yyyy-MM}|{entity.TypeMatiereId}|{entity.Id}",
+                    nameof(DechetFonderieService),
+                    resume,
+                    avant,
+                    apres),
+                cancellationToken);
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(DechetFonderie entity)
+        => new Dictionary<string, object?>
+        {
+            ["date"] = entity.DateDeclaration,
+            ["typeMatiereId"] = entity.TypeMatiereId,
+            ["typeDechet"] = entity.TypeDechet.ToString(),
+            ["origine"] = entity.Origine.ToString(),
+            ["poidsKg"] = entity.PoidsKg,
+            ["statut"] = entity.Statut.ToString()
+        };
 
     private static DechetFonderieResponse ToResponse(DechetFonderie entity, TypeMatiere? typeMatiere = null)
     {

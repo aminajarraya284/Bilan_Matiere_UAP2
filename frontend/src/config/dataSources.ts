@@ -72,11 +72,11 @@ const DEFAULTS: Readonly<Record<DataVertical, DataSourceMode>> = {
   dashboard: 'api',
   alertes: 'api',
   rapports: 'api',
+  audit: 'api',
 
-  // Aucun endpoint backend : les routes appelees renverraient 404.
-  // Les donnees de demonstration restent exploitables, d'ou `mock`.
-  audit: 'mock',
-  administration: 'mock',
+  // Parametres et types matiere sont relies aux endpoints backend reels.
+  // La gestion des profils n'est pas appelee tant que son lot n'est pas valide.
+  administration: 'api',
 
   // Aucun endpoint backend ET aucune donnee de demonstration credible :
   // afficher des synchronisations fictives induirait l'utilisateur en erreur.

@@ -1,7 +1,9 @@
 import * as XLSX from 'xlsx';
 import api from '@/services/api';
 import { importsHistoriqueService } from '@/features/imports-historique/importsHistorique.service';
-import type { ImportBatchSummary } from '@/features/imports-historique/importsHistorique.types';
+import { rapportMachineService } from '@/features/rapport-machine/rapportMachine.service';
+import type { ImportExecutionSummary, ImportTracking } from '@/features/rapport-machine/rapportMachine.types';
+import { mouvementsStockService } from '@/features/mouvements-stock/mouvementsStock.service';
 import { isApiSource } from '@/config/dataSources';
 
 export type X3BilanType = 'USINAGE_2' | 'UAP2';
@@ -19,6 +21,7 @@ export type X3ClassificationResult = {
 };
 
 type BackendImportResponse = {
+  id?: string;
   importBatchId?: string;
   duplicate?: boolean;
   inserted?: number;
@@ -26,7 +29,9 @@ type BackendImportResponse = {
   unchanged?: number;
   rejected?: number;
   rowsRead?: number;
+  readCount?: number;
   rowsValid?: number;
+  validCount?: number;
   anomalies?: number;
   statut?: string;
   archiveErrorMessage?: string | null;
@@ -56,7 +61,7 @@ export type X3ImportedSource = {
 export type X3ImportedSourceStatus = Omit<X3ImportedSource, 'rows'>;
 
 const STORAGE_PREFIX = 'sopal_x3_excel_import';
-const MAX_EXCEL_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_EXCEL_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
 const REQUIRED_MVTSTOTRSVCR_COLUMNS = [
   'Date imput',
@@ -154,7 +159,7 @@ const assertExpectedFileName = (file: File, expectedType: X3ExcelFileType) => {
 const assertExcelFileSize = (file: File): void => {
   if (file.size === 0) throw new Error('Le fichier Excel est vide.');
   if (file.size > MAX_EXCEL_FILE_SIZE_BYTES) {
-    throw new Error('Le fichier Excel dépasse la taille maximale autorisée de 20 Mo.');
+    throw new Error('Le fichier Excel dépasse la taille maximale autorisée de 100 Mo.');
   }
 };
 
@@ -339,21 +344,23 @@ const applyRealApiStatus = (
   response: BackendImportResponse,
   error?: string
 ): X3ImportedSource => {
+  const rowsRead = response.rowsRead ?? response.readCount ?? 0;
+  const rowsValid = response.rowsValid ?? response.validCount ?? ((response.inserted ?? 0) + (response.updated ?? 0) + (response.unchanged ?? 0));
   const importedSource: X3ImportedSource = {
     bilanType: 'USINAGE_2',
     fileType,
     fileName,
     importedAt: new Date().toISOString(),
-    rowCount: response.rowsValid ?? 0,
+    rowCount: rowsValid,
     status: error || response.statut === 'Echec' ? 'Erreur' : 'Importé',
     error: error ?? response.archiveErrorMessage ?? undefined,
     profile: fileType === 'YRJMCH' ? 'YRJMCH_V1' : 'MVT_ENTREE_OF_V1',
-    rowsRead: response.rowsRead,
-    rowsInserted: response.inserted,
-    rowsUpdated: response.updated,
-    rowsIgnored: response.unchanged,
-    rowsRejected: response.rejected,
-    importBatchId: response.importBatchId,
+    rowsRead,
+    rowsInserted: response.inserted ?? 0,
+    rowsUpdated: response.updated ?? 0,
+    rowsIgnored: response.unchanged ?? 0,
+    rowsRejected: response.rejected ?? 0,
+    importBatchId: response.importBatchId ?? response.id,
     rows: []
   };
 
@@ -379,25 +386,28 @@ const applyRealApiError = (fileType: X3ExcelFileType, fileName: string, error: s
   });
 };
 
-const toFileTypeFromBatch = (batch: ImportBatchSummary): X3ExcelFileType | null => {
-  const typeImport = batch.typeImport.toLowerCase();
-  const profilImport = (batch.profilImport ?? '').toLowerCase();
-  if (typeImport.includes('rapportmachine') || profilImport.includes('yrjmch')) return 'YRJMCH';
-  if (typeImport.includes('mvtentreeof') || profilImport.includes('mvt_entree_of')) return 'MVTSTOTRSVCR';
-  return null;
-};
-
-const statusFromBatch = async (batch: ImportBatchSummary, fileType: X3ExcelFileType): Promise<X3ImportedSourceStatus> => {
-  let fileName = '';
+/**
+ * Traduit un suivi d'import (endpoint dedie) en statut de carte.
+ *
+ * Le nom de fichier est deja resolu par le backend depuis les fichiers archives ;
+ * l'appel a l'historique ne sert plus qu'a retrouver l'identifiant permettant de
+ * retelecharger la piece, et son echec ne doit pas invalider le statut.
+ */
+const statusFromTracking = async (
+  batch: ImportExecutionSummary,
+  fileType: X3ExcelFileType
+): Promise<X3ImportedSourceStatus> => {
+  // Un lot `Duplicate` (fichier deja importe) n'est pas une erreur : seul un echec
+  // reel doit basculer la carte en rouge.
+  const enEchec = batch.statut.toLowerCase().includes('echec');
   let archivedFileId: string | undefined;
   let hasArchivedFile = false;
   let uploadedBy: string | undefined;
 
   try {
-    const files = await importsHistoriqueService.getFiles(batch.id);
+    const files = await importsHistoriqueService.getFiles(batch.importBatchId);
     const file = files[0];
     if (file) {
-      fileName = file.nomFichierOriginal;
       archivedFileId = file.id;
       hasArchivedFile = true;
       uploadedBy = file.uploadeParNom ?? undefined;
@@ -409,64 +419,72 @@ const statusFromBatch = async (batch: ImportBatchSummary, fileType: X3ExcelFileT
   return {
     bilanType: 'USINAGE_2',
     fileType,
-    fileName,
+    fileName: batch.nomFichier ?? '',
     importedAt: batch.dateFinUtc ?? batch.dateCreationUtc,
-    rowCount: batch.validCount ?? batch.nombreLignesValides,
-    status: batch.statut.toLowerCase().includes('echec') ? 'Erreur' : 'Importé',
-    error: batch.archiveErrorMessage ?? undefined,
-    profile: batch.profilImport ?? undefined,
-    user: uploadedBy ?? batch.creeParNom ?? undefined,
-    rowsRead: batch.readCount ?? batch.nombreLignesLues,
-    rowsInserted: batch.insertedCount,
-    rowsUpdated: batch.updatedCount,
-    rowsIgnored: batch.unchangedCount,
-    rowsRejected:
-      batch.rejectedCount ??
-      Math.max(0, batch.nombreLignesLues - batch.nombreLignesValides),
-    importBatchId: batch.id,
+    rowCount: batch.lignesValides,
+    status: enEchec ? 'Erreur' : 'Importé',
+    error: enEchec ? (batch.message ?? undefined) : undefined,
+    user: uploadedBy ?? undefined,
+    rowsRead: batch.lignesLues,
+    rowsInserted: batch.lignesInserees,
+    rowsUpdated: batch.lignesMisesAJour,
+    rowsIgnored: batch.lignesInchangees,
+    rowsRejected: batch.lignesRejetees,
+    importBatchId: batch.importBatchId,
     hasArchivedFile,
     archivedFileId
   };
 };
 
 /**
- * Un lot `Duplicate` signale que le fichier deposé avait deja ete importe : il est
- * enregistre avec des compteurs a zero, puisqu'aucune ligne n'a ete relue. L'afficher
- * comme « dernier import » ferait donc tomber la carte a « 0 ligne lue » alors que les
- * donnees sont bien en base. On retient le dernier lot ayant reellement ingere le
- * fichier, et on ne retombe sur un lot `Duplicate` que si aucun autre n'existe.
+ * Statut de chaque source, lu depuis l'endpoint de suivi DEDIE a son type d'import.
+ *
+ * Ne pas repasser par `/v1/diagnostics/imports-reels` : ce diagnostic ne renvoie que
+ * les 10 derniers lots, tous types confondus. Comme chaque import (gammes,
+ * nomenclatures, rapports machine, mouvements) ecrit dans la meme table, les lots
+ * YRJMCH / MVTSTOTRSVCR en sortaient des que 10 imports plus recents existaient, et
+ * les cartes retombaient a « Non importé » alors que les donnees etaient bien en base.
+ *
+ * Les endpoints dedies filtrent par `TypeImport` et renvoient le dernier import
+ * reussi, sans troncature.
  */
-const isEffectiveBatch = (batch: ImportBatchSummary): boolean => {
-  const statut = batch.statut.toLowerCase();
-  return !statut.includes('encours') && !statut.includes('duplicate');
+const TRACKING_LOADERS: Record<X3ExcelFileType, () => Promise<ImportTracking>> = {
+  YRJMCH: () => rapportMachineService.getImportTracking(),
+  MVTSTOTRSVCR: () => mouvementsStockService.getImportTracking()
 };
 
 const refreshRealApiStatuses = async (): Promise<void> => {
-  const diagnostic = await importsHistoriqueService.getDiagnostic();
-  const latestByType = new Map<X3ExcelFileType, ImportBatchSummary>();
-  const fallbackByType = new Map<X3ExcelFileType, ImportBatchSummary>();
+  const fileTypes = Object.keys(TRACKING_LOADERS) as X3ExcelFileType[];
 
-  diagnostic.derniersImportBatches.forEach((batch) => {
-    const fileType = toFileTypeFromBatch(batch);
-    if (!fileType || batch.statut.toLowerCase().includes('encours')) return;
+  await Promise.all(
+    fileTypes.map(async (fileType) => {
+      let tracking: ImportTracking;
+      try {
+        tracking = await TRACKING_LOADERS[fileType]();
+      } catch {
+        // Un suivi indisponible ne doit pas effacer le statut deja affiche.
+        return;
+      }
 
-    if (isEffectiveBatch(batch)) {
-      if (!latestByType.has(fileType)) latestByType.set(fileType, batch);
-    } else if (!fallbackByType.has(fileType)) {
-      fallbackByType.set(fileType, batch);
-    }
-  });
+      // `dernierImportReussi` est la memoire de la carte ; `derniereTentative` ne sert
+      // qu'a signaler un echec quand aucun import n'a jamais abouti.
+      const batch = tracking.dernierImportReussi ?? tracking.derniereTentative;
+      if (!batch) return;
 
-  fallbackByType.forEach((batch, fileType) => {
-    if (!latestByType.has(fileType)) latestByType.set(fileType, batch);
-  });
-
-  for (const [fileType, batch] of latestByType) {
-    const status = await statusFromBatch(batch, fileType);
-    (['USINAGE_2', 'UAP2'] as X3BilanType[]).forEach((bilanType) => {
-      realApiStatuses[bilanType][fileType] = { ...status, bilanType };
-    });
-  }
+      const status = await statusFromTracking(batch, fileType);
+      (['USINAGE_2', 'UAP2'] as X3BilanType[]).forEach((bilanType) => {
+        const current = realApiStatuses[bilanType][fileType];
+        const mergedFileName =
+          status.fileName || current.fileName || (fileType === 'YRJMCH' ? 'YRJMCH.xlsx' : 'MVTSTOTRSVCR.xls');
+        realApiStatuses[bilanType][fileType] = {
+          ...current,
+          ...status,
+          fileName: mergedFileName,
+          bilanType
+        };
+      });
+    })
+  );
 };
 
 const importMvtViaBackend = async (file: File): Promise<X3ImportedSource> => {

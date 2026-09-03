@@ -149,46 +149,60 @@ public sealed class ManufacturingReferencesService : IManufacturingReferencesSer
                 (await _nomenclatureReader.ReadAsync(new MemoryStream(bytes), sourceSystem, batch.Id, cancellationToken)).ToList(),
                 n => n.CleMetier);
             var keys = nomenclatures.Select(n => n.CleMetier).ToList();
-
-            var existingByKey = (await _repository.GetNomenclaturesByCleMetiersAsync(keys, cancellationToken))
-                .GroupBy(n => n.CleMetier)
-                .ToDictionary(group => group.Key, group => group.First());
-
-            var toAdd = new List<RefNomenclature>();
             var inserted = 0;
             var updated = 0;
-            foreach (var n in nomenclatures)
-            {
-                if (existingByKey.TryGetValue(n.CleMetier, out var ex))
-                {
-                    ex.MettreAJour(
-                        n.AlternativeNomenclature,
-                        n.CodeParentNiveau,
-                        n.CodeComposant,
-                        n.Niveau,
-                        n.Sequence,
-                        n.DesignationComposant,
-                        n.QuantiteLien,
-                        n.QuantiteLienCumulee,
-                        n.UniteQuantite,
-                        n.CategorieComposant,
-                        n.TypeLien,
-                        n.PourcentageRebut,
-                        sourceSystem,
-                        batch.Id,
-                        DateTime.UtcNow);
-                    ex.Reactiver();
-                    updated++;
-                }
-                else
-                {
-                    toAdd.Add(n);
-                    inserted++;
-                }
-            }
 
-            if (toAdd.Count > 0) await _repository.AddRefNomenclaturesAsync(toAdd, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
+            // Le fichier réel peut contenir plusieurs centaines de milliers de lignes.
+            // Un seul AddRange/SaveChanges conserve toutes les entités dans le ChangeTracker
+            // et fait dépasser la mémoire de SQLite dans les tests. La transaction reste
+            // globale, mais les entités sont traitées puis détachées par lots.
+            const int batchSize = 500;
+            foreach (var rowsBatch in nomenclatures.Chunk(batchSize))
+            {
+                var existingByKey = (await _repository.GetNomenclaturesByCleMetiersAsync(
+                        rowsBatch.Select(n => n.CleMetier).ToArray(), cancellationToken))
+                    .GroupBy(n => n.CleMetier)
+                    .ToDictionary(group => group.Key, group => group.First());
+
+                var toAdd = new List<RefNomenclature>();
+                foreach (var n in rowsBatch)
+                {
+                    if (existingByKey.TryGetValue(n.CleMetier, out var ex))
+                    {
+                        ex.MettreAJour(
+                            n.AlternativeNomenclature,
+                            n.CodeParentNiveau,
+                            n.CodeComposant,
+                            n.Niveau,
+                            n.Sequence,
+                            n.DesignationComposant,
+                            n.QuantiteLien,
+                            n.QuantiteLienCumulee,
+                            n.UniteQuantite,
+                            n.CategorieComposant,
+                            n.TypeLien,
+                            n.PourcentageRebut,
+                            sourceSystem,
+                            batch.Id,
+                            DateTime.UtcNow);
+                        ex.Reactiver();
+                        updated++;
+                    }
+                    else
+                    {
+                        toAdd.Add(n);
+                        inserted++;
+                    }
+                }
+
+                if (toAdd.Count > 0)
+                {
+                    await _repository.AddRefNomenclaturesAsync(toAdd, cancellationToken);
+                }
+
+                await _repository.SaveChangesAsync(cancellationToken);
+                _repository.ClearChangeTracker();
+            }
 
             if (isCompleteExport)
             {

@@ -100,4 +100,8 @@ describe('dataSources', () => {
   it('utilise l API reelle par defaut pour les alertes', () => {
     expect(getDataSourceMode('alertes')).toBe('api');
   });
+
+  it("utilise l'API réelle par défaut pour le journal d'audit", () => {
+    expect(getDataSourceMode('audit')).toBe('api');
+  });
 });

@@ -140,7 +140,6 @@ public sealed class DashboardApiTests(ApiWebApplicationFactory factory) : IAsync
             99,
             Guid.Parse("de000000-0000-0000-0000-000000000099"),
             "lecteur",
-            "non-utilise",
             "Lecteur métier",
             "lecteur@sopal.invalid",
             "Lecteur");
@@ -215,10 +214,30 @@ public sealed class DashboardApiTests(ApiWebApplicationFactory factory) : IAsync
             new DateTime(2026, 1, 31, 10, 30, 0, DateTimeKind.Utc),
             DashboardStatuts.Ok,
             new DashboardBilanSummary("FONDERIE", 12.5m, "kg", 2, null, 2, 0, 0, 0, DashboardStatuts.Ok),
+            CreerDetailFonderie(),
             new DashboardBilanSummary("USINAGE2", 8m, "pieces", 2, 2, 2, 0, 0, 0, DashboardStatuts.Ok),
             new DashboardBilanSummary("UAP2", 0m, "pieces", 2, 2, 2, 0, 0, 0, DashboardStatuts.Ok),
             new DashboardOperationsSummary(1, 2, 3, 4, null, 0),
             new DashboardImportSummary(5, 0, 0, 1, null),
             new DashboardDataQualitySummary(0, 0, 0, 0, DashboardStatuts.Ok),
             []);
+
+    /// <summary>
+    /// Detail Fonderie coherent avec l'ecart de 12,5 kg declare dans le resume :
+    /// INPUT total 200 kg, OUTPUT total 187,5 kg, sur deux types matiere complets.
+    /// </summary>
+    private static DashboardFonderieSummary CreerDetailFonderie()
+        => new(
+            200m,
+            187.5m,
+            12.5m,
+            6.25m,
+            2,
+            0,
+            [
+                new DashboardFonderieTypeSummary(
+                    "M3000L0", 100m, 40m, 140m, 90m, 12m, 25m, 127m, 13m, 9.29m, [], "Complet"),
+                new DashboardFonderieTypeSummary(
+                    "M3010L0", 50m, 10m, 60m, 55m, 5m, 0.5m, 60.5m, -0.5m, -0.83m, [], "Complet")
+            ]);
 }

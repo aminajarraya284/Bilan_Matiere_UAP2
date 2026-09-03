@@ -1,5 +1,6 @@
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Contracts;
 using BilanMatiereUAP2.Contracts.ReceptionsUsinage2;
 using BilanMatiereUAP2.Domain.Entities;
@@ -47,7 +48,8 @@ public sealed class ReceptionUsinage2Service(
     IDateTimeProvider dateTimeProvider,
     IParametreApplicationProvider parametres,
     IValidator<CreateReceptionUsinage2Request> createValidator,
-    IValidator<UpdateReceptionUsinage2Request> updateValidator) : IReceptionUsinage2Service
+    IValidator<UpdateReceptionUsinage2Request> updateValidator,
+    IAuditService? auditService = null) : IReceptionUsinage2Service
 {
     public async Task<PagedReceptionsUsinage2Response> GetAllAsync(GetReceptionsUsinage2Query query, CancellationToken cancellationToken)
     {
@@ -104,6 +106,7 @@ public sealed class ReceptionUsinage2Service(
             dateTimeProvider.UtcNow);
 
         await repository.AddAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, SnapshotAudit(entity), "Creation d'une reception Usinage 2.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ToResponseAsync(entity, cancellationToken);
     }
@@ -112,6 +115,7 @@ public sealed class ReceptionUsinage2Service(
     {
         await updateValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = SnapshotAudit(entity);
         entity.Modifier(
             command.Request.NombrePiecesReceptionnees,
             command.Request.PoidsTotalReceptionneKg,
@@ -120,6 +124,7 @@ public sealed class ReceptionUsinage2Service(
             currentUser.UserId,
             currentUser.UserName,
             dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Modification, entity, avant, SnapshotAudit(entity), "Modification d'une reception Usinage 2.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ToResponseAsync(entity, cancellationToken);
     }
@@ -127,6 +132,7 @@ public sealed class ReceptionUsinage2Service(
     public async Task<ReceptionUsinage2Response> ValiderAsync(ValiderReceptionUsinage2Command command, CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = SnapshotAudit(entity);
         var estAdmin = string.Equals(currentUser.Role, "Admin", StringComparison.OrdinalIgnoreCase);
         var derogation = command.Request.DerogationAdmin && estAdmin;
         if (command.Request.DerogationAdmin && !estAdmin)
@@ -135,6 +141,7 @@ public sealed class ReceptionUsinage2Service(
         }
 
         entity.Valider(derogation, command.Request.DerogationJustification, currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Validation, entity, avant, SnapshotAudit(entity), "Validation d'une reception Usinage 2.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ToResponseAsync(entity, cancellationToken);
     }
@@ -142,7 +149,9 @@ public sealed class ReceptionUsinage2Service(
     public async Task<ReceptionUsinage2Response> AnnulerAsync(AnnulerReceptionUsinage2Command command, CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = SnapshotAudit(entity);
         entity.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, SnapshotAudit(entity), "Annulation d'une reception Usinage 2.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ToResponseAsync(entity, cancellationToken);
     }
@@ -150,9 +159,11 @@ public sealed class ReceptionUsinage2Service(
     public async Task<ReceptionUsinage2Response> RecalculerContexteAsync(RecalculerContexteReceptionUsinage2Command command, CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = SnapshotAudit(entity);
         var context = await contextService.GetAsync(entity.NumeroOF, entity.DateReception, cancellationToken)
             ?? ContextIntrouvable(entity.NumeroOF);
         entity.RecalculerContexte(ToSnapshot(context), currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Modification, entity, avant, SnapshotAudit(entity), "Recalcul du contexte d'une reception Usinage 2.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return await ToResponseAsync(entity, cancellationToken);
     }
@@ -274,6 +285,41 @@ public sealed class ReceptionUsinage2Service(
     private async Task<ReceptionUsinage2> GetRequiredAsync(Guid id, CancellationToken cancellationToken)
         => await repository.GetByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Réception Usinage 2 introuvable.");
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        ReceptionUsinage2 entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => auditService is null
+            ? Task.CompletedTask
+            : auditService.EnregistrerAsync(
+                new AuditEntry(
+                    action,
+                    DomaineAudit.ReceptionUsinage2,
+                    nameof(ReceptionUsinage2),
+                    entity.Id.ToString(),
+                    $"{entity.NumeroOF}|{entity.CodeArticle ?? "ARTICLE_INCONNU"}|{entity.Id}",
+                    nameof(ReceptionUsinage2Service),
+                    resume,
+                    avant,
+                    apres),
+                cancellationToken);
+
+    private static IReadOnlyDictionary<string, object?> SnapshotAudit(ReceptionUsinage2 entity)
+        => new Dictionary<string, object?>
+        {
+            ["date"] = entity.DateReception,
+            ["numeroOF"] = entity.NumeroOF,
+            ["codeArticle"] = entity.CodeArticle,
+            ["quantitePieces"] = entity.NombrePiecesReceptionnees,
+            ["poidsTotalReceptionneKg"] = entity.PoidsTotalReceptionneKg,
+            ["atelierOrigine"] = entity.AtelierOrigine,
+            ["codeTypeMatiere"] = entity.CodeTypeMatiere,
+            ["statut"] = entity.StatutReception.ToString()
+        };
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();

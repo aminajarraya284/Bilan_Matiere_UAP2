@@ -43,6 +43,9 @@ builder.Services.Configure<ImportX3Options>(builder.Configuration.GetSection(Imp
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
+builder.Services.AddScoped<HttpAuditContext>();
+builder.Services.AddScoped<ICurrentUserContext>(provider => provider.GetRequiredService<HttpAuditContext>());
+builder.Services.AddScoped<ICorrelationIdAccessor>(provider => provider.GetRequiredService<HttpAuditContext>());
 
 // Garde de securite : DevelopmentAuthenticationHandler (header X-Development-Role) ne doit
 // jamais etre enregistre ni actif en dehors de Development. Hors Development, seule
@@ -61,6 +64,9 @@ if (isDevelopmentAuthAllowed)
     // n'est donc possible hors Development.
     builder.Services.TryAddSingleton(TimeProvider.System);
     builder.Services.AddSingleton<IDevelopmentTokenService, DevelopmentTokenService>();
+    // Resout les mots de passe de developpement depuis la configuration (User Secrets).
+    // Enregistre sous la meme condition : hors Development, ce service n'existe pas.
+    builder.Services.AddSingleton<IDevelopmentAccountAuthenticator, ConfigurationDevelopmentAccountAuthenticator>();
 
     builder.Services
         .AddAuthentication(options =>
@@ -143,6 +149,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
     options.AddPolicy(AuthorizationPolicies.ManageInventairesFonderie, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
+    options.AddPolicy(AuthorizationPolicies.ManageAdministration, policy =>
+        policy.RequireRole("Admin"));
     options.AddPolicy(DashboardAuthorizationPolicies.Read, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
     options.AddPolicy(AlertesAuthorizationPolicies.Read, policy =>
@@ -151,6 +159,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
     options.AddPolicy(RapportsAuthorizationPolicies.Read, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
+    options.AddPolicy(AuditAuthorizationPolicies.Read, policy =>
+        policy.RequireRole("Admin"));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -175,6 +185,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -186,6 +197,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors(frontendCorsPolicy);
 app.UseAuthentication();
+// Rapproche l'identite Entra avec le profil local (creation au premier login, refus si
+// desactive ou sans role reconnu) AVANT que les policies metier ne s'appliquent.
+app.UseMiddleware<EntraUserProvisioningMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

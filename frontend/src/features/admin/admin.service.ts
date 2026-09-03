@@ -1,109 +1,63 @@
 import api from '@/services/api';
-import { BUSINESS_RULES } from '@/config/businessRules';
-import { AdminUser, AdminArticle, AdminSettings } from './admin.types';
-import { isMockSource } from '@/config/dataSources';
-
-const mockUsers: AdminUser[] = [
-  { id: 1, fullName: 'Amina Jarraya', role: 'Admin', email: 'amina.jarraya@sopal.com', actif: true },
-  { id: 2, fullName: 'Ahmed Trabelsi', role: 'ResponsableFonderie', email: 'ahmed.t@sopal.com', actif: true },
-  { id: 3, fullName: 'Khalil Ben Ali', role: 'ResponsableUsinage2', email: 'khalil.ba@sopal.com', actif: true }
-];
-
-const mockArticles: AdminArticle[] = [
-  {
-    id: 1,
-    code: '0101A03-1',
-    designation: 'CORPS MINI VANNE BS 1/2',
-    typeMatiere: 'M3010L0',
-    unite: 'KG',
-    actif: true
-  },
-  {
-    id: 2,
-    code: '0102A03-1',
-    designation: 'CORPS MINI VANNE BS 1/2 MF',
-    typeMatiere: 'M3000L0',
-    unite: 'KG',
-    actif: true
-  },
-  { id: 3, code: '0203203-1', designation: 'CORPS MINI VANNE', typeMatiere: 'M3060L0', unite: 'KG', actif: true }
-];
-
-let mockSettings: AdminSettings = {
-  seuilAlerteEcart: BUSINESS_RULES.seuilEcartPourcentage,
-  seuilCritiqueEcart: BUSINESS_RULES.seuilCritiqueEcartPourcentage,
-  toleranceAlertePoids: BUSINESS_RULES.seuilAlertePoidsKg,
-  frequenceSyncX3: 'Toutes les 4 heures'
-};
+import { assertApiSource } from '@/config/dataSources';
+import type {
+  AdminDevelopmentAccount,
+  AdminMaterialType,
+  AdminParameter,
+  AdminUserProfile,
+  AdminUsersQuery,
+  PagedAdminUsers
+} from './admin.types';
 
 export const adminService = {
-  // --- USERS ---
-  async getUsers(): Promise<AdminUser[]> {
-    if (isMockSource('administration')) return [...mockUsers];
-    const res = await api.get<AdminUser[]>('/users');
-    return res.data;
+  async getParameters(): Promise<AdminParameter[]> {
+    assertApiSource('administration');
+    return (await api.get<AdminParameter[]>('/v1/parametres')).data;
   },
 
-  async createUser(data: Omit<AdminUser, 'id'>): Promise<AdminUser> {
-    if (isMockSource('administration')) {
-      const newId = Math.max(...mockUsers.map((u) => u.id), 0) + 1;
-      const newUser = { ...data, id: newId };
-      mockUsers.push(newUser);
-      return newUser;
-    }
-    const res = await api.post<AdminUser>('/users', data);
-    return res.data;
+  async updateParameter(cle: string, valeur: string): Promise<AdminParameter> {
+    assertApiSource('administration');
+    return (
+      await api.put<AdminParameter>('/v1/parametres/' + encodeURIComponent(cle), { valeur })
+    ).data;
   },
 
-  async toggleUserStatus(id: number): Promise<void> {
-    if (isMockSource('administration')) {
-      const u = mockUsers.find((user) => user.id === id);
-      if (u) u.actif = !u.actif;
-      return;
-    }
-    await api.put(`/users/${id}/toggle-status`);
+  async getMaterialTypes(): Promise<AdminMaterialType[]> {
+    assertApiSource('typesMatiere');
+    return (await api.get<AdminMaterialType[]>('/v1/types-matiere')).data;
   },
 
-  // --- ARTICLES ---
-  async getArticles(): Promise<AdminArticle[]> {
-    if (isMockSource('administration')) return [...mockArticles];
-    const res = await api.get<AdminArticle[]>('/articles');
-    return res.data;
+  /** Profils Entra provisionnés automatiquement. Pagination serveur. */
+  async getUsers(query: AdminUsersQuery = {}): Promise<PagedAdminUsers> {
+    assertApiSource('administration');
+    return (
+      await api.get<PagedAdminUsers>('/v1/admin/utilisateurs', {
+        params: {
+          page: query.page ?? 1,
+          pageSize: query.pageSize ?? 25,
+          ...(query.recherche ? { recherche: query.recherche } : {}),
+          ...(query.estActif === undefined ? {} : { estActif: query.estActif })
+        }
+      })
+    ).data;
   },
 
-  async createArticle(data: Omit<AdminArticle, 'id'>): Promise<AdminArticle> {
-    if (isMockSource('administration')) {
-      const newId = Math.max(...mockArticles.map((a) => a.id), 0) + 1;
-      const newArt = { ...data, id: newId };
-      mockArticles.push(newArt);
-      return newArt;
-    }
-    const res = await api.post<AdminArticle>('/articles', data);
-    return res.data;
+  /** Seule mutation disponible : activer ou couper l'accès local. */
+  async setUserActivation(id: number, estActif: boolean): Promise<AdminUserProfile> {
+    assertApiSource('administration');
+    return (
+      await api.put<AdminUserProfile>(`/v1/admin/utilisateurs/${id}/activation`, { estActif })
+    ).data;
   },
 
-  async toggleArticleStatus(id: number): Promise<void> {
-    if (isMockSource('administration')) {
-      const a = mockArticles.find((art) => art.id === id);
-      if (a) a.actif = !a.actif;
-      return;
-    }
-    await api.put(`/articles/${id}/toggle-status`);
-  },
-
-  // --- SETTINGS ---
-  async getSettings(): Promise<AdminSettings> {
-    if (isMockSource('administration')) return { ...mockSettings };
-    const res = await api.get<AdminSettings>('/settings');
-    return res.data;
-  },
-
-  async updateSettings(data: AdminSettings): Promise<AdminSettings> {
-    if (isMockSource('administration')) {
-      mockSettings = { ...data };
-      return mockSettings;
-    }
-    const res = await api.put<AdminSettings>('/settings', data);
-    return res.data;
+  /**
+   * Comptes de connexion locale. Répond 404 hors Development : l'appelant traite
+   * ce cas comme « aucun compte de développement », pas comme une erreur.
+   */
+  async getDevelopmentAccounts(): Promise<AdminDevelopmentAccount[]> {
+    assertApiSource('administration');
+    return (
+      await api.get<AdminDevelopmentAccount[]>('/v1/admin/utilisateurs/developpement')
+    ).data;
   }
 };

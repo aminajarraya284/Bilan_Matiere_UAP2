@@ -11,6 +11,11 @@ namespace BilanMatiereUAP2.Api.Controllers;
 [Authorize(Policy = AuthorizationPolicies.ReadReceptionsUsinage2)]
 public sealed class BilansUap2Controller(IBilanUap2Service service) : ControllerBase
 {
+    [HttpGet("periodes")]
+    [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<string>>> GetPeriodes(CancellationToken cancellationToken)
+        => Ok(await service.GetPeriodesDisponiblesAsync(cancellationToken));
+
     [HttpGet]
     [ProducesResponseType<BilanUap2Response>(StatusCodes.Status200OK)]
     public async Task<ActionResult<BilanUap2Response>> GetCourant(CancellationToken cancellationToken)

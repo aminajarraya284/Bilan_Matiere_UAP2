@@ -148,14 +148,12 @@ describe('DashboardView', () => {
     expect(dashboardViewSource).toContain("to: '/bilan-matiere?tab=fonderie'");
   });
 
-  it('ne contient plus les anciens KPI ou routes Dashboard fictives', async () => {
+  it('ne contient plus les anciennes routes Dashboard fictives', async () => {
     mocks.getDashboard.mockResolvedValue(createDashboardResponse());
 
     const wrapper = mountView();
     await flushPromises();
 
-    expect(wrapper.text()).not.toContain('Stock début');
-    expect(wrapper.text()).not.toContain('Sorties magasin X3');
     expect(wrapper.html()).not.toContain('/dashboard/summary');
     expect(wrapper.html()).not.toContain('/dashboard/bilan-par-matiere');
   });
@@ -175,5 +173,16 @@ describe('DashboardView', () => {
     expect(chart.text()).toContain('8');
     expect(chart.text()).toContain('3');
     expect(chart.text()).toContain('3');
+  });
+
+  it('affiche le résumé et le détail Fonderie fournis par l API', async () => {
+    mocks.getDashboard.mockResolvedValue(createDashboardResponse());
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="fonderie-summary"]').text()).toContain('24,50 kg');
+    expect(wrapper.get('[data-testid="fonderie-by-type"]').text()).toContain('M3000L0');
+    expect(wrapper.get('[data-testid="fonderie-by-type"]').text()).toContain('12,00 kg');
   });
 });

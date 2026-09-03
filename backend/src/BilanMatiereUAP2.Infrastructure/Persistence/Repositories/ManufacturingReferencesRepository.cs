@@ -324,4 +324,7 @@ public sealed class ManufacturingReferencesRepository : IManufacturingReferences
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default)
         => _dbContext.SaveChangesAsync(cancellationToken);
+
+    public void ClearChangeTracker()
+        => _dbContext.ChangeTracker.Clear();
 }

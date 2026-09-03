@@ -9,14 +9,13 @@ import {
   Printer,
   Wrench,
   BarChart3,
-  MessageSquare
 } from 'lucide-vue-next';
 import { RouterLink, useRoute } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { bilanService } from './bilan.service';
 import { rebutsUsinage2Service } from './rebutsUsinage2.service';
 import type { RebutUsinage2 } from './rebutsUsinage2.types';
-import { BilanMatiereReport, BilanUsinage2Api, BilanUap2ParOF } from './bilan.types';
+import { BilanMatiereReport, BilanUsinage2Api } from './bilan.types';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import BadgeStatus from '@/components/ui/BadgeStatus.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
@@ -25,6 +24,7 @@ import { formatNumber } from '@/utils/formatters';
 import { useAppDialog } from '@/composables/useAppDialog';
 import { BUSINESS_RULES } from '@/config/businessRules';
 import type { DataVertical } from '@/config/dataSources';
+import BilanMatiereUap2View from './BilanMatiereUap2View.vue';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -97,30 +97,11 @@ const usinageEmptyMessage = computed(() => {
   return 'Aucune donnée ne correspond à la période sélectionnée.';
 });
 
-// UAP2 state
-const bilansUap2 = ref<BilanUap2ParOF[]>([]);
-const isLoadingUap2 = ref(true);
-const uap2Error = ref('');
-
 // Filters
 const filterMois = ref<string>(BUSINESS_RULES.periodeParDefaut);
 const filterDateDebut = ref<string>(BUSINESS_RULES.dateDebutParDefaut);
 const filterDateFin = ref<string>(BUSINESS_RULES.dateFinParDefaut);
 const filterAlliage = ref<string>('TOUS');
-
-// Verification dialog (Usinage / UAP2)
-const showVerifyDialog = ref(false);
-// La cle d'un bilan est `bilanKey` (chaine « periode|type »), jamais un identifiant
-// numerique : aucun des contrats de bilan n'expose de champ `id`.
-const verifyTarget = ref<{ bilanKey: string; type: 'usinage' | 'uap2'; currentStatut: string; currentObs: string }>({
-  bilanKey: '',
-  type: 'usinage',
-  currentStatut: 'OK',
-  currentObs: ''
-});
-const verifyStatut = ref('OK');
-const verifyObservation = ref('');
-const verifyJustification = ref('');
 
 // ===== FONDERIE =====
 const loadBilans = async () => {
@@ -397,91 +378,6 @@ const annulerRebut = async (rebut: RebutUsinage2) => {
 const formatNullable = (value: number | null, decimals = 0): string =>
   value === null ? '—' : formatNumber(value, decimals);
 
-// ===== UAP2 =====
-const loadBilansUap2 = async () => {
-  isLoadingUap2.value = true;
-  uap2Error.value = '';
-  try {
-    bilansUap2.value = await bilanService.getBilansUap2(filterMois.value, filterDateDebut.value, filterDateFin.value);
-  } catch (error) {
-    // Un tableau vide sans explication se lit comme « aucun écart » : on affiche la cause.
-    uap2Error.value = error instanceof Error ? error.message : "Le Bilan UAP2 n'a pas pu être chargé.";
-    bilansUap2.value = [];
-  } finally {
-    isLoadingUap2.value = false;
-  }
-};
-
-type BilanUap2Display = BilanUap2ParOF & Partial<Record<string, number>>;
-
-const getUap2RebutUsinage2Pieces = (item: BilanUap2ParOF): number => {
-  const displayItem = item as BilanUap2Display;
-  const value = displayItem.rebutUsinage2Pieces ?? displayItem.rebutUsinage2 ?? displayItem.rebutUsinage2Kg;
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-};
-
-const getUap2ResultatLabel = (item: BilanUap2ParOF): string => {
-  if (item.statut === 'Cloture') return 'Clôturé';
-  return item.statut === 'OK' ? 'À clôturer' : 'À vérifier';
-};
-
-const getUap2ResultatClass = (item: BilanUap2ParOF): string => {
-  if (item.statut === 'Cloture') return 'bg-slate-100 text-slate-700 border-slate-200';
-  if (item.statut === 'OK') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  return 'bg-amber-50 text-amber-700 border-amber-200';
-};
-
-const totalUap2 = computed(() => {
-  const items = bilansUap2.value;
-  const totalSortieMP = items.reduce((s, i) => s + i.quantiteSortieMPKg, 0);
-  const totalQteCtrl = items.reduce((s, i) => s + i.quantiteControlePieces, 0);
-  const totalRebuts = items.reduce((s, i) => s + getUap2RebutUsinage2Pieces(i), 0);
-  const totalEntreeSF = items.reduce((s, i) => s + i.entreeSfNetKg, 0);
-  const totalOutput = items.reduce((s, i) => s + i.outputOFKg, 0);
-  const ecartGlobal = items.reduce((s, i) => s + i.ecartBilanOFKg, 0);
-  const tauxGlobal = totalSortieMP > 0 ? (ecartGlobal / totalSortieMP) * 100 : 0;
-  return {
-    totalSortieMP,
-    totalQteCtrl,
-    totalRebuts,
-    totalEntreeSF,
-    totalOutput,
-    ecartGlobal,
-    tauxGlobal
-  };
-});
-
-// ===== VERIFY DIALOG =====
-const openVerifyDialog = (
-  bilanKey: string,
-  type: 'usinage' | 'uap2',
-  currentStatut: string,
-  currentObs: string
-) => {
-  verifyTarget.value = { bilanKey, type, currentStatut, currentObs };
-  verifyStatut.value = currentStatut;
-  verifyObservation.value = currentObs;
-  verifyJustification.value = '';
-  showVerifyDialog.value = true;
-};
-
-const submitVerification = async () => {
-  try {
-    await bilanService.verifierBilan(verifyTarget.value.bilanKey, verifyTarget.value.type, {
-      statutControle: verifyStatut.value,
-      observation: verifyObservation.value,
-      justification: verifyJustification.value
-    });
-    successMessage.value = 'Vérification enregistrée avec succès.';
-    showVerifyDialog.value = false;
-    if (verifyTarget.value.type === 'usinage') await loadBilansUsinage();
-    else await loadBilansUap2();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
-  }
-};
-
 // ===== TAB SWITCH =====
 const switchTab = (tab: TabId) => {
   if (!canOpenTab(tab)) return;
@@ -489,7 +385,6 @@ const switchTab = (tab: TabId) => {
   if (tab === 'usinage2' && bilansUsinage.value.length === 0) loadBilansUsinage();
   // La saisie des rebuts vit dans cet onglet : sa liste doit suivre la meme periode.
   if (tab === 'usinage2') loadRebuts();
-  if (tab === 'uap2' && bilansUap2.value.length === 0) loadBilansUap2();
 };
 
 // ===== INIT =====
@@ -499,7 +394,6 @@ onMounted(() => {
     loadBilansUsinage();
     loadRebuts();
   }
-  if (activeTab.value === 'uap2') loadBilansUap2();
 });
 </script>
 
@@ -1044,246 +938,8 @@ onMounted(() => {
 
     <!-- ===================== ONGLET UAP2 TOTAL ===================== -->
     <template v-if="activeTab === 'uap2'">
-      <!-- Summary cards UAP2 -->
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total sortie MP</p>
-          <p class="mt-1.5 text-lg font-black text-slate-900">{{ formatNumber(totalUap2.totalSortieMP, 0) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total quantité contrôlée</p>
-          <p class="mt-1.5 text-lg font-black text-slate-900">{{ formatNumber(totalUap2.totalQteCtrl, 0) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total rebut Usinage 2</p>
-          <p class="mt-1.5 text-lg font-black text-rose-600">{{ formatNumber(totalUap2.totalRebuts, 0) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total entrée OF</p>
-          <p class="mt-1.5 text-lg font-black text-slate-700">{{ formatNumber(totalUap2.totalEntreeSF, 0) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Écart global OF</p>
-          <p class="mt-1.5 text-lg font-black" :class="totalUap2.ecartGlobal < 0 ? 'text-rose-600' : 'text-slate-700'">
-            {{ formatNumber(totalUap2.ecartGlobal, 2) }}
-          </p>
-        </div>
-        <div class="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Taux écart global</p>
-          <p
-            class="mt-1.5 text-lg font-black"
-            :class="
-              Math.abs(totalUap2.tauxGlobal) > BUSINESS_RULES.seuilEcartBilanAutoPourcentage
-                ? 'text-rose-600'
-                : 'text-slate-700'
-            "
-          >
-            {{ formatNumber(totalUap2.tauxGlobal, 2) }} %
-          </p>
-        </div>
-      </div>
-
-      <!-- Table UAP2 -->
-      <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
-          <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <BarChart3 class="w-4 h-4 text-blue-900" />
-            Bilan UAP2 par OF
-          </h3>
-          <div class="flex gap-2">
-            <button
-              @click="handlePrint"
-              class="bg-slate-700 hover:bg-slate-800 text-white font-bold text-[10px] uppercase py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
-            >
-              <Printer class="w-3.5 h-3.5" />
-              Imprimer
-            </button>
-            <button
-              @click="loadBilansUap2"
-              class="bg-blue-900 hover:bg-blue-800 text-white font-bold text-[10px] uppercase py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw class="w-3.5 h-3.5" />
-              Recalculer UAP2
-            </button>
-          </div>
-        </div>
-
-        <div v-if="isLoadingUap2">
-          <LoadingState />
-        </div>
-
-        <div
-          v-else-if="uap2Error"
-          class="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
-        >
-          {{ uap2Error }}
-        </div>
-
-        <div v-else class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-[11px]">
-            <thead>
-              <tr
-                class="bg-slate-50/50 border-b border-slate-100 text-[9px] text-slate-500 font-bold uppercase tracking-wider"
-              >
-                <th class="p-2.5">OF</th>
-                <th class="p-2.5">Article</th>
-                <th class="p-2.5">Désignation</th>
-                <th class="p-2.5 text-right font-bold">Total CTRL (pièces)</th>
-                <th class="p-2.5 text-right">Poids PHY</th>
-                <th class="p-2.5 text-right text-rose-900 font-bold">Écart en kg</th>
-                <th class="p-2.5 text-right">Rebut SCI</th>
-                <th class="p-2.5 text-right">Rebut TRN</th>
-                <th class="p-2.5 text-right">Rebut EMR</th>
-                <th class="p-2.5 text-right">Rebut Usinage 2</th>
-                <th class="p-2.5 text-right font-bold">Total entrée OF</th>
-                <th class="p-2.5 text-right">Écart par OF</th>
-                <th class="p-2.5 text-right font-bold">Résultat</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 font-medium">
-              <tr v-for="item in bilansUap2" :key="item.bilanKey" class="hover:bg-slate-50/30 transition-colors">
-                <td class="p-2.5 font-black text-blue-900 font-mono whitespace-nowrap">{{ item.numeroOF }}</td>
-                <td class="p-2.5 font-mono text-slate-700">{{ item.codeArticle }}</td>
-                <td class="p-2.5 text-slate-500 max-w-[160px] truncate">{{ item.designationArticle }}</td>
-                <td class="p-2.5 text-right font-semibold font-mono text-blue-800">
-                  {{ formatNumber(item.quantiteControlePieces, 0) }}
-                </td>
-                <td class="p-2.5 text-right font-semibold font-mono">
-                  {{ formatNumber(item.poidsPhysiqueUnitaireKg, 3) }}
-                </td>
-                <td
-                  class="p-2.5 text-right font-black font-mono"
-                  :class="Math.abs(item.ecartBilanOFKg) > 0 ? 'text-rose-600' : 'text-slate-700'"
-                >
-                  {{ formatNumber(item.ecartBilanOFKg, 2) }}
-                </td>
-                <td class="p-2.5 text-right font-mono text-rose-500">{{ formatNumber(item.rebutSciKg, 2) }}</td>
-                <td class="p-2.5 text-right font-mono text-rose-500">{{ formatNumber(item.rebutTrnKg, 2) }}</td>
-                <td class="p-2.5 text-right font-mono text-rose-500">{{ formatNumber(item.rebutEmrKg, 2) }}</td>
-                <td class="p-2.5 text-right font-bold font-mono text-rose-600">
-                  {{ formatNumber(getUap2RebutUsinage2Pieces(item), 0) }}
-                </td>
-                <td class="p-2.5 text-right font-bold font-mono text-slate-700">
-                  {{ formatNumber(item.entreeSfNetKg, 2) }}
-                </td>
-                <td
-                  class="p-2.5 text-right font-bold font-mono"
-                  :class="
-                    Math.abs(item.tauxEcartOF) > BUSINESS_RULES.seuilEcartBilanAutoPourcentage
-                      ? 'text-rose-600'
-                      : 'text-slate-600'
-                  "
-                >
-                  {{ formatNumber(item.tauxEcartOF, 2) }} %
-                </td>
-                <td class="p-2.5 text-right">
-                  <button
-                    v-if="isAdmin"
-                    @click="openVerifyDialog(item.bilanKey, 'uap2', item.statut, item.observation || '')"
-                    class="inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase"
-                    :class="getUap2ResultatClass(item)"
-                  >
-                    {{ getUap2ResultatLabel(item) }}
-                  </button>
-                  <span
-                    v-else
-                    class="inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase"
-                    :class="getUap2ResultatClass(item)"
-                  >
-                    {{ getUap2ResultatLabel(item) }}
-                  </span>
-                </td>
-              </tr>
-              <tr v-if="!bilansUap2.length">
-                <td colspan="13" class="p-6 text-center text-slate-400 font-bold uppercase tracking-wider">
-                  Aucun bilan UAP2 disponible pour cette sélection
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <BilanMatiereUap2View />
     </template>
 
-    <!-- ===================== DIALOG VERIFICATION ===================== -->
-    <Teleport to="body">
-      <div v-if="showVerifyDialog" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="showVerifyDialog = false"></div>
-        <div
-          class="relative bg-white rounded-2xl border border-slate-100 shadow-2xl w-full max-w-lg mx-4 p-6 space-y-5"
-        >
-          <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <div class="bg-blue-50 rounded-xl p-2.5">
-              <MessageSquare class="w-5 h-5 text-blue-700" />
-            </div>
-            <div>
-              <h3 class="text-sm font-black text-slate-800">Vérifier le bilan</h3>
-              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                Ajouter commentaire, justification et statut de contrôle
-              </p>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div>
-              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5"
-                >Statut de contrôle</label
-              >
-              <select
-                v-model="verifyStatut"
-                class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-200"
-              >
-                <option value="OK">OK</option>
-                <option value="AVerifier">À vérifier</option>
-                <option value="Anomalie">Anomalie</option>
-                <option value="Justifie">Justifié</option>
-                <option value="Regularise">Régularisé</option>
-                <option v-if="verifyTarget.type === 'uap2'" value="Cloture">Clôturé</option>
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5"
-                >Observation</label
-              >
-              <textarea
-                v-model="verifyObservation"
-                rows="2"
-                class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Observation sur le contrôle..."
-              ></textarea>
-            </div>
-
-            <div>
-              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5"
-                >Justification</label
-              >
-              <textarea
-                v-model="verifyJustification"
-                rows="2"
-                class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Justification de l'écart..."
-              ></textarea>
-            </div>
-          </div>
-
-          <div class="flex justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              @click="showVerifyDialog = false"
-              class="px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
-            >
-              Annuler
-            </button>
-            <button
-              @click="submitVerification"
-              class="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer active:scale-95 transition-all"
-            >
-              <CheckCircle2 class="w-4 h-4" />
-              Enregistrer
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>

@@ -25,6 +25,21 @@ export const createDashboardResponse = (
   calculeLeUtc: '2026-01-31T10:30:00Z',
   statutGlobal: 'OK',
   fonderie: bilan('FONDERIE', 12.5, 'kg', null),
+  fonderieDetail: {
+    totalInputKg: 24.5,
+    totalOutputKg: 12,
+    totalEcartKg: 12.5,
+    tauxEcartPourcent: 51.02,
+    nombreTypesComplets: 1,
+    nombreTypesAvecDonneesManquantesOuAnomalies: 0,
+    types: [
+      {
+        codeTypeMatiere: 'M3000L0', stockDebutKg: 10, sortiesMagasinX3Kg: 2, inputKg: 12,
+        stockFinKg: 5, dechetsFonderieKg: 1, receptionsUsinage2Kg: 2, outputKg: 8,
+        ecartKg: 4, tauxEcartPourcent: 33.33, anomalies: [], statut: 'Complet'
+      }
+    ]
+  },
   usinage2: bilan('USINAGE2', 8, 'pieces', 2),
   uap2: bilan('UAP2', 0, 'pieces', 2),
   operations: {

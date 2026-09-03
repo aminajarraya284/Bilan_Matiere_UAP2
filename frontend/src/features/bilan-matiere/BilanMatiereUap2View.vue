@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, Layers3 } from 'lucide-vue-next';
+import { AlertTriangle, Layers3, RefreshCw } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
@@ -13,20 +13,37 @@ import { BUSINESS_RULES } from '@/config/businessRules';
 const periode = ref(BUSINESS_RULES.periodeParDefaut.slice(0, 7));
 const bilan = ref<BilanUap2ApiResponse | null>(null);
 const isLoading = ref(true);
+const isLoadingPeriodes = ref(true);
 const loadError = ref('');
+const periodesError = ref('');
 
 const lignes = computed<BilanUap2ApiLigne[]>(() => bilan.value?.lignes ?? []);
 
-const charger = async () => {
+const charger = async (periodeACharger = periode.value) => {
   isLoading.value = true;
   loadError.value = '';
   try {
-    bilan.value = await bilanService.getBilanUap2Reel(periode.value);
-  } catch (error) {
-    loadError.value = error instanceof Error ? error.message : 'Chargement du Bilan UAP2 impossible.';
+    bilan.value = await bilanService.getBilanUap2Reel(periodeACharger);
+  } catch {
+    loadError.value = 'Impossible de charger le bilan UAP2.';
     bilan.value = null;
   } finally {
     isLoading.value = false;
+  }
+};
+
+const initialiser = async () => {
+  try {
+    const periodesDisponibles = await bilanService.getPeriodesUap2Disponibles();
+    if (periodesDisponibles.length > 0) {
+      periode.value = periodesDisponibles[0];
+      await charger(periode.value);
+    }
+  } catch {
+    periodesError.value = 'Impossible de déterminer la dernière période disponible.';
+  } finally {
+    isLoadingPeriodes.value = false;
+    if (!bilan.value) isLoading.value = false;
   }
 };
 
@@ -36,7 +53,7 @@ const horsSeuil = (ligne: BilanUap2ApiLigne): boolean =>
   bilan.value !== null &&
   Math.abs(ligne.tauxEcartPourcent) > bilan.value.seuilEcartPourcent;
 
-onMounted(charger);
+onMounted(initialiser);
 </script>
 
 <template>
@@ -50,7 +67,7 @@ onMounted(charger);
       <FormField id="uap2-periode" label="Période" required>
         <input
           v-model="periode"
-          @change="charger"
+          @change="charger(periode)"
           type="month"
           class="bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold"
           required
@@ -59,9 +76,26 @@ onMounted(charger);
       <p v-if="bilan" class="pb-2 text-xs text-slate-500">
         Seuil d'alerte appliqué : {{ formatNumber(bilan.seuilEcartPourcent, 2) }} %
       </p>
+      <button
+        type="button"
+        class="mb-0.5 inline-flex items-center gap-2 rounded-lg bg-blue-900 px-4 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"
+        :disabled="isLoading"
+        @click="charger(periode)"
+      >
+        <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
+        Actualiser
+      </button>
     </div>
 
-    <LoadingState v-if="isLoading" />
+    <LoadingState v-if="isLoadingPeriodes || isLoading" />
+
+    <div v-else-if="periodesError" class="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700">
+      {{ periodesError }}
+    </div>
+
+    <div v-else-if="bilan && lignes.length === 0" class="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500 shadow-sm">
+      Aucune donnée UAP2 pour la période sélectionnée.
+    </div>
 
     <div
       v-else-if="loadError"
@@ -70,8 +104,15 @@ onMounted(charger);
       {{ loadError }}
     </div>
 
+    <div
+      v-else-if="!bilan"
+      class="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500 shadow-sm"
+    >
+      Aucune donnée UAP2 disponible.
+    </div>
+
     <template v-else-if="bilan">
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">OF suivis</h3>
           <p class="mt-2 text-2xl font-black text-slate-900">{{ bilan.nombreLignes }}</p>
@@ -80,6 +121,13 @@ onMounted(charger);
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Total CTRL</h3>
           <p class="mt-2 text-2xl font-black font-mono text-slate-900">
             {{ formatNumber(bilan.totalQuantiteCtrlPieces, 0) }}
+            <span class="text-sm font-bold text-slate-400">pièces</span>
+          </p>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Écart UAP2 global</h3>
+          <p class="mt-2 text-2xl font-black font-mono text-slate-900">
+            {{ formatNumber(bilan.totalEcartUap2Pieces, 0) }}
             <span class="text-sm font-bold text-slate-400">pièces</span>
           </p>
         </div>
@@ -104,6 +152,13 @@ onMounted(charger);
             {{ bilan.nombreLignesHorsSeuil }}
           </p>
         </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Anomalies</h3>
+          <p class="mt-2 text-2xl font-black" :class="bilan.nombreAnomalies > 0 ? 'text-amber-600' : 'text-slate-900'">
+            {{ bilan.nombreAnomalies }}
+          </p>
+          <p class="mt-1 text-xs text-slate-500">{{ bilan.nombreLignesDonneesManquantes }} ligne(s) incomplète(s)</p>
+        </div>
       </div>
 
       <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
@@ -121,7 +176,9 @@ onMounted(charger);
                 <th class="p-3">OF</th>
                 <th class="p-3">Article</th>
                 <th class="p-3 text-right">CTRL (pcs)</th>
-                <th class="p-3 text-right">Rebuts SCI/EMR/TRN (pcs)</th>
+                <th class="p-3 text-right">Rebut SCI (pcs)</th>
+                <th class="p-3 text-right">Rebut EMR (pcs)</th>
+                <th class="p-3 text-right">Rebut TRN (pcs)</th>
                 <th class="p-3 text-right">Sortie MP (pcs)</th>
                 <th class="p-3 text-right">Poids phys. (kg/pc)</th>
                 <th class="p-3 text-right text-blue-900">Sortie MP (kg)</th>
@@ -137,9 +194,9 @@ onMounted(charger);
                 <td class="p-3 font-mono font-bold text-slate-800">{{ ligne.numeroOF }}</td>
                 <td class="p-3 font-mono text-slate-600">{{ ligne.codeArticle }}</td>
                 <td class="p-3 text-right font-black font-mono">{{ formatNumber(ligne.quantiteCtrlPieces, 0) }}</td>
-                <td class="p-3 text-right font-mono text-slate-600">
-                  {{ formatNumber(ligne.rebutSciPieces + ligne.rebutEmrPieces + ligne.rebutTrnPieces, 0) }}
-                </td>
+                <td class="p-3 text-right font-mono text-slate-600">{{ formatNumber(ligne.rebutSciPieces, 0) }}</td>
+                <td class="p-3 text-right font-mono text-slate-600">{{ formatNumber(ligne.rebutEmrPieces, 0) }}</td>
+                <td class="p-3 text-right font-mono text-slate-600">{{ formatNumber(ligne.rebutTrnPieces, 0) }}</td>
                 <td class="p-3 text-right font-semibold font-mono">
                   {{ formatNumber(ligne.quantiteSortieMpPieces, 0) }}
                 </td>
@@ -182,7 +239,7 @@ onMounted(charger);
                 </td>
               </tr>
               <tr v-if="lignes.length === 0">
-                <td colspan="12" class="p-6 text-center font-bold uppercase tracking-wider text-slate-400">
+                <td colspan="14" class="p-6 text-center font-bold uppercase tracking-wider text-slate-400">
                   Aucune donnée pour cette période
                 </td>
               </tr>

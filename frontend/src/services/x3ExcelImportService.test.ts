@@ -4,6 +4,8 @@ const apiPost = vi.fn();
 const getDiagnostic = vi.fn();
 const getFiles = vi.fn();
 const download = vi.fn();
+const getYrjmchTracking = vi.fn();
+const getMvtTracking = vi.fn();
 
 vi.mock('@/services/api', () => ({
   default: {
@@ -18,6 +20,34 @@ vi.mock('@/features/imports-historique/importsHistorique.service', () => ({
     download
   }
 }));
+
+// Le statut des cartes Etats X3 provient des endpoints de suivi DEDIES, filtres par
+// type d'import — et non du diagnostic global, tronque aux 10 derniers lots.
+vi.mock('@/features/rapport-machine/rapportMachine.service', () => ({
+  rapportMachineService: { getImportTracking: getYrjmchTracking }
+}));
+
+vi.mock('@/features/mouvements-stock/mouvementsStock.service', () => ({
+  mouvementsStockService: { getImportTracking: getMvtTracking }
+}));
+
+const emptyTracking = { derniereTentative: null, dernierImportReussi: null };
+
+const trackingBatch = (overrides: Record<string, unknown> = {}) => ({
+  importBatchId: 'batch-id',
+  statut: 'Termine',
+  message: null,
+  nomFichier: 'YRJMCH.xlsx',
+  dateCreationUtc: '2026-07-27T12:11:48Z',
+  dateFinUtc: '2026-07-27T12:11:48Z',
+  lignesLues: 0,
+  lignesValides: 0,
+  lignesRejetees: 0,
+  lignesInserees: 0,
+  lignesMisesAJour: 0,
+  lignesInchangees: 0,
+  ...overrides
+});
 
 const importService = async () => {
   vi.resetModules();
@@ -34,8 +64,12 @@ describe('x3ExcelImportService real API mode', () => {
     getDiagnostic.mockReset();
     getFiles.mockReset();
     download.mockReset();
+    getYrjmchTracking.mockReset();
+    getMvtTracking.mockReset();
     getDiagnostic.mockResolvedValue({ derniersImportBatches: [] });
     getFiles.mockResolvedValue([]);
+    getYrjmchTracking.mockResolvedValue(emptyTracking);
+    getMvtTracking.mockResolvedValue(emptyTracking);
   });
 
   it('imports MVTSTOTRSVCR through the backend API', async () => {
@@ -82,34 +116,15 @@ describe('x3ExcelImportService real API mode', () => {
   // Regression : un re-import du meme fichier cree un lot `Duplicate` a 0 ligne.
   // La carte Etats X3 doit continuer d'afficher le dernier import EFFECTIF, sinon
   // elle annonce « 0 ligne lue » alors que les donnees sont bien en base.
+  // Le backend exclut deja les lots `Duplicate` de `dernierImportReussi`.
   it('ignores a Duplicate batch and keeps the last effective import counters', async () => {
-    getDiagnostic.mockResolvedValue({
-      derniersImportBatches: [
-        {
-          id: 'dup-1',
-          typeImport: 'RapportMachine',
-          profilImport: 'YRJMCH_V1',
-          statut: 'Duplicate',
-          nombreLignesLues: 0,
-          nombreLignesValides: 0,
-          readCount: 0,
-          validCount: 0,
-          dateCreationUtc: '2026-07-27T12:16:01',
-          dateFinUtc: '2026-07-27T12:16:01'
-        },
-        {
-          id: 'ok-1',
-          typeImport: 'RapportMachine',
-          profilImport: 'YRJMCH_V1',
-          statut: 'Termine',
-          nombreLignesLues: 81997,
-          nombreLignesValides: 81996,
-          readCount: 81997,
-          validCount: 81996,
-          dateCreationUtc: '2026-07-27T12:11:48',
-          dateFinUtc: '2026-07-27T12:11:48'
-        }
-      ]
+    getYrjmchTracking.mockResolvedValue({
+      derniereTentative: trackingBatch({ importBatchId: 'dup-1', statut: 'Duplicate' }),
+      dernierImportReussi: trackingBatch({
+        importBatchId: 'ok-1',
+        lignesLues: 81997,
+        lignesValides: 81996
+      })
     });
     const { x3ExcelImportService } = await importService();
 
@@ -121,28 +136,49 @@ describe('x3ExcelImportService real API mode', () => {
     expect(status.rowCount).toBe(81996);
   });
 
+  // Un fichier deja importe n'est pas une erreur : la carte reste « Importé ».
   it('falls back to the Duplicate batch when no effective import exists', async () => {
-    getDiagnostic.mockResolvedValue({
-      derniersImportBatches: [
-        {
-          id: 'dup-only',
-          typeImport: 'RapportMachine',
-          profilImport: 'YRJMCH_V1',
-          statut: 'Duplicate',
-          nombreLignesLues: 0,
-          nombreLignesValides: 0,
-          readCount: 0,
-          validCount: 0,
-          dateCreationUtc: '2026-07-27T12:16:01',
-          dateFinUtc: '2026-07-27T12:16:01'
-        }
-      ]
+    getYrjmchTracking.mockResolvedValue({
+      derniereTentative: trackingBatch({ importBatchId: 'dup-only', statut: 'Duplicate' }),
+      dernierImportReussi: null
+    });
+    const { x3ExcelImportService } = await importService();
+
+    await x3ExcelImportService.refreshStatuses();
+    const status = x3ExcelImportService.getStatus('USINAGE_2', 'YRJMCH');
+
+    expect(status.importBatchId).toBe('dup-only');
+    expect(status.status).toBe('Importé');
+  });
+
+  // Cause du defaut « l'import n'est pas memorise » : le diagnostic global ne renvoie
+  // que les 10 derniers lots, tous types confondus. Des qu'assez d'imports plus
+  // recents existaient, la carte retombait a « Non importé ».
+  it('lit le statut depuis les endpoints dédiés, jamais depuis le diagnostic global', async () => {
+    getYrjmchTracking.mockResolvedValue({
+      derniereTentative: null,
+      dernierImportReussi: trackingBatch({ importBatchId: 'ancien-lot', lignesValides: 42 })
     });
     const { x3ExcelImportService } = await importService();
 
     await x3ExcelImportService.refreshStatuses();
 
-    expect(x3ExcelImportService.getStatus('USINAGE_2', 'YRJMCH').importBatchId).toBe('dup-only');
+    expect(getYrjmchTracking).toHaveBeenCalled();
+    expect(getDiagnostic).not.toHaveBeenCalled();
+    expect(x3ExcelImportService.getStatus('USINAGE_2', 'YRJMCH')).toMatchObject({
+      importBatchId: 'ancien-lot',
+      status: 'Importé',
+      rowCount: 42
+    });
+  });
+
+  // Un suivi indisponible ne doit pas effacer le statut deja affiche.
+  it('conserve le statut courant si le suivi est indisponible', async () => {
+    getYrjmchTracking.mockRejectedValue(new Error('API indisponible'));
+    const { x3ExcelImportService } = await importService();
+
+    await expect(x3ExcelImportService.refreshStatuses()).resolves.toBeUndefined();
+    expect(x3ExcelImportService.getStatus('USINAGE_2', 'YRJMCH').status).toBe('Non importé');
   });
 
   it.each(['Date crea', 'Heure crea', 'Utilisateur', 'Lot', 'Emplacement', 'Statut'])(
@@ -198,35 +234,16 @@ describe('x3ExcelImportService real API mode', () => {
 
   it('refreshes import history after a successful backend import', async () => {
     apiPost.mockResolvedValue({ data: { duplicate: false, inserted: 1, updated: 0, rowsRead: 1, rowsValid: 1 } });
-    getDiagnostic.mockResolvedValue({
-      derniersImportBatches: [
-        {
-          id: 'stale-batch-id',
-          hashFichierSha256: 'hash-stale',
-          typeImport: 'MvtEntreeOF',
-          profilImport: 'MVT_ENTREE_OF_V1',
-          statut: 'EnCours',
-          nombreLignesLues: 0,
-          nombreLignesValides: 0,
-          nombreLignesImportees: 0,
-          nombreAnomalies: 0,
-          dateCreationUtc: '2026-07-27T08:02:00Z',
-          dateFinUtc: null
-        },
-        {
-          id: 'batch-id',
-          hashFichierSha256: 'hash',
-          typeImport: 'MvtEntreeOF',
-          profilImport: 'MVT_ENTREE_OF_V1',
-          statut: 'Termine',
-          nombreLignesLues: 1,
-          nombreLignesValides: 1,
-          nombreLignesImportees: 1,
-          nombreAnomalies: 72888,
-          dateCreationUtc: '2026-07-27T08:00:00Z',
-          dateFinUtc: '2026-07-27T08:01:00Z'
-        }
-      ]
+    getMvtTracking.mockResolvedValue({
+      // Une tentative `EnCours` plus recente ne doit pas masquer le dernier import reussi.
+      derniereTentative: trackingBatch({ importBatchId: 'stale-batch-id', statut: 'EnCours' }),
+      dernierImportReussi: trackingBatch({
+        importBatchId: 'batch-id',
+        nomFichier: 'MVTSTOTRSVCR.xls',
+        lignesLues: 1,
+        lignesValides: 1,
+        lignesInserees: 1
+      })
     });
     getFiles.mockResolvedValue([
       {
@@ -246,7 +263,7 @@ describe('x3ExcelImportService real API mode', () => {
 
     await x3ExcelImportService.importMVTSTOTRSVCR(makeFile('MVTSTOTRSVCR.xls'), 'USINAGE_2');
 
-    expect(getDiagnostic).toHaveBeenCalled();
+    expect(getMvtTracking).toHaveBeenCalled();
     expect(x3ExcelImportService.getStatus('USINAGE_2', 'MVTSTOTRSVCR')).toMatchObject({
       importBatchId: 'batch-id',
       archivedFileId: 'file-id',

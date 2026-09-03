@@ -451,8 +451,9 @@ BilanUsinage2Pieces = QuantiteReceptionneePieces
 - **Formule** :
 
 ```text
-QuantiteNonReceptionnee = QuantiteEMRNette - TotalReceptionsU2Validees
-                        = (TotalCtrlEMR - TotalRebutEMR) - PiecesRecuesU2
+QuantiteNonReceptionnee = QuantitePiecesEMR - RebutEMR
+                        - TotalReceptionsU2Validees
+                        = (QuantitePiecesEMR - RebutEMR) - PiecesRecuesU2
 ```
 
 - **Unité** : pièces.
@@ -507,6 +508,11 @@ INTERDIT : PoidsPhysiqueUnitaire = PoidsTotalReceptionne / NombrePieces
 **Objectif** : comparer le poids réel au poids attendu par la nomenclature.
 
 - **Source visée** : `BOMARTPARENT`, valeur `QuantiteLien`.
+- **Définition** : le poids théorique unitaire est une valeur théorique issue de la
+  nomenclature/référence de fabrication. Il ne s'agit pas d'une moyenne calculée à
+  partir des réceptions.
+- **Interdiction explicite** : ne jamais calculer
+  `PoidsTheoriqueUnitaire = PoidsTotalReceptionne / NombrePieces`.
 - **État actuel** : **la chaîne n'est pas alimentée**. `poidsTheoriqueUnitaireKg` reste
   systématiquement `null` et l'avertissement suivant est émis à chaque appel :
 
@@ -574,6 +580,9 @@ ECART  = INPUT - OUTPUT
 ```
 
 - **Exclusion** : l'**inventaire du four est exclu du bilan** (voir `RM-INV-004`).
+- **Réceptions U2 éligibles** : seules les réceptions validées et satisfaisant les
+  critères métier applicables, notamment l'atelier d'origine lorsqu'il est requis,
+  sont intégrées à `ReceptionsUsinage2`.
 - **Origine du stock de début** : voir `RM-INV-005`.
 - **Comportement en cas de donnée manquante** : une composante absente ne devient pas
   zéro ; le bilan est marqué en anomalie ou en donnée manquante (`RM-COM-003`).
@@ -761,14 +770,18 @@ TauxEcartPourcent = EcartUap2Pieces / QuantiteCtrl × 100
 ```
 
 - **Seuil** : `|TauxEcart| ≤ 1,5 %` acceptable, au-delà avertissement. La valeur provient
-  du paramètre `SEUIL_ECART_UAP2` (`RM-COM-006`) ; en son absence, repli sur 1,5 % avec
-  l'anomalie `PARAMETRE_APPLICATION_MANQUANT:SEUIL_ECART_UAP2`.
+  en priorité du paramètre `SEUIL_ECART_UAP2` (`RM-COM-006`). Dans l'implémentation
+  actuelle, si ce paramètre est absent, le service applique la constante technique
+  `1,5 %` et ajoute l'anomalie `PARAMETRE_APPLICATION_MANQUANT:SEUIL_ECART_UAP2`.
 - **Signe** : jamais de `Math.Abs` sur l'écart lui-même — un manquant et un excédent ne
   se confondent pas. La valeur absolue ne sert qu'à comparer le taux au seuil.
 - **Point ouvert** : le **signe du Rebut U2** reste à confirmer. L'implémentation suit la
   lecture littérale de la note (rebut U2 **dans** la parenthèse soustraite, comme
   l'Entrée OF), ce qui est aussi la lecture physiquement cohérente : c'est une sortie
   comptabilisée. Marqué `[A CONFIRMER]` dans `BilanUap2Service`.
+- **Sources connexes** : les réceptions U2 peuvent être consultées pour le contexte et
+  la résolution du poids physique, mais elles ne constituent pas un terme direct de
+  la formule d'écart UAP2 ci-dessus.
 - **Correction apportée** : la version antérieure de ce document mentionnait
   `ReceptionsU2Kg` et `EntreesSemiFiniesKg`, et exprimait l'écart en kilogrammes. Ces
   trois éléments sont **erronés** : ils ne figurent pas dans la note SOPAL. En
@@ -780,10 +793,10 @@ TauxEcartPourcent = EcartUap2Pieces / QuantiteCtrl × 100
 ### RM-UAP2-003 — Restitution attendue
 
 Le résultat doit rester explicable par OF et article, et exposer au minimum :
-`NumeroOF`, `CodeArticle`, `TypeMatiere`, `PoidsPhysiqueUnitaireKg`, quantités nettes
-`SCI`/`EMR`/`TRN`, `SortieMatiereKg`, `EntreeOF`, `ReceptionsU2Kg`, `RebutU2Kg`,
-`EntreesSemiFiniesKg`, `EcartOFKg`, statut, liste des données manquantes, liste des
-anomalies de conversion.
+`NumeroOF`, `CodeArticle`, `TypeMatiere`, `PoidsPhysiqueUnitaireKg`, quantités pièces
+`CTRL`/`SCI`/`EMR`/`TRN`, `SortieMatierePieces`, `SortieMatiereKg`,
+`EntreeOFPieces`, `RebutU2Pieces`, `EcartUap2Pieces`, `TauxEcartPourcent`, statut,
+liste des données manquantes et liste des anomalies de conversion.
 
 - **Statuts** : réutiliser les valeurs existantes `OK`, `AVerifier`, `Anomalie`,
   `DonneesManquantes`. **Ne pas créer de nouvel énuméré** si un équivalent existe.
@@ -959,6 +972,22 @@ calculés côté serveur — voir le tableau ci-dessous.
 | `RM-RPT-006` | Confirmée techniquement | CSV : UTF-8 avec BOM, séparateur `;`, échappement des guillemets et neutralisation des cellules commençant par `=`, `+`, `-` ou `@`. | `RapportsServiceTests`, `RapportsApiTests` |
 | `RM-RPT-007` | Confirmée techniquement | L'aperçu et l'export traversent le même service applicatif et les mêmes filtres. | tests service/API/frontend |
 | `RM-RPT-008` | Confirmée techniquement | Aucun export PDF n'est annoncé : aucun moteur PDF fiable n'existe dans le dépôt. Excel n'est pas exposé ; CSV est le format supporté. | catalogue HTTP |
+
+## RM-AUD — Journal d'audit
+
+| Règle | Statut | Définition | Tests principaux |
+|---|---|---|---|
+| `RM-AUD-001` | Confirmée techniquement | Une trace est un événement historique immuable. Aucune modification, suppression ou création libre n'est exposée. | `TraceAuditTests`, tests HTTP Audit |
+| `RM-AUD-002` | Confirmée techniquement | Seules les mutations, validations, annulations, imports et actions d'alerte prioritaires sont tracés. Les lectures de bilans, Dashboard, Rapports et inventaires ne génèrent pas de bruit. | tests d'intégration des workflows |
+| `RM-AUD-003` | Confirmée techniquement | Les valeurs avant/après sont des projections explicites. Une entité EF ou un `HttpContext` complet n'est jamais sérialisé. | `AuditServicesTests` |
+| `RM-AUD-004` | Confirmée techniquement | `null` reste distinct de `0`. Les unités sont portées par les noms : `poidsKg`, `poidsUnitaireKg`, `poidsTotalReceptionneKg`, `quantitePieces`. | tests Domain, sanitizer et workflows |
+| `RM-AUD-005` | Confirmée techniquement | Les clés sensibles sont supprimées sans distinction de casse, y compris dans les structures imbriquées, avant la sérialisation JSON. | `AuditServicesTests`, `AuditApiTests` |
+| `RM-AUD-006` | Confirmée techniquement | L'identité provient du principal authentifié Development ou Entra. Sans utilisateur interactif : `SYSTEM`, `Système`, rôle `System`; aucun faux Admin. | tests Application |
+| `RM-AUD-007` | Confirmée techniquement | Une requête utilise un seul `X-Correlation-ID`, validé et limité à 100 caractères, également placé dans les logs et la réponse. | `AuditApiTests` |
+| `RM-AUD-008` | Confirmée techniquement | Un import produit une seule trace de résultat global, jamais une trace par ligne et jamais le contenu du fichier. | `ReportMachineServiceTests` et décorateurs d'import |
+| `RM-AUD-009` | Confirmée techniquement | La consultation est réservée à `Admin`, paginée, triée par date UTC décroissante et réalisée avec `AsNoTracking`. | `AuditServicesTests`, `AuditApiTests` |
+| `RM-AUD-010` | À confirmer | La durée de rétention, l'archivage et une éventuelle purge administrative hors application doivent être définis par SOPAL. Aucune suppression n'est implémentée. | TODO_METIER / TODO_INFRA |
+| `RM-AUD-011` | Limite documentée | Le contrat de recalcul Alertes ne distingue pas « inchangées » : toute détection active actualise sa dernière date et est comptée comme mise à jour. Aucun compteur artificiel n'est créé dans l'audit. | tests Alertes |
 
 ---
 

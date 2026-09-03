@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Contracts.Alertes;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
@@ -34,7 +35,8 @@ public sealed class AlerteApplicationService(
     IAlerteRepository repository,
     IAlerteGenerationService generationService,
     ICurrentUserService currentUser,
-    IDateTimeProvider dateTimeProvider) : IAlerteApplicationService
+    IDateTimeProvider dateTimeProvider,
+    IAuditService? auditService = null) : IAlerteApplicationService
 {
     private static readonly IReadOnlyCollection<string> SourcesFonderie = [SourcesAlertes.BilanFonderie];
     private static readonly IReadOnlyCollection<string> SourcesUsinage2 =
@@ -95,7 +97,7 @@ public sealed class AlerteApplicationService(
             }
 
             alerte.Acquitter(UtilisateurCourant(), dateTimeProvider.UtcNow, commentaire);
-        }, cancellationToken);
+        }, ActionAudit.Acquittement, "Acquittement d'une alerte metier.", cancellationToken);
 
     public Task<AlerteDetailResponse> ResoudreAsync(
         Guid id,
@@ -109,7 +111,7 @@ public sealed class AlerteApplicationService(
             }
 
             alerte.Resoudre(UtilisateurCourant(), dateTimeProvider.UtcNow, commentaire);
-        }, cancellationToken);
+        }, ActionAudit.Resolution, "Resolution d'une alerte metier.", cancellationToken);
 
     public Task<AlerteDetailResponse> IgnorerAsync(
         Guid id,
@@ -123,28 +125,81 @@ public sealed class AlerteApplicationService(
             }
 
             alerte.Ignorer(UtilisateurCourant(), dateTimeProvider.UtcNow, commentaire);
-        }, cancellationToken);
+        }, ActionAudit.Ignorance, "Ignorance d'une alerte metier.", cancellationToken);
 
     public async Task<AlerteRecalculResponse> RecalculerAsync(
         string periode,
         CancellationToken cancellationToken = default)
     {
         _ = GetSourcesAutorisees();
-        return await generationService.RecalculerAsync(periode, cancellationToken);
+        var resultat = await generationService.RecalculerAsync(periode, cancellationToken);
+        if (auditService is not null)
+        {
+            await auditService.EnregistrerAsync(
+                new AuditEntry(
+                    ActionAudit.Recalcul,
+                    DomaineAudit.Alerte,
+                    "AlertesMetier",
+                    periode,
+                    periode,
+                    nameof(AlerteApplicationService),
+                    "Recalcul des alertes metier.",
+                    Informations: new Dictionary<string, object?>
+                    {
+                        ["periode"] = resultat.Periode,
+                        ["nombreDetections"] = resultat.NombreDetections,
+                        ["nombreCreees"] = resultat.NombreCreees,
+                        ["nombreMisesAJour"] = resultat.NombreMisesAJour,
+                        ["nombreResolues"] = resultat.NombreResoluesAutomatiquement
+                    }),
+                cancellationToken);
+        }
+
+        return resultat;
     }
 
     private async Task<AlerteDetailResponse> TraiterAsync(
         Guid id,
         Action<AlerteMetier> action,
+        ActionAudit actionAudit,
+        string resume,
         CancellationToken cancellationToken)
     {
         var alerte = await repository.GetByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Alerte introuvable.");
         GarantirSourceAutorisee(alerte.Source);
+        var avant = SnapshotAudit(alerte);
         action(alerte);
+        if (auditService is not null)
+        {
+            await auditService.EnregistrerAsync(
+                new AuditEntry(
+                    actionAudit,
+                    DomaineAudit.Alerte,
+                    nameof(AlerteMetier),
+                    alerte.Id.ToString(),
+                    $"{alerte.Code}|{alerte.Periode ?? "SANS_PERIODE"}|{alerte.NumeroOF ?? "SANS_OF"}",
+                    nameof(AlerteApplicationService),
+                    resume,
+                    avant,
+                    SnapshotAudit(alerte)),
+                cancellationToken);
+        }
         await repository.SaveChangesAsync(cancellationToken);
         return ToDetail(alerte);
     }
+
+    private static IReadOnlyDictionary<string, object?> SnapshotAudit(AlerteMetier alerte)
+        => new Dictionary<string, object?>
+        {
+            ["code"] = alerte.Code,
+            ["source"] = alerte.Source,
+            ["periode"] = alerte.Periode,
+            ["numeroOF"] = alerte.NumeroOF,
+            ["codeArticle"] = alerte.CodeArticle,
+            ["statut"] = alerte.Statut.ToString(),
+            ["commentaireTraitement"] = alerte.CommentaireTraitement
+        };
 
     private IReadOnlyCollection<string>? GetSourcesAutorisees()
     {

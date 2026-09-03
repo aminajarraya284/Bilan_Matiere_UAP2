@@ -2,8 +2,10 @@ using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Contracts.Parametres;
 using BilanMatiereUAP2.Domain.Entities;
+using BilanMatiereUAP2.Domain.Enums;
 using BilanMatiereUAP2.Domain.Services;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -20,7 +22,8 @@ public interface IParametreApplicationService : IParametreApplicationProvider
 
 public sealed class ParametreApplicationService(
     IParametreApplicationRepository repository,
-    IUnitOfWork unitOfWork) : IParametreApplicationService
+    IUnitOfWork unitOfWork,
+    IAuditService? auditService = null) : IParametreApplicationService
 {
     public async Task<IReadOnlyList<ParametreApplicationResponse>> GetAllAsync(
         CancellationToken cancellationToken = default)
@@ -78,8 +81,24 @@ public sealed class ParametreApplicationService(
         }
 
         var normalizedValue = ValiderEtNormaliserValeur(normalizedKey, request.Valeur);
+        var ancienneValeur = parameter.Valeur;
         parameter.ModifierValeur(normalizedValue);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (auditService is not null && !string.Equals(ancienneValeur, parameter.Valeur, StringComparison.Ordinal))
+        {
+            await auditService.EnregistrerAsync(
+                new AuditEntry(
+                    ActionAudit.Modification,
+                    DomaineAudit.Administration,
+                    nameof(ParametreApplication),
+                    normalizedKey,
+                    normalizedKey,
+                    nameof(ParametreApplicationService),
+                    $"Modification du paramètre {normalizedKey}.",
+                    new Dictionary<string, object?> { ["valeur"] = ancienneValeur },
+                    new Dictionary<string, object?> { ["valeur"] = parameter.Valeur }),
+                cancellationToken);
+        }
         return ToResponse(parameter);
     }
 

@@ -12,10 +12,26 @@ public sealed class DevelopmentTokenServiceTests
         Id: 1,
         UserId: Guid.Parse("de000000-0000-0000-0000-000000000001"),
         Username: "admin",
-        Password: "admin",
         FullName: "Administrateur SOPAL",
         Email: "admin@sopal.com",
         Role: "Admin");
+
+    /// <summary>
+    /// Valeur de test uniquement, sans rapport avec un quelconque secret reel : les mots de
+    /// passe de developpement vivent dans les User Secrets du poste, jamais dans le depot.
+    /// </summary>
+    private const string MotDePasseDeTest = "valeur-de-test-non-secrete";
+
+    private static IDevelopmentAccountAuthenticator BuildAuthenticator(
+        params (string Username, string? Password)[] comptesConfigures)
+    {
+        var settings = comptesConfigures.ToDictionary(
+            compte => $"{DevelopmentAccounts.ConfigurationSection}:{compte.Username}:Password",
+            compte => compte.Password);
+
+        return new ConfigurationDevelopmentAccountAuthenticator(
+            new ConfigurationBuilder().AddInMemoryCollection(settings).Build());
+    }
 
     private static DevelopmentTokenService BuildService(
         TimeProvider timeProvider,
@@ -113,28 +129,64 @@ public sealed class DevelopmentTokenServiceTests
     }
 
     [Theory]
-    [InlineData("admin", "admin", "Admin")]
-    [InlineData("ADMIN", "admin", "Admin")]
-    [InlineData("fonderie", "fonderie", "ResponsableFonderie")]
-    [InlineData("usinage2", "usinage2", "ResponsableUsinage2")]
-    public void Authenticate_AvecIdentifiantsValides_RetourneLeCompte(string username, string password, string role)
+    [InlineData("admin", "Admin")]
+    [InlineData("ADMIN", "Admin")]
+    [InlineData("fonderie", "ResponsableFonderie")]
+    [InlineData("usinage2", "ResponsableUsinage2")]
+    public void Authenticate_CompteConfigureEtBonMotDePasse_RetourneLeCompte(string username, string role)
     {
-        var account = DevelopmentAccounts.Authenticate(username, password);
+        var authenticator = BuildAuthenticator(
+            ("admin", MotDePasseDeTest),
+            ("fonderie", MotDePasseDeTest),
+            ("usinage2", MotDePasseDeTest));
+
+        var account = authenticator.Authenticate(username, MotDePasseDeTest);
 
         Assert.NotNull(account);
         Assert.Equal(role, account!.Role);
     }
 
     [Theory]
-    [InlineData("admin", "Admin")]      // mot de passe sensible a la casse
+    [InlineData("admin", "VALEUR-DE-TEST-NON-SECRETE")]  // sensible a la casse
     [InlineData("admin", "")]
     [InlineData("admin", "mauvais")]
-    [InlineData("inconnu", "inconnu")]
-    [InlineData("", "admin")]
+    [InlineData("inconnu", "valeur-de-test-non-secrete")]
+    [InlineData("", "valeur-de-test-non-secrete")]
     [InlineData(null, null)]
-    public void Authenticate_AvecIdentifiantsInvalides_RetourneNull(string? username, string? password)
+    public void Authenticate_IdentifiantsInvalides_RetourneNull(string? username, string? password)
     {
-        Assert.Null(DevelopmentAccounts.Authenticate(username, password));
+        var authenticator = BuildAuthenticator(("admin", MotDePasseDeTest));
+
+        Assert.Null(authenticator.Authenticate(username, password));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Authenticate_MotDePasseAbsentDeLaConfiguration_NeReplieSurAucuneValeur(string? configure)
+    {
+        var authenticator = BuildAuthenticator(("admin", configure));
+
+        // Ni l'identifiant seul, ni une valeur vide, ni l'ancien defaut historique
+        // ne doivent ouvrir la session : un compte non configure est indisponible.
+        Assert.Null(authenticator.Authenticate("admin", "admin"));
+        Assert.Null(authenticator.Authenticate("admin", string.Empty));
+        Assert.Null(authenticator.Authenticate("admin", MotDePasseDeTest));
+        Assert.False(authenticator.EstConfigure(Account));
+    }
+
+    [Fact]
+    public void Accounts_NExposentAucunMotDePasse()
+    {
+        var proprietes = typeof(DevelopmentAccount)
+            .GetProperties()
+            .Select(propriete => propriete.Name)
+            .ToArray();
+
+        Assert.DoesNotContain(proprietes, nom => nom.Contains("Password", StringComparison.OrdinalIgnoreCase)
+            && !nom.Contains("ConfigurationKey", StringComparison.OrdinalIgnoreCase));
+        Assert.All(DevelopmentAccounts.All, compte =>
+            Assert.Equal($"DevelopmentAccounts:{compte.Username}:Password", compte.PasswordConfigurationKey));
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider

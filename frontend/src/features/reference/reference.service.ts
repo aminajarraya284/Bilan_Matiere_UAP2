@@ -254,7 +254,7 @@ const toNomenclatureReferenceFromApi = (
   statut: nomenclature.isActive ? 'Actif' : 'Brouillon'
 });
 
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MATERIAL_CODES = new Set<TypeMatiereCode>(['M3000L0', 'M3010L0', 'M3060L0']);
 
 const GAMME_ALIASES: ColumnAliases = {
@@ -365,7 +365,7 @@ const parseWorkbook = async (file: File): Promise<RawRow[]> => {
     throw new Error('Format non supporté. Importez un fichier Excel .xlsx ou .xls.');
   }
   if (file.size === 0) throw new Error('Le fichier Excel est vide.');
-  if (file.size > MAX_FILE_SIZE_BYTES) throw new Error('Le fichier Excel dépasse la taille maximale de 20 Mo.');
+  if (file.size > MAX_FILE_SIZE_BYTES) throw new Error('Le fichier Excel dépasse la taille maximale de 100 Mo.');
 
   const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using BilanMatiereUAP2.Contracts.Parametres;
+using BilanMatiereUAP2.Contracts.Audit;
 using BilanMatiereUAP2.Domain.Entities;
 
 namespace BilanMatiereUAP2.Api.IntegrationTests;
@@ -54,6 +55,35 @@ public sealed class ParametresApplicationApiTests(ApiWebApplicationFactory facto
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(item);
         Assert.Equal("6.25", item.Valeur);
+    }
+
+    [Fact]
+    public async Task PutParametre_CreatesAuditTraceWithBeforeAndAfterValues()
+    {
+        _client.DefaultRequestHeaders.Add("X-Development-Role", "Admin");
+
+        var response = await _client.PutAsJsonAsync(
+            $"/api/v1/parametres/{ParametresApplicationCles.SeuilEcartUap2}",
+            new UpdateParametreApplicationRequest("2.0"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var auditResponse = await _client.GetAsync(
+            $"/api/v1/audit?entite=ParametreApplication&referenceMetier={ParametresApplicationCles.SeuilEcartUap2}");
+        var auditPage = await auditResponse.Content.ReadFromJsonAsync<PagedAuditResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
+        Assert.NotNull(auditPage);
+        var trace = Assert.Single(auditPage.Items);
+        var detailResponse = await _client.GetAsync($"/api/v1/audit/{trace.Id}");
+        var detail = await detailResponse.Content.ReadFromJsonAsync<AuditDetailResponse>();
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        Assert.NotNull(detail);
+        Assert.Equal("Administration", detail.Domaine);
+        Assert.Equal("Modification", detail.Action);
+        Assert.Equal(ParametresApplicationCles.SeuilEcartUap2, detail.ReferenceMetier);
+        Assert.Contains("1.5", detail.AnciennesValeurs?.ToString() ?? string.Empty);
+        Assert.Contains("2", detail.NouvellesValeurs?.ToString() ?? string.Empty);
     }
 
     [Fact]

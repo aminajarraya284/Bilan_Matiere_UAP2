@@ -1,6 +1,7 @@
 using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Contracts.InventairesFonderie;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
@@ -161,7 +162,8 @@ public sealed class InventaireFonderieService(
     IValidator<CreateInventaireFourRequest> createFourValidator,
     IValidator<UpdateInventaireFourRequest> updateFourValidator,
     IValidator<CreateInventaireFonderieRequest> createLegacyValidator,
-    IValidator<UpdateInventaireFonderieRequest> updateLegacyValidator) : IInventaireFonderieService
+    IValidator<UpdateInventaireFonderieRequest> updateLegacyValidator,
+    IAuditService? auditService = null) : IInventaireFonderieService
 {
     // ==========================================
     // PARTIE 1 : CONTENEURS / OF
@@ -218,6 +220,7 @@ public sealed class InventaireFonderieService(
             dateTimeProvider.UtcNow);
 
         await repository.AddConteneurAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, Snapshot(entity), "Creation d'une ligne d'inventaire conteneur.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -233,6 +236,7 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire conteneur introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Modifier(
             request.DateInventaire,
             request.NumeroConteneur,
@@ -242,6 +246,7 @@ public sealed class InventaireFonderieService(
             request.Observation,
             dateTimeProvider.UtcNow);
 
+        await AuditerAsync(ActionAudit.Modification, entity, avant, Snapshot(entity), "Modification d'une ligne d'inventaire conteneur.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -253,7 +258,9 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire conteneur introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Valider(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Validation, entity, avant, Snapshot(entity), "Validation d'une ligne d'inventaire conteneur.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -265,7 +272,9 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetConteneurByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire conteneur introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Annuler(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'une ligne d'inventaire conteneur.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -340,6 +349,7 @@ public sealed class InventaireFonderieService(
             dateTimeProvider.UtcNow);
 
         await repository.AddCategorieAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, Snapshot(entity), "Creation d'une ligne d'inventaire categorie.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -355,6 +365,7 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire categorie introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Modifier(
             request.DateInventaire,
             request.Categorie,
@@ -363,6 +374,7 @@ public sealed class InventaireFonderieService(
             request.Commentaire,
             dateTimeProvider.UtcNow);
 
+        await AuditerAsync(ActionAudit.Modification, entity, avant, Snapshot(entity), "Modification d'une ligne d'inventaire categorie.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -374,7 +386,9 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire categorie introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Valider(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Validation, entity, avant, Snapshot(entity), "Validation d'une ligne d'inventaire categorie.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -386,7 +400,9 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetCategorieByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire categorie introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Annuler(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'une ligne d'inventaire categorie.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -461,6 +477,7 @@ public sealed class InventaireFonderieService(
             dateTimeProvider.UtcNow);
 
         await repository.AddFourAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, Snapshot(entity), "Creation d'une ligne d'inventaire four.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -476,6 +493,7 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetFourByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire four introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Modifier(
             request.DateInventaire,
             request.CodeFour,
@@ -484,6 +502,7 @@ public sealed class InventaireFonderieService(
             request.Observation,
             dateTimeProvider.UtcNow);
 
+        await AuditerAsync(ActionAudit.Modification, entity, avant, Snapshot(entity), "Modification d'une ligne d'inventaire four.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -495,7 +514,9 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetFourByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire four introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Valider(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Validation, entity, avant, Snapshot(entity), "Validation d'une ligne d'inventaire four.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -507,7 +528,9 @@ public sealed class InventaireFonderieService(
         var entity = await repository.GetFourByIdAsync(id, cancellationToken)
             ?? throw new NotFoundException("Inventaire four introuvable.");
 
+        var avant = Snapshot(entity);
         entity.Annuler(currentUser.UserName ?? currentUser.UserId?.ToString() ?? "Système", dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'une ligne d'inventaire four.", cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -627,6 +650,7 @@ public sealed class InventaireFonderieService(
             currentUser.UserName,
             dateTimeProvider.UtcNow);
         await repository.AddAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, Snapshot(entity), "Creation d'un inventaire Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToLegacyResponse(entity, typeMatiere);
     }
@@ -640,6 +664,7 @@ public sealed class InventaireFonderieService(
         var periode = ParsePeriod(command.Request.Periode);
         var typeMatiere = await GetRequiredActiveTypeMatiereByIdAsync(command.Request.TypeMatiereId, cancellationToken);
         await EnsureNoDuplicateLegacyAsync(periode, typeMatiere.Id, entity.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Modifier(
             periode,
             typeMatiere.Id,
@@ -649,6 +674,7 @@ public sealed class InventaireFonderieService(
             currentUser.UserId,
             currentUser.UserName,
             dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Modification, entity, avant, Snapshot(entity), "Modification d'un inventaire Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToLegacyResponse(entity, typeMatiere);
     }
@@ -659,7 +685,9 @@ public sealed class InventaireFonderieService(
     {
         var entity = await GetRequiredLegacyAsync(command.Id, cancellationToken);
         await EnsureNoDuplicateLegacyAsync(entity.Periode, entity.TypeMatiereId, entity.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Valider(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Validation, entity, avant, Snapshot(entity), "Validation d'un inventaire Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToLegacyResponse(entity);
     }
@@ -669,7 +697,9 @@ public sealed class InventaireFonderieService(
         CancellationToken cancellationToken)
     {
         var entity = await GetRequiredLegacyAsync(command.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Annuler(currentUser.UserId, currentUser.UserName, dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'un inventaire Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToLegacyResponse(entity);
     }
@@ -774,6 +804,142 @@ public sealed class InventaireFonderieService(
 
     private static ValidationException Validation(string propertyName, string message)
         => new([new ValidationFailure(propertyName, message)]);
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        InventaireConteneurOf entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => EnregistrerAuditAsync(
+            action,
+            nameof(InventaireConteneurOf),
+            entity.Id,
+            $"{entity.DateInventaire:yyyy-MM}|{entity.CodeTypeMatiere}|{entity.Id}",
+            avant,
+            apres,
+            resume,
+            cancellationToken);
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        InventaireCategorie entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => EnregistrerAuditAsync(
+            action,
+            nameof(InventaireCategorie),
+            entity.Id,
+            $"{entity.DateInventaire:yyyy-MM}|{entity.CodeTypeMatiere}|{entity.Id}",
+            avant,
+            apres,
+            resume,
+            cancellationToken);
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        InventaireFour entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => EnregistrerAuditAsync(
+            action,
+            nameof(InventaireFour),
+            entity.Id,
+            $"{entity.DateInventaire:yyyy-MM}|{entity.CodeTypeMatiere}|{entity.Id}",
+            avant,
+            apres,
+            resume,
+            cancellationToken);
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        InventaireFonderie entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => EnregistrerAuditAsync(
+            action,
+            nameof(InventaireFonderie),
+            entity.Id,
+            $"{entity.Periode:yyyy-MM}|{entity.TypeMatiereId}|{entity.Id}",
+            avant,
+            apres,
+            resume,
+            cancellationToken);
+
+    private Task EnregistrerAuditAsync(
+        ActionAudit action,
+        string entite,
+        Guid id,
+        string referenceMetier,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => auditService is null
+            ? Task.CompletedTask
+            : auditService.EnregistrerAsync(
+                new AuditEntry(
+                    action,
+                    DomaineAudit.InventaireFonderie,
+                    entite,
+                    id.ToString(),
+                    referenceMetier,
+                    nameof(InventaireFonderieService),
+                    resume,
+                    avant,
+                    apres),
+                cancellationToken);
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireConteneurOf entity)
+        => new Dictionary<string, object?>
+        {
+            ["periode"] = entity.DateInventaire.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            ["date"] = entity.DateInventaire,
+            ["numeroConteneur"] = entity.NumeroConteneur,
+            ["numeroOF"] = entity.NumeroOF,
+            ["typeMatiere"] = entity.CodeTypeMatiere,
+            ["poidsKg"] = entity.PoidsReelKg,
+            ["statut"] = entity.Statut.ToString()
+        };
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireCategorie entity)
+        => new Dictionary<string, object?>
+        {
+            ["periode"] = entity.DateInventaire.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            ["date"] = entity.DateInventaire,
+            ["categorie"] = entity.Categorie.ToString(),
+            ["typeMatiere"] = entity.CodeTypeMatiere,
+            ["poidsKg"] = entity.PoidsReelKg,
+            ["statut"] = entity.Statut.ToString()
+        };
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireFour entity)
+        => new Dictionary<string, object?>
+        {
+            ["periode"] = entity.DateInventaire.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            ["date"] = entity.DateInventaire,
+            ["codeFour"] = entity.CodeFour,
+            ["typeMatiere"] = entity.CodeTypeMatiere,
+            ["poidsKg"] = entity.QuantiteKg,
+            ["statut"] = entity.Statut.ToString()
+        };
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(InventaireFonderie entity)
+        => new Dictionary<string, object?>
+        {
+            ["periode"] = entity.Periode.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            ["typeMatiereId"] = entity.TypeMatiereId,
+            ["stockDebutKg"] = entity.StockDebutKg,
+            ["stockFinKg"] = entity.StockFinKg,
+            ["statut"] = entity.Statut.ToString()
+        };
 
     private static InventaireConteneurResponse ToResponse(InventaireConteneurOf entity)
         => new(

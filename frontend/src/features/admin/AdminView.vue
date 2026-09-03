@@ -1,528 +1,395 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { Users, Settings, Package, Layers, Plus, CheckCircle2, UserPlus, Save } from 'lucide-vue-next';
-import { adminService } from './admin.service';
-import { AdminUser, AdminArticle, AdminSettings } from './admin.types';
+import { onMounted, ref } from 'vue';
+import { CheckCircle2, ExternalLink, Layers, Package, Settings, ShieldCheck, Users } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
-import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
-import DataSourceBadge from '@/components/ui/DataSourceBadge.vue';
 import { useAppDialog } from '@/composables/useAppDialog';
+import { adminService } from './admin.service';
+import type {
+  AdminDevelopmentAccount,
+  AdminMaterialType,
+  AdminParameter,
+  AdminUserProfile
+} from './admin.types';
 
-const activeTab = ref<'users' | 'articles' | 'types' | 'settings'>('users');
+type AdminTab = 'users' | 'references' | 'types' | 'settings';
+
+const activeTab = ref<AdminTab>('users');
 const dialog = useAppDialog();
-const users = ref<AdminUser[]>([]);
-const articles = ref<AdminArticle[]>([]);
-const settings = ref<AdminSettings | null>(null);
-const isLoading = ref(true);
+const parameters = ref<AdminParameter[]>([]);
+const parameterDrafts = ref<Record<string, string>>({});
+const materialTypes = ref<AdminMaterialType[]>([]);
+const users = ref<AdminUserProfile[]>([]);
+const usersTotal = ref(0);
+const developmentAccounts = ref<AdminDevelopmentAccount[]>([]);
+const isLoadingUsers = ref(true);
+const usersError = ref('');
+const togglingUserId = ref<number | null>(null);
+const isLoadingParameters = ref(true);
+const isLoadingMaterialTypes = ref(true);
+const parametersError = ref('');
+const materialTypesError = ref('');
 const successMessage = ref('');
 
-// Forms state
-const formUser = ref({
-  fullName: '',
-  email: '',
-  role: 'ResponsableFonderie' as 'Admin' | 'ResponsableFonderie' | 'ResponsableUsinage2',
-  actif: true
-});
+const formatDateTime = (value: string | null): string =>
+  value
+    ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }).format(
+        new Date(value)
+      )
+    : '—';
 
-const formArticle = ref({
-  code: '',
-  designation: '',
-  typeMatiere: 'M3010L0',
-  unite: 'KG',
-  actif: true
-});
-
-const materialTypes = [
-  {
-    code: 'M3010L0',
-    label: 'Type matiere M3010L0',
-    description: 'Type matiere autorise SOPAL.',
-    colorClass: 'text-blue-600'
-  },
-  {
-    code: 'M3000L0',
-    label: 'Type matiere M3000L0',
-    description: 'Type matiere autorise SOPAL.',
-    colorClass: 'text-indigo-600'
-  }
-];
-
-const loadAdminData = async () => {
-  isLoading.value = true;
+const loadUsers = async () => {
+  isLoadingUsers.value = true;
+  usersError.value = '';
   try {
-    const [uRes, aRes, sRes] = await Promise.all([
-      adminService.getUsers(),
-      adminService.getArticles(),
-      adminService.getSettings()
-    ]);
-    users.value = uRes;
-    articles.value = aRes;
-    settings.value = sRes;
-  } catch (err) {
-    console.error(err);
+    const page = await adminService.getUsers({ page: 1, pageSize: 25 });
+    users.value = page.items;
+    usersTotal.value = page.total;
+  } catch {
+    // Aucun repli sur des données de démonstration : une erreur reste une erreur.
+    users.value = [];
+    usersTotal.value = 0;
+    usersError.value = 'Impossible de charger les profils utilisateurs.';
   } finally {
-    isLoading.value = false;
+    isLoadingUsers.value = false;
   }
 };
 
-const handleCreateUser = async () => {
-  if (!formUser.value.fullName || !formUser.value.email) {
-    await dialog.alert('Veuillez remplir tous les champs.', {
-      title: 'Champs obligatoires',
-      tone: 'warning'
-    });
-    return;
-  }
+const loadDevelopmentAccounts = async () => {
   try {
-    await adminService.createUser(formUser.value);
-    formUser.value.fullName = '';
-    formUser.value.email = '';
-    successMessage.value = 'Utilisateur créé avec succès !';
-    await loadAdminData();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
+    developmentAccounts.value = await adminService.getDevelopmentAccounts();
+  } catch {
+    // 404 hors Development : il n'y a simplement pas de compte local, ce n'est pas une panne.
+    developmentAccounts.value = [];
   }
 };
 
-const handleToggleUser = async (id: number) => {
+const handleToggleUser = async (user: AdminUserProfile) => {
+  togglingUserId.value = user.id;
+  usersError.value = '';
   try {
-    await adminService.toggleUserStatus(id);
-    successMessage.value = 'Statut utilisateur mis à jour !';
-    await loadAdminData();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
+    const updated = await adminService.setUserActivation(user.id, !user.estActif);
+    const index = users.value.findIndex((item) => item.id === updated.id);
+    if (index >= 0) users.value[index] = updated;
+    successMessage.value = updated.estActif ? 'Accès activé.' : 'Accès désactivé.';
+  } catch {
+    usersError.value = "La modification de l'accès a échoué.";
+  } finally {
+    togglingUserId.value = null;
   }
 };
 
-const handleCreateArticle = async () => {
-  if (!formArticle.value.code || !formArticle.value.designation) {
-    await dialog.alert('Veuillez remplir tous les champs.', {
-      title: 'Champs obligatoires',
-      tone: 'warning'
-    });
-    return;
-  }
+const loadParameters = async () => {
+  isLoadingParameters.value = true;
+  parametersError.value = '';
   try {
-    await adminService.createArticle(formArticle.value);
-    formArticle.value.code = '';
-    formArticle.value.designation = '';
-    successMessage.value = 'Article créé avec succès !';
-    await loadAdminData();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
+    parameters.value = await adminService.getParameters();
+    parameterDrafts.value = Object.fromEntries(
+      parameters.value.map((parameter) => [parameter.cle, parameter.valeur])
+    );
+  } catch {
+    parameters.value = [];
+    parametersError.value = 'Impossible de charger les paramètres de l’application.';
+  } finally {
+    isLoadingParameters.value = false;
   }
 };
 
-const handleToggleArticle = async (id: number) => {
+const loadMaterialTypes = async () => {
+  isLoadingMaterialTypes.value = true;
+  materialTypesError.value = '';
   try {
-    await adminService.toggleArticleStatus(id);
-    successMessage.value = 'Statut article mis à jour !';
-    await loadAdminData();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
+    materialTypes.value = await adminService.getMaterialTypes();
+  } catch {
+    materialTypes.value = [];
+    materialTypesError.value = 'Impossible de charger les types matière.';
+  } finally {
+    isLoadingMaterialTypes.value = false;
   }
 };
 
-const handleSaveSettings = async () => {
-  if (!settings.value) return;
+const handleSaveParameter = async (parameter: AdminParameter) => {
   try {
-    await adminService.updateSettings(settings.value);
-    successMessage.value = "Paramètres d'exploitation enregistrés !";
+    const updated = await adminService.updateParameter(
+      parameter.cle,
+      parameterDrafts.value[parameter.cle] ?? ''
+    );
+    const index = parameters.value.findIndex((item) => item.cle === updated.cle);
+    if (index >= 0) parameters.value[index] = updated;
+    parameterDrafts.value[updated.cle] = updated.valeur;
+    successMessage.value = 'Paramètre ' + updated.cle + ' enregistré.';
     setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    await dialog.alert(
+      error instanceof Error ? error.message : 'Modification du paramètre impossible.',
+      { title: 'Erreur de validation', tone: 'danger' }
+    );
   }
 };
 
 onMounted(() => {
-  loadAdminData();
+  void loadUsers();
+  void loadDevelopmentAccounts();
+  void loadParameters();
+  void loadMaterialTypes();
 });
 </script>
 
 <template>
   <div class="space-y-6">
-    <!-- Page Header -->
     <PageHeader
       title="Administration"
-      description="Gérer les utilisateurs, les seuils de contrôle et les articles de référence."
+      description="Gestion des paramètres, utilisateurs et références de l'application."
     />
-    <DataSourceBadge vertical="administration" />
 
-    <!-- Notice -->
     <div
       v-if="successMessage"
-      class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3"
+      class="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800"
     >
-      <CheckCircle2 class="w-5 h-5 text-emerald-500 shrink-0" />
+      <CheckCircle2 class="h-5 w-5 shrink-0 text-emerald-500" />
       <span>{{ successMessage }}</span>
     </div>
 
-    <!-- Tab navigation -->
     <div class="app-tabs select-none">
-      <button @click="activeTab = 'users'" class="app-tab" :class="activeTab === 'users' ? 'app-tab--active' : ''">
-        <Users class="w-4 h-4" />
-        Utilisateurs & Rôles
+      <button class="app-tab" :class="{ 'app-tab--active': activeTab === 'users' }" @click="activeTab = 'users'">
+        <Users class="h-4 w-4" />
+        Utilisateurs & rôles
       </button>
-
       <button
-        @click="activeTab = 'articles'"
         class="app-tab"
-        :class="activeTab === 'articles' ? 'app-tab--active' : ''"
+        :class="{ 'app-tab--active': activeTab === 'references' }"
+        @click="activeTab = 'references'"
       >
-        <Package class="w-4 h-4" />
-        Articles d'Exploitation
+        <Package class="h-4 w-4" />
+        Références X3
       </button>
-
-      <button @click="activeTab = 'types'" class="app-tab" :class="activeTab === 'types' ? 'app-tab--active' : ''">
-        <Layers class="w-4 h-4" />
-        Types Matière
+      <button class="app-tab" :class="{ 'app-tab--active': activeTab === 'types' }" @click="activeTab = 'types'">
+        <Layers class="h-4 w-4" />
+        Types matière
       </button>
-
       <button
+        class="app-tab"
+        :class="{ 'app-tab--active': activeTab === 'settings' }"
         @click="activeTab = 'settings'"
-        class="app-tab"
-        :class="activeTab === 'settings' ? 'app-tab--active' : ''"
       >
-        <Settings class="w-4 h-4" />
-        Paramètres & Seuils
+        <Settings class="h-4 w-4" />
+        Paramètres & seuils
       </button>
     </div>
 
-    <div v-if="isLoading">
-      <LoadingState />
-    </div>
-
-    <!-- Active tabs content -->
-    <div v-else class="space-y-6">
-      <!-- TAB 1 : USERS & ROLES -->
-      <div v-if="activeTab === 'users'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Add user card -->
-        <div class="bg-white rounded-xl border border-slate-100 p-6 shadow-sm space-y-4 h-fit">
-          <div class="flex items-center gap-2 border-b border-slate-50 pb-2">
-            <UserPlus class="w-4.5 h-4.5 text-blue-900" />
-            <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Nouvel Utilisateur</h4>
-          </div>
-
-          <form @submit.prevent="handleCreateUser" class="space-y-4">
-            <FormField id="u-name" label="Nom Complet" required>
-              <input
-                type="text"
-                v-model="formUser.fullName"
-                class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-semibold w-full focus:bg-white"
-                placeholder="Nom Prénom"
-                required
-              />
-            </FormField>
-
-            <FormField id="u-email" label="Adresse Email" required>
-              <input
-                type="email"
-                v-model="formUser.email"
-                class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-semibold w-full focus:bg-white"
-                placeholder="email@sopal.com"
-                required
-              />
-            </FormField>
-
-            <FormField id="u-role" label="Rôle Système" required>
-              <select
-                v-model="formUser.role"
-                class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-                required
-              >
-                <option value="Admin">Administrateur</option>
-                <option value="ResponsableFonderie">Responsable Fonderie</option>
-                <option value="ResponsableUsinage2">Responsable Usinage 2</option>
-              </select>
-            </FormField>
-
-            <button
-              type="submit"
-              class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all"
-            >
-              <Plus class="w-4 h-4" />
-              Créer l'utilisateur
-            </button>
-          </form>
-        </div>
-
-        <!-- Users list table -->
-        <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col lg:col-span-2">
-          <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/20">
-            <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Liste des Comptes d'Accès</h4>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr
-                  class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider"
-                >
-                  <th class="p-3">ID</th>
-                  <th class="p-3">Nom complet</th>
-                  <th class="p-3">Rôle Assigné</th>
-                  <th class="p-3">Email</th>
-                  <th class="p-3">Statut</th>
-                  <th class="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 text-xs font-medium">
-                <tr v-for="u in users" :key="u.id" class="hover:bg-slate-50/30 transition-colors">
-                  <td class="p-3 font-mono text-slate-400">#{{ u.id }}</td>
-                  <td class="p-3 font-bold text-slate-800">{{ u.fullName }}</td>
-                  <td class="p-3">
-                    <span
-                      class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700"
-                    >
-                      {{ u.role }}
-                    </span>
-                  </td>
-                  <td class="p-3 text-slate-500 font-mono">{{ u.email }}</td>
-                  <td class="p-3">
-                    <span
-                      class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                      :class="
-                        u.actif
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      "
-                    >
-                      <span class="w-1 h-1 rounded-full" :class="u.actif ? 'bg-emerald-500' : 'bg-slate-500'"></span>
-                      {{ u.actif ? 'Actif' : 'Désactivé' }}
-                    </span>
-                  </td>
-                  <td class="p-3 text-right">
-                    <button
-                      @click="handleToggleUser(u.id)"
-                      class="px-2.5 py-1 rounded border text-[10px] font-bold cursor-pointer transition-colors"
-                      :class="
-                        u.actif
-                          ? 'bg-rose-50 border-rose-150 text-rose-700 hover:bg-rose-100'
-                          : 'bg-emerald-50 border-emerald-150 text-emerald-700 hover:bg-emerald-100'
-                      "
-                    >
-                      {{ u.actif ? 'Désactiver' : 'Activer' }}
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+    <section v-if="activeTab === 'users'" class="space-y-6">
+      <div class="rounded-xl border border-blue-100 bg-blue-50/50 p-4 text-sm leading-6 text-blue-900">
+        <p class="flex items-start gap-2">
+          <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+          <span>
+            Les identités et les rôles sont gérés dans <strong>Microsoft Entra ID</strong>. Un profil est créé
+            automatiquement à la première connexion. L'application permet uniquement d'activer ou de désactiver
+            l'accès local. Aucun mot de passe n'est stocké dans l'application.
+          </span>
+        </p>
       </div>
 
-      <!-- TAB 2 : ARTICLES -->
-      <div v-if="activeTab === 'articles'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Add article form -->
-        <div class="bg-white rounded-xl border border-slate-100 p-6 shadow-sm space-y-4 h-fit">
-          <div class="flex items-center gap-2 border-b border-slate-50 pb-2">
-            <Package class="w-4.5 h-4.5 text-blue-900" />
-            <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Nouvel Article</h4>
-          </div>
+      <section class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <header class="flex items-center justify-between gap-4">
+          <h2 class="flex items-center gap-2 text-base font-black text-slate-900">
+            <Users class="h-5 w-5 text-slate-500" aria-hidden="true" />
+            Profils Entra
+          </h2>
+          <span class="text-xs font-semibold text-slate-500">{{ usersTotal }} profil(s)</span>
+        </header>
 
-          <form @submit.prevent="handleCreateArticle" class="space-y-4">
-            <FormField id="a-code" label="Code Article" required>
-              <input
-                type="text"
-                v-model="formArticle.code"
-                class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold w-full focus:bg-white font-mono"
-                placeholder="0101A03-1"
-                required
-              />
-            </FormField>
-
-            <FormField id="a-des" label="Désignation" required>
-              <input
-                type="text"
-                v-model="formArticle.designation"
-                class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-semibold w-full focus:bg-white"
-                placeholder="Désignation complète"
-                required
-              />
-            </FormField>
-
-            <FormField id="a-type" label="Type Matière" required>
-              <select
-                v-model="formArticle.typeMatiere"
-                class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-                required
-              >
-                <option v-for="type in materialTypes" :key="type.code" :value="type.code">{{ type.code }}</option>
-              </select>
-            </FormField>
-
-            <button
-              type="submit"
-              class="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all"
-            >
-              <Plus class="w-4 h-4" />
-              Créer l'article
-            </button>
-          </form>
+        <LoadingState v-if="isLoadingUsers" />
+        <p v-else-if="usersError" class="rounded-lg bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+          {{ usersError }}
+        </p>
+        <p v-else-if="!users.length" class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Aucun profil pour l'instant. Le premier profil apparaîtra dès qu'un utilisateur Entra se connectera.
+        </p>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th class="py-2 pr-4">Nom</th>
+                <th class="py-2 pr-4">Email</th>
+                <th class="py-2 pr-4">Rôle Entra</th>
+                <th class="py-2 pr-4">Statut</th>
+                <th class="py-2 pr-4">Dernière connexion</th>
+                <th class="py-2">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="user in users" :key="user.id">
+                <td class="py-2 pr-4 font-semibold text-slate-900">{{ user.nomAffichage ?? '—' }}</td>
+                <td class="py-2 pr-4 text-slate-600">{{ user.email ?? '—' }}</td>
+                <td class="py-2 pr-4 text-slate-600">{{ user.roleObserve ?? '—' }}</td>
+                <td class="py-2 pr-4">
+                  <span
+                    class="rounded-full px-2 py-0.5 text-xs font-bold"
+                    :class="user.estActif ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'"
+                  >
+                    {{ user.estActif ? 'Actif' : 'Inactif' }}
+                  </span>
+                </td>
+                <td class="py-2 pr-4 text-slate-600">{{ formatDateTime(user.derniereConnexionUtc) }}</td>
+                <td class="py-2">
+                  <button
+                    type="button"
+                    class="rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    :disabled="togglingUserId === user.id"
+                    @click="handleToggleUser(user)"
+                  >
+                    {{ user.estActif ? 'Désactiver' : 'Activer' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </section>
 
-        <!-- Articles list table -->
-        <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col lg:col-span-2">
-          <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/20">
-            <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Catalogue Articles Validés</h4>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr
-                  class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider"
-                >
-                  <th class="p-3">ID</th>
-                  <th class="p-3">Code Article</th>
-                  <th class="p-3">Désignation</th>
-                  <th class="p-3">Type Matière</th>
-                  <th class="p-3">Unité</th>
-                  <th class="p-3">Statut</th>
-                  <th class="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 text-xs font-medium">
-                <tr v-for="a in articles" :key="a.id" class="hover:bg-slate-50/30 transition-colors">
-                  <td class="p-3 font-mono text-slate-400">#{{ a.id }}</td>
-                  <td class="p-3 font-bold font-mono text-slate-800">{{ a.code }}</td>
-                  <td class="p-3 text-slate-700 font-semibold">{{ a.designation }}</td>
-                  <td class="p-3 font-bold font-mono text-blue-900">{{ a.typeMatiere }}</td>
-                  <td class="p-3 font-mono text-slate-400">{{ a.unite }}</td>
-                  <td class="p-3">
-                    <span
-                      class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                      :class="
-                        a.actif
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      "
-                    >
-                      <span class="w-1 h-1 rounded-full" :class="a.actif ? 'bg-emerald-500' : 'bg-slate-500'"></span>
-                      {{ a.actif ? 'Actif' : 'Inactif' }}
-                    </span>
-                  </td>
-                  <td class="p-3 text-right">
-                    <button
-                      @click="handleToggleArticle(a.id)"
-                      class="px-2.5 py-1 rounded border text-[10px] font-bold cursor-pointer transition-colors"
-                      :class="
-                        a.actif
-                          ? 'bg-rose-50 border-rose-150 text-rose-700 hover:bg-rose-100'
-                          : 'bg-emerald-50 border-emerald-150 text-emerald-700 hover:bg-emerald-100'
-                      "
-                    >
-                      {{ a.actif ? 'Désactiver' : 'Activer' }}
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 3 : MATERIAL TYPES -->
-      <div v-if="activeTab === 'types'" class="bg-white rounded-xl border border-slate-100 p-6 shadow-sm space-y-4">
-        <div class="flex items-center gap-2 border-b border-slate-50 pb-2">
-          <Layers class="w-4.5 h-4.5 text-blue-900" />
-          <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Types Matière Autorisés</h4>
-        </div>
-
-        <p class="text-xs text-slate-500 font-semibold">Types matière validés SOPAL.</p>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-          <div
-            v-for="type in materialTypes"
-            :key="type.code"
-            class="border border-slate-100 rounded-xl p-5 space-y-2 bg-slate-50/30"
-          >
-            <span class="text-[10px] font-bold uppercase tracking-wider" :class="type.colorClass">
-              Code : {{ type.code }}
-            </span>
-            <h5 class="text-sm font-black text-slate-800 leading-tight">{{ type.label }}</h5>
-            <p class="text-xs text-slate-400 font-medium">{{ type.description }}</p>
-          </div>
-        </div>
-
-        <div
-          class="bg-blue-50/50 border border-blue-100 p-4 rounded-xl flex items-center gap-3 mt-4 text-xs font-semibold text-blue-900"
-        >
-          <span>Ajout ou modification : validation SOPAL requise.</span>
-        </div>
-      </div>
-
-      <!-- TAB 4 : SETTINGS -->
-      <div
-        v-if="activeTab === 'settings' && settings"
-        class="bg-white rounded-xl border border-slate-100 p-6 shadow-sm space-y-6"
+      <section
+        v-if="developmentAccounts.length"
+        class="space-y-4 rounded-xl border border-amber-200 bg-amber-50/50 p-6 shadow-sm"
       >
-        <div class="flex items-center gap-2 border-b border-slate-50 pb-2">
-          <Settings class="w-4.5 h-4.5 text-blue-900" />
-          <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">
-            Configuration des Seuils d'Exploitation
-          </h4>
+        <header>
+          <h2 class="text-base font-black text-amber-950">Comptes de développement</h2>
+          <p class="mt-1 text-sm text-amber-900">
+            Connexion locale, disponible uniquement dans cet environnement. En lecture seule : ces comptes sont
+            définis par la configuration et leurs mots de passe vivent dans les User Secrets du poste.
+          </p>
+        </header>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-amber-800">
+              <tr>
+                <th class="py-2 pr-4">Identifiant</th>
+                <th class="py-2 pr-4">Nom</th>
+                <th class="py-2 pr-4">Rôle</th>
+                <th class="py-2 pr-4">Type</th>
+                <th class="py-2">Statut</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-amber-100">
+              <tr v-for="account in developmentAccounts" :key="account.username">
+                <td class="py-2 pr-4 font-mono text-xs font-bold text-amber-950">{{ account.username }}</td>
+                <td class="py-2 pr-4 text-amber-900">{{ account.nomAffichage }}</td>
+                <td class="py-2 pr-4 text-amber-900">{{ account.role }}</td>
+                <td class="py-2 pr-4 text-amber-900">Développement</td>
+                <td class="py-2">
+                  <span
+                    class="rounded-full px-2 py-0.5 text-xs font-bold"
+                    :class="account.estConfigure ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'"
+                  >
+                    {{ account.estConfigure ? 'Actif' : 'Secret non configuré' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </section>
+    </section>
 
-        <form @submit.prevent="handleSaveSettings" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField id="s-seuil" label="Seuil d'Alerte Écart (%)" required>
-            <input
-              type="number"
-              step="0.1"
-              v-model="settings.seuilAlerteEcart"
-              class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold w-full focus:bg-white font-mono"
-              required
-            />
-          </FormField>
+    <section
+      v-else-if="activeTab === 'references'"
+      class="rounded-xl border border-blue-100 bg-blue-50/50 p-6 shadow-sm"
+    >
+      <div class="flex items-start gap-3">
+        <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0 text-blue-800" />
+        <div>
+          <h2 class="text-sm font-black text-blue-950">Références de fabrication X3</h2>
+          <p class="mt-1 text-xs font-medium leading-5 text-blue-900">
+            Les gammes et nomenclatures proviennent des imports Sage X3. Elles sont consultables ici en lecture
+            seule afin de préserver la source de référence.
+          </p>
+          <p class="mt-2 text-xs font-bold text-blue-800">Source : données X3 importées · Lecture seule</p>
+          <RouterLink
+            to="/references-fabrication"
+            class="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-800"
+          >
+            Ouvrir les références de fabrication
+            <ExternalLink class="h-4 w-4" />
+          </RouterLink>
+        </div>
+      </div>
+    </section>
 
-          <FormField id="s-crit" label="Seuil Critique d'Écart (%)" required>
-            <input
-              type="number"
-              step="0.1"
-              v-model="settings.seuilCritiqueEcart"
-              class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold w-full focus:bg-white font-mono"
-              required
-            />
-          </FormField>
+    <section v-else-if="activeTab === 'types'" class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <Layers class="h-4 w-4 text-blue-900" />
+        <div>
+          <h2 class="text-sm font-black text-slate-800">Types matière</h2>
+          <p class="mt-1 text-xs text-slate-500">Liste issue du référentiel applicatif.</p>
+        </div>
+      </div>
 
-          <FormField id="s-tol" label="Tolérance d'Écart Poids (kg)" required>
-            <input
-              type="number"
-              v-model="settings.toleranceAlertePoids"
-              class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold w-full focus:bg-white font-mono"
-              required
-            />
-          </FormField>
-
-          <FormField id="s-freq" label="Fréquence de Synchronisation Sage X3" required>
-            <select
-              v-model="settings.frequenceSyncX3"
-              class="bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-semibold w-full focus:bg-white cursor-pointer"
-              required
+      <LoadingState v-if="isLoadingMaterialTypes" />
+      <div v-else-if="materialTypesError" class="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700">
+        {{ materialTypesError }}
+      </div>
+      <p v-else-if="materialTypes.length === 0" class="rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-500">
+        Aucun type matière configuré.
+      </p>
+      <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <article v-for="type in materialTypes" :key="type.id" class="rounded-xl border border-slate-200 bg-slate-50/40 p-5">
+          <div class="flex items-start justify-between gap-3">
+            <p class="font-mono text-xs font-black text-blue-900">{{ type.code }}</p>
+            <span
+              class="rounded-full px-2 py-1 text-[10px] font-bold"
+              :class="type.estActif ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-600'"
             >
-              <option value="En temps réel">En temps réel (Webhook)</option>
-              <option value="Toutes les heures">Toutes les heures</option>
-              <option value="Toutes les 4 heures">Toutes les 4 heures</option>
-              <option value="Une fois par jour">Une fois par jour</option>
-            </select>
-          </FormField>
+              {{ type.estActif ? 'Actif' : 'Inactif' }}
+            </span>
+          </div>
+          <p class="mt-2 text-sm font-bold text-slate-800">{{ type.libelle }}</p>
+        </article>
+      </div>
+    </section>
 
-          <div class="md:col-span-2 pt-4 border-t border-slate-50 flex justify-end">
+    <section v-else class="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+        <Settings class="h-4 w-4 text-blue-900" />
+        <div>
+          <h2 class="text-sm font-black text-slate-800">Paramètres & seuils</h2>
+          <p class="mt-1 text-xs text-slate-500">Configuration persistée par l’API d’administration.</p>
+        </div>
+      </div>
+
+      <LoadingState v-if="isLoadingParameters" />
+      <div v-else-if="parametersError" class="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700">
+        {{ parametersError }}
+      </div>
+      <p v-else-if="parameters.length === 0" class="rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-500">
+        Aucun paramètre applicatif configuré.
+      </p>
+      <div v-else class="grid grid-cols-1 gap-4">
+        <article v-for="parameter in parameters" :key="parameter.cle" class="rounded-xl border border-slate-200 p-4">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="font-mono text-xs font-black text-blue-900">{{ parameter.cle }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ parameter.description }}</p>
+            </div>
+            <span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+              {{ parameter.typeValeur }}
+            </span>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <input
+              v-model="parameterDrafts[parameter.cle]"
+              :disabled="!parameter.modifiable"
+              class="min-w-64 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:bg-slate-100"
+            />
             <button
-              type="submit"
-              class="bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-6 rounded-xl flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+              v-if="parameter.modifiable"
+              type="button"
+              class="rounded-lg bg-blue-900 px-4 py-2 text-xs font-bold text-white hover:bg-blue-800"
+              @click="handleSaveParameter(parameter)"
             >
-              <Save class="w-4 h-4" />
-              Enregistrer les Paramètres
+              Enregistrer
             </button>
           </div>
-        </form>
+        </article>
       </div>
-    </div>
+    </section>
   </div>
 </template>

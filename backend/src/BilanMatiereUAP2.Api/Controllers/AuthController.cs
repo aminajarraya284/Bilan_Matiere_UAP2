@@ -17,6 +17,7 @@ namespace BilanMatiereUAP2.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(
     IDevelopmentTokenService tokenService,
+    IDevelopmentAccountAuthenticator accountAuthenticator,
     IWebHostEnvironment environment,
     IConfiguration configuration,
     ILogger<AuthController> logger) : ControllerBase
@@ -41,7 +42,9 @@ public sealed class AuthController(
             return NotFound();
         }
 
-        var account = DevelopmentAccounts.Authenticate(request.Username, request.Password);
+        // Le mot de passe attendu vient des User Secrets : si la cle n'est pas configuree,
+        // le compte est indisponible, sans repli sur une valeur faible.
+        var account = accountAuthenticator.Authenticate(request.Username, request.Password);
         if (account is null)
         {
             // Message unique pour utilisateur inconnu et mot de passe invalide :

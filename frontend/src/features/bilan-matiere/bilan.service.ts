@@ -203,6 +203,11 @@ export const bilanService = {
    * Le bilan est recalcule a chaque lecture cote serveur : il n'existe pas d'endpoint
    * de calcul separe. Le filtre par type matiere est applique ici, sur le resultat.
    */
+  async getPeriodesUap2Disponibles(): Promise<string[]> {
+    assertApiSource('bilanUap2');
+    return (await api.get<string[]>('/v1/bilans/uap2/periodes')).data;
+  },
+
   async calculerBilanFonderie(
     periode: string,
     codeTypeMatiere: string,

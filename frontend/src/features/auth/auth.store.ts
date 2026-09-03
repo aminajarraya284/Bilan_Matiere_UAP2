@@ -42,12 +42,19 @@ const parseStoredDevelopmentUser = (value: unknown): AuthenticatedUser | null =>
     candidate.roles.every(isRole) &&
     candidate.authenticationMode === 'development'
   ) {
+    // Construction explicite plutôt qu'un spread suivi d'un cast : les gardes
+    // ci-dessus ont déjà vérifié chaque champ requis, autant les nommer.
     return {
-      ...candidate,
+      id: candidate.id,
+      displayName: candidate.displayName,
+      email: candidate.email,
+      roles: candidate.roles,
+      authenticationMode: 'development',
       fullName: candidate.displayName,
+      username: candidate.username,
       role: getPrimaryRole(candidate.roles),
       status: 'Actif'
-    } as AuthenticatedUser;
+    };
   }
 
   // Migration transparente des sessions Development créées avant le Lot 2.

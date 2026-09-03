@@ -19,7 +19,7 @@ public sealed class ConsommationsComposantsController(IX3ImportService service) 
     }
 
     [HttpPost("imports")]
-    [RequestSizeLimit(45 * 1024 * 1024)]
+    [RequestSizeLimit(100 * 1024 * 1024)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<ImportX3Response>(StatusCodes.Status201Created)]
     public async Task<ActionResult<ImportX3Response>> Import(

@@ -18,12 +18,36 @@ public sealed record DashboardResponse(
     DateTime CalculeLeUtc,
     string StatutGlobal,
     DashboardBilanSummary Fonderie,
+    DashboardFonderieSummary FonderieDetail,
     DashboardBilanSummary Usinage2,
     DashboardBilanSummary Uap2,
     DashboardOperationsSummary Operations,
     DashboardImportSummary Imports,
     DashboardDataQualitySummary QualiteDonnees,
     IReadOnlyCollection<DashboardWarning> Avertissements);
+
+public sealed record DashboardFonderieSummary(
+    decimal? TotalInputKg,
+    decimal? TotalOutputKg,
+    decimal? TotalEcartKg,
+    decimal? TauxEcartPourcent,
+    int NombreTypesComplets,
+    int NombreTypesAvecDonneesManquantesOuAnomalies,
+    IReadOnlyList<DashboardFonderieTypeSummary> Types);
+
+public sealed record DashboardFonderieTypeSummary(
+    string CodeTypeMatiere,
+    decimal? StockDebutKg,
+    decimal? SortiesMagasinX3Kg,
+    decimal? InputKg,
+    decimal? StockFinKg,
+    decimal? DechetsFonderieKg,
+    decimal? ReceptionsUsinage2Kg,
+    decimal? OutputKg,
+    decimal? EcartKg,
+    decimal? TauxEcartPourcent,
+    IReadOnlyList<string> Anomalies,
+    string Statut);
 
 public sealed record DashboardBilanSummary(
     string Code,

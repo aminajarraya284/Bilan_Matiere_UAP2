@@ -74,7 +74,8 @@ describe('authentification en mode API reelle', () => {
 
     const user = await store.login('admin', 'admin');
 
-    expect(user.role).toBe('Admin');
+    expect(user).not.toBeNull();
+    expect(user?.role).toBe('Admin');
     expect(hasPermission('Admin', 'Dashboard')).toBe(true);
   });
 

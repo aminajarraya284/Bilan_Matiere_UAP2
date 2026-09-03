@@ -64,6 +64,7 @@ const yrjmchTotal = ref(0);
 const yrjmchPage = ref(1);
 const yrjmchPageSize = ref(10);
 const yrjmchLoading = ref(false);
+const yrjmchError = ref<string | null>(null);
 const yrjmchSearchOF = ref('');
 const yrjmchSearchArticle = ref('');
 const yrjmchFilterProcessus = ref<ProcessusRapportMachine | ''>('');
@@ -74,6 +75,7 @@ const mvtTotal = ref(0);
 const mvtPage = ref(1);
 const mvtPageSize = ref(10);
 const mvtLoading = ref(false);
+const mvtError = ref<string | null>(null);
 const mvtSearchOF = ref('');
 const mvtSearchArticle = ref('');
 
@@ -86,6 +88,7 @@ const refreshX3ExcelStatuses = async () => {
 
 const fetchYrjmchData = async () => {
   yrjmchLoading.value = true;
+  yrjmchError.value = null;
   try {
     const res = await rapportMachineService.search({
       page: yrjmchPage.value,
@@ -98,9 +101,10 @@ const fetchYrjmchData = async () => {
     });
     yrjmchItems.value = res.items;
     yrjmchTotal.value = res.total;
-  } catch {
+  } catch (error) {
     yrjmchItems.value = [];
     yrjmchTotal.value = 0;
+    yrjmchError.value = error instanceof Error ? error.message : 'Impossible de charger les données YRJMCH.';
   } finally {
     yrjmchLoading.value = false;
   }
@@ -108,6 +112,7 @@ const fetchYrjmchData = async () => {
 
 const fetchMvtData = async () => {
   mvtLoading.value = true;
+  mvtError.value = null;
   try {
     const res = await mouvementsStockService.search({
       page: mvtPage.value,
@@ -119,9 +124,10 @@ const fetchMvtData = async () => {
     });
     mvtItems.value = res.items;
     mvtTotal.value = res.total;
-  } catch {
+  } catch (error) {
     mvtItems.value = [];
     mvtTotal.value = 0;
+    mvtError.value = error instanceof Error ? error.message : 'Impossible de charger les données MVTSTOTRSVCR.';
   } finally {
     mvtLoading.value = false;
   }
@@ -241,7 +247,7 @@ const mvtSansEntreeOf = computed(() => {
 });
 
 onMounted(() => {
-  void refreshX3ExcelStatuses();
+  void Promise.all([refreshX3ExcelStatuses(), fetchYrjmchData(), fetchMvtData()]);
 });
 </script>
 
@@ -609,9 +615,17 @@ onMounted(() => {
                     Chargement des rapports machine...
                   </td>
                 </tr>
+                <tr v-else-if="yrjmchError">
+                  <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
+                    Impossible de charger les données YRJMCH : {{ yrjmchError }}
+                  </td>
+                </tr>
                 <tr v-else-if="!yrjmchItems.length">
                   <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
-                    Aucun rapport machine importé.
+                    <template v-if="sourceStatuses.YRJMCH.status === 'Importé' && (sourceStatuses.YRJMCH.rowsRead ?? 0) > 0">
+                      L'import est enregistré mais aucune donnée métier persistée n'a été retrouvée.
+                    </template>
+                    <template v-else>Aucune donnée YRJMCH n'a encore été importée.</template>
                   </td>
                 </tr>
                 <tr v-for="item in yrjmchItems" :key="item.id" class="hover:bg-slate-50/60">
@@ -725,9 +739,17 @@ onMounted(() => {
                     Chargement des mouvements d'entrée OF...
                   </td>
                 </tr>
+                <tr v-else-if="mvtError">
+                  <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
+                    Impossible de charger les données MVTSTOTRSVCR : {{ mvtError }}
+                  </td>
+                </tr>
                 <tr v-else-if="!mvtItems.length">
                   <td colspan="8" class="px-3 py-6 text-center text-xs font-medium text-slate-400">
-                    Aucun mouvement d'entrée OF importé.
+                    <template v-if="sourceStatuses.MVTSTOTRSVCR.status === 'Importé' && (sourceStatuses.MVTSTOTRSVCR.rowsRead ?? 0) > 0">
+                      L'import est enregistré mais aucune donnée métier persistée n'a été retrouvée.
+                    </template>
+                    <template v-else>Aucune donnée MVTSTOTRSVCR n'a encore été importée.</template>
                   </td>
                 </tr>
                 <tr v-for="item in mvtItems" :key="item.id" class="hover:bg-slate-50/60">

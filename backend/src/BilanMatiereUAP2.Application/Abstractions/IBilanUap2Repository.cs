@@ -11,6 +11,8 @@ namespace BilanMatiereUAP2.Application.Abstractions;
 /// </summary>
 public interface IBilanUap2Repository
 {
+    Task<IReadOnlyList<string>> GetPeriodesDisponiblesAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Lignes YRJMCH actives : colonne H (quantite) et colonne I (rebut).</summary>
     Task<IReadOnlyList<X3RapportMachine>> GetRapportsMachineAsync(
         int annee,

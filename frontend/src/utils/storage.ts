@@ -1,7 +1,6 @@
 ﻿import { SortieX3Mouvement } from '@/features/sorties-x3/sortiesX3.types';
 import { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
 import { BilanMatiereReport, BilanUsinage2ParPiece, BilanUap2ParOF } from '@/features/bilan-matiere/bilan.types';
-import { AuditLogEntry } from '@/features/audit/audit.types';
 import {
   testBilans,
   testReceptionsUsinage2,
@@ -18,8 +17,7 @@ const KEYS = {
   INVENTAIRE_FOURS: 'sopal_inventaire_fours',
   BILANS: 'sopal_bilans',
   BILANS_USINAGE: 'sopal_bilans_usinage',
-  BILANS_UAP2: 'sopal_bilans_uap2',
-  AUDIT_LOGS: 'sopal_audit_logs'
+  BILANS_UAP2: 'sopal_bilans_uap2'
 };
 
 const ALLOWED_TYPE_MATIERES = new Set(['M3010L0', 'M3000L0', 'M3060L0']);
@@ -118,23 +116,6 @@ export const storage = {
     );
   },
 
-  // Audit
-  getAuditLogs(): AuditLogEntry[] {
-    return getStorageItem(KEYS.AUDIT_LOGS, []);
-  },
-  saveAuditLogs(data: AuditLogEntry[]): void {
-    setStorageItem(KEYS.AUDIT_LOGS, data);
-  },
-  addAuditLog(entry: Omit<AuditLogEntry, 'id'>): AuditLogEntry {
-    const current = this.getAuditLogs();
-    const newEntry: AuditLogEntry = {
-      ...entry,
-      id: current.length ? Math.max(...current.map((log) => log.id)) + 1 : 1000
-    };
-    this.saveAuditLogs([newEntry, ...current]);
-    return newEntry;
-  },
-
   // Reset helper
   resetAll(): void {
     localStorage.removeItem(KEYS.SORTIES_X3);
@@ -146,7 +127,6 @@ export const storage = {
     localStorage.removeItem(KEYS.BILANS);
     localStorage.removeItem(KEYS.BILANS_USINAGE);
     localStorage.removeItem(KEYS.BILANS_UAP2);
-    localStorage.removeItem(KEYS.AUDIT_LOGS);
     window.location.reload();
   }
 };

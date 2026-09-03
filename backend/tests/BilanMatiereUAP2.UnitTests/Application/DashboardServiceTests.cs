@@ -292,6 +292,9 @@ public sealed class DashboardServiceTests
 
     private sealed class FakeUap2Service(BilanUap2Response response) : IBilanUap2Service
     {
+        public Task<IReadOnlyList<string>> GetPeriodesDisponiblesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>([]);
+
         public Task<BilanUap2Response> GetAsync(string periode, CancellationToken cancellationToken = default)
             => Task.FromResult(response);
     }

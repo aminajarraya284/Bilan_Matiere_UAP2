@@ -22,6 +22,15 @@ export const createDashboardMock = (periode: string): DashboardResponse => ({
   calculeLeUtc: new Date().toISOString(),
   statutGlobal: 'NonDisponible',
   fonderie: emptyBilan('FONDERIE', 'kg'),
+  fonderieDetail: {
+    totalInputKg: null,
+    totalOutputKg: null,
+    totalEcartKg: null,
+    tauxEcartPourcent: null,
+    nombreTypesComplets: 0,
+    nombreTypesAvecDonneesManquantesOuAnomalies: 0,
+    types: []
+  },
   usinage2: emptyBilan('USINAGE2', 'pieces'),
   uap2: emptyBilan('UAP2', 'pieces'),
   operations: {

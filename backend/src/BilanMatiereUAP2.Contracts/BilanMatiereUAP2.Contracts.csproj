@@ -4,4 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BilanMatiereUAP2.Domain\BilanMatiereUAP2.Domain.csproj" />
+  </ItemGroup>
 </Project>

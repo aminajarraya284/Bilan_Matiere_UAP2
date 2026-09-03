@@ -1,5 +1,6 @@
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Contracts.ControlePoidsFonderie;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
@@ -43,7 +44,8 @@ public sealed class ControlePoidsFonderieService(
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
     IValidator<CreateControlePoidsFonderieRequest> createValidator,
-    IValidator<UpdateControlePoidsFonderieRequest> updateValidator) : IControlePoidsFonderieService
+    IValidator<UpdateControlePoidsFonderieRequest> updateValidator,
+    IAuditService? auditService = null) : IControlePoidsFonderieService
 {
     public async Task<PagedControlesPoidsFonderieResponse> GetAllAsync(
         GetControlesPoidsFonderieQuery query,
@@ -96,6 +98,7 @@ public sealed class ControlePoidsFonderieService(
             dateTimeProvider.UtcNow);
 
         await repository.AddAsync(entity, cancellationToken);
+        await AuditerAsync(ActionAudit.Creation, entity, null, Snapshot(entity), "Creation d'un controle poids Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity, typeMatiere);
     }
@@ -107,6 +110,7 @@ public sealed class ControlePoidsFonderieService(
         await updateValidator.ValidateAndThrowAsync(command.Request, cancellationToken);
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
         var typeMatiere = await GetRequiredActiveTypeMatiereAsync(command.Request.TypeMatiereId, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Modifier(
             command.Request.DateControle,
             command.Request.NumeroOF,
@@ -117,6 +121,7 @@ public sealed class ControlePoidsFonderieService(
             command.Request.NombreEchantillons,
             command.Request.Observation,
             dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Modification, entity, avant, Snapshot(entity), "Modification d'un controle poids Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity, typeMatiere);
     }
@@ -126,8 +131,11 @@ public sealed class ControlePoidsFonderieService(
         CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = Snapshot(entity);
         var validationDate = dateTimeProvider.UtcNow;
         entity.Valider(currentUser.UserId, currentUser.UserName, validationDate);
+
+        await AuditerAsync(ActionAudit.Validation, entity, avant, Snapshot(entity), "Validation d'un controle poids Fonderie.", cancellationToken);
 
         // La resolution de contexte interroge la base : le controle doit donc etre
         // persiste comme Valide avant de recalculer les receptions concernees.
@@ -170,7 +178,9 @@ public sealed class ControlePoidsFonderieService(
         CancellationToken cancellationToken)
     {
         var entity = await GetRequiredAsync(command.Id, cancellationToken);
+        var avant = Snapshot(entity);
         entity.Annuler(dateTimeProvider.UtcNow);
+        await AuditerAsync(ActionAudit.Annulation, entity, avant, Snapshot(entity), "Annulation d'un controle poids Fonderie.", cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(entity);
     }
@@ -225,6 +235,40 @@ public sealed class ControlePoidsFonderieService(
     {
         return new ValidationException([new ValidationFailure(propertyName, message)]);
     }
+
+    private Task AuditerAsync(
+        ActionAudit action,
+        Domain.Entities.ControlePoidsFonderie entity,
+        IReadOnlyDictionary<string, object?>? avant,
+        IReadOnlyDictionary<string, object?> apres,
+        string resume,
+        CancellationToken cancellationToken)
+        => auditService is null
+            ? Task.CompletedTask
+            : auditService.EnregistrerAsync(
+                new AuditEntry(
+                    action,
+                    DomaineAudit.ControlePoidsFonderie,
+                    nameof(Domain.Entities.ControlePoidsFonderie),
+                    entity.Id.ToString(),
+                    $"{entity.CodeArticle}|{entity.NumeroOF ?? "SANS_OF"}|{entity.Id}",
+                    nameof(ControlePoidsFonderieService),
+                    resume,
+                    avant,
+                    apres),
+                cancellationToken);
+
+    private static IReadOnlyDictionary<string, object?> Snapshot(Domain.Entities.ControlePoidsFonderie entity)
+        => new Dictionary<string, object?>
+        {
+            ["date"] = entity.DateControle,
+            ["article"] = entity.CodeArticle,
+            ["numeroOF"] = entity.NumeroOF,
+            ["typeMatiereId"] = entity.TypeMatiereId,
+            ["poidsUnitaireKg"] = entity.PoidsPhysiqueUnitaireKg,
+            ["nombreEchantillons"] = entity.NombreEchantillons,
+            ["statut"] = entity.Statut.ToString()
+        };
 
     private static ReceptionUsinage2.ContexteSnapshot ToSnapshot(Contracts.ReceptionU2ContextResponse context)
         => new(

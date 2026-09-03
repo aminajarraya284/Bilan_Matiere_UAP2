@@ -1,4 +1,5 @@
 using BilanMatiereUAP2.Application.Abstractions;
+using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Application.Services;
 using BilanMatiereUAP2.Contracts;
@@ -19,13 +20,16 @@ public sealed class ReportMachineServiceTests
         var reader = new FixedReader();
         var archive = new RecordingArchiveService();
         var refresh = new RecordingDependencyRefreshService();
-        var service = new ReportMachineService(
-            repository,
-            reader,
-            archive,
-            refresh,
-            new AnonymousCurrentUserService(),
-            new TestImportHashCalculator());
+        var audit = new RecordingAuditService();
+        var service = new AuditedReportMachineService(
+            new ReportMachineService(
+                repository,
+                reader,
+                archive,
+                refresh,
+                new AnonymousCurrentUserService(),
+                new TestImportHashCalculator()),
+            audit);
 
         reader.Rows =
         [
@@ -59,6 +63,10 @@ public sealed class ReportMachineServiceTests
         Assert.Equal(4, repository.Rows.Count);
         Assert.Equal(3, archive.ArchivedBatchIds.Count);
         Assert.Equal(2, refresh.RapportMachineRefreshCount);
+        Assert.Equal(
+            [ActionAudit.ImportReussi, ActionAudit.ImportReussi, ActionAudit.ImportDuplicate],
+            audit.Entries.Select(entry => entry.Action).ToArray());
+        Assert.All(audit.Entries, entry => Assert.Equal(DomaineAudit.ImportX3, entry.Domaine));
     }
 
     [Fact]
@@ -341,6 +349,17 @@ public sealed class ReportMachineServiceTests
     {
         public string CalculateSha256(byte[] content) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));
         public string CalculateCoupleHash(string firstHash, string secondHash) => CalculateSha256(System.Text.Encoding.UTF8.GetBytes($"{firstHash}:{secondHash}"));
+    }
+
+    private sealed class RecordingAuditService : IAuditService
+    {
+        public List<AuditEntry> Entries { get; } = [];
+
+        public Task EnregistrerAsync(AuditEntry entry, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(entry);
+            return Task.CompletedTask;
+        }
     }
 
 }

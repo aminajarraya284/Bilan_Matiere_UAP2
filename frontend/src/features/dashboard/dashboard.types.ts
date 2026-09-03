@@ -24,6 +24,31 @@ export interface DashboardOperationsSummary {
   ofReferencesManquantes: number;
 }
 
+export interface DashboardFonderieSummary {
+  totalInputKg: number | null;
+  totalOutputKg: number | null;
+  totalEcartKg: number | null;
+  tauxEcartPourcent: number | null;
+  nombreTypesComplets: number;
+  nombreTypesAvecDonneesManquantesOuAnomalies: number;
+  types: DashboardFonderieTypeSummary[];
+}
+
+export interface DashboardFonderieTypeSummary {
+  codeTypeMatiere: string;
+  stockDebutKg: number | null;
+  sortiesMagasinX3Kg: number | null;
+  inputKg: number | null;
+  stockFinKg: number | null;
+  dechetsFonderieKg: number | null;
+  receptionsUsinage2Kg: number | null;
+  outputKg: number | null;
+  ecartKg: number | null;
+  tauxEcartPourcent: number | null;
+  anomalies: string[];
+  statut: string;
+}
+
 export interface DashboardImportSummary {
   reussis: number;
   partiels: number;
@@ -52,6 +77,7 @@ export interface DashboardResponse {
   calculeLeUtc: string;
   statutGlobal: DashboardStatus;
   fonderie: DashboardBilanSummary;
+  fonderieDetail: DashboardFonderieSummary;
   usinage2: DashboardBilanSummary;
   uap2: DashboardBilanSummary;
   operations: DashboardOperationsSummary;

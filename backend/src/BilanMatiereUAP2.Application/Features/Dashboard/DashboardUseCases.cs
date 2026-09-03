@@ -41,6 +41,7 @@ public sealed class DashboardService(
         var importsData = await readRepository.GetImportsAsync(premierJour, cancellationToken);
 
         var resumeFonderie = ConstruireFonderie(fonderie);
+        var detailFonderie = ConstruireDetailFonderie(fonderie);
         var resumeUsinage2 = ConstruireUsinage2(usinage2);
         var resumeUap2 = ConstruireUap2(uap2);
 
@@ -99,12 +100,45 @@ public sealed class DashboardService(
             dateTimeProvider.UtcNow,
             statutGlobal,
             resumeFonderie,
+            detailFonderie,
             resumeUsinage2,
             resumeUap2,
             operations,
             imports,
             qualite,
             avertissements);
+    }
+
+    private static DashboardFonderieSummary ConstruireDetailFonderie(BilanFonderieResponse bilan)
+    {
+        var types = bilan.Lignes.Select(ligne => new DashboardFonderieTypeSummary(
+            ligne.CodeTypeMatiere,
+            ligne.StockDebutKg,
+            ligne.SortiesMagasinX3Kg,
+            ligne.InputKg,
+            ligne.StockFinKg,
+            ligne.DechetsFonderieKg,
+            ligne.ReceptionsUsinage2Kg,
+            ligne.OutputKg,
+            ligne.EcartKg,
+            ligne.TauxEcartPourcent,
+            ligne.Anomalies,
+            ligne.Statut)).ToArray();
+        var totalInput = bilan.TotalInputKg;
+        var totalOutput = bilan.TotalOutputKg;
+        var totalEcart = bilan.TotalEcartKg;
+        decimal? taux = totalInput is null || totalEcart is null || totalInput == 0m
+            ? null
+            : Math.Round(totalEcart.Value / totalInput.Value * 100m, 2, MidpointRounding.AwayFromZero);
+
+        return new DashboardFonderieSummary(
+            totalInput,
+            totalOutput,
+            totalEcart,
+            taux,
+            types.Count(type => type.Statut == "Complet" && type.Anomalies.Count == 0),
+            types.Count(type => type.Statut != "Complet" || type.Anomalies.Count > 0),
+            types);
     }
 
     private static DashboardBilanSummary ConstruireFonderie(BilanFonderieResponse bilan)

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   importYRJMCH: vi.fn(),
   downloadArchivedFile: vi.fn(),
   recalculerClassificationYRJMCH: vi.fn(),
+  rapportMachineSearch: vi.fn(),
+  mouvementsStockSearch: vi.fn(),
   success: vi.fn(),
   error: vi.fn()
 }));
@@ -30,6 +32,14 @@ vi.mock('@/composables/useAppToast', () => ({
     success: mocks.success,
     error: mocks.error
   })
+}));
+
+vi.mock('@/features/rapport-machine/rapportMachine.service', () => ({
+  rapportMachineService: { search: mocks.rapportMachineSearch }
+}));
+
+vi.mock('@/features/mouvements-stock/mouvementsStock.service', () => ({
+  mouvementsStockService: { search: mocks.mouvementsStockSearch }
 }));
 
 const status = (
@@ -67,6 +77,8 @@ describe('EtatsX3View', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.refreshStatuses.mockResolvedValue(undefined);
+    mocks.rapportMachineSearch.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
+    mocks.mouvementsStockSearch.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
     mocks.getStatus.mockImplementation((bilanType: X3BilanType, fileType: X3ExcelFileType) =>
       status(bilanType, fileType)
     );
@@ -89,6 +101,28 @@ describe('EtatsX3View', () => {
     expect(text).toContain('Importer Excel');
     expect(text).toContain("Consulter l'historique");
     expect(text).not.toContain('Synchroniser');
+  });
+
+  it('recharge les lignes SQL au montage sans fichier sélectionné', async () => {
+    mocks.rapportMachineSearch.mockResolvedValue({
+      items: [{ id: 'r1', dateProduction: '2026-07-31', numeroOF: 'OF-1', codeArticle: 'A1', designationArticle: null, codePoste: 'EMR', numeroOperation: null, processus: 'EMR', quantiteTotale: 10, quantiteRebut: 1, quantiteNette: 9 }],
+      total: 92987,
+      page: 1,
+      pageSize: 10
+    });
+    mocks.mouvementsStockSearch.mockResolvedValue({
+      items: [{ id: 'm1', dateImputation: '2026-07-31', numeroOF: 'OF-1', codeArticle: 'A1', designation: null, quantiteSignee: 4, unite: 'PCS', transaction: 'MVTSTOTRSVCR', nature: 'EntreeOF' }],
+      total: 28126,
+      page: 1,
+      pageSize: 10
+    });
+
+    const wrapper = await mountView();
+
+    expect(mocks.rapportMachineSearch).toHaveBeenCalledOnce();
+    expect(mocks.mouvementsStockSearch).toHaveBeenCalledOnce();
+    expect(wrapper.text()).toContain('OF-1');
+    expect(wrapper.text()).not.toContain("Aucun rapport machine importé.");
   });
 
   it('affiche exactement la règle métier YRJMCH validée', async () => {
