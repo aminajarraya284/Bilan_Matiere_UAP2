@@ -390,7 +390,8 @@ onMounted(() => dashboardStore.load());
 
       <DashboardSection title="Résumé Bilan Fonderie" description="Totaux réels du bilan Fonderie, exclusivement en kilogrammes.">
         <div class="summary-grid" data-testid="fonderie-summary">
-          <div v-for="item in fonderieSummaryItems" :key="item.label">
+          <div v-for="(item, index) in fonderieSummaryItems" :key="item.label" :class="{ 'summary-card--primary': index === 0 }">
+            <span v-if="index === 0" class="summary-card__eyebrow">Flux matière entrant</span>
             <dt>{{ item.label }}</dt>
             <dd>{{ item.value }}</dd>
           </div>
@@ -886,6 +887,40 @@ onMounted(() => dashboardStore.load());
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   background: white;
+}
+
+.summary-grid .summary-card--primary {
+  position: relative;
+  overflow: hidden;
+  padding: 1.15rem 1.2rem;
+  border-color: #93c5fd;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 72%);
+  box-shadow: 0 8px 18px rgb(37 99 235 / 0.1);
+}
+
+.summary-card--primary::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0.3rem;
+  height: 100%;
+  background: #2563eb;
+  content: '';
+}
+
+.summary-card__eyebrow {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: #1d4ed8;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-card--primary dd {
+  color: #1e3a8a;
+  font-size: clamp(1.55rem, 2.6vw, 2rem);
 }
 
 .summary-grid dt,
