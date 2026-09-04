@@ -15,7 +15,9 @@ export const routePermissions: Record<string, UserRole[]> = {
   ImportsHistorique: ['Admin'],
   Alertes: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Admin: ['Admin'],
-  Audit: ['Admin']
+  Audit: ['Admin'],
+  HistoriquePeriodes: ['Admin'],
+  PeriodeArchivee: ['Admin']
 };
 
 export const hasPermission = (userRole: UserRole | undefined, routeName: string): boolean => {

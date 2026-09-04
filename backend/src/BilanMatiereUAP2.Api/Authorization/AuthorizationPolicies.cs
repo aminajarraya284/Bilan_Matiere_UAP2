@@ -15,4 +15,5 @@ public static class AuthorizationPolicies
     public const string ReadInventairesFonderie = nameof(ReadInventairesFonderie);
     public const string ManageInventairesFonderie = nameof(ManageInventairesFonderie);
     public const string ManageAdministration = nameof(ManageAdministration);
+    public const string ManagePeriodArchives = nameof(ManagePeriodArchives);
 }

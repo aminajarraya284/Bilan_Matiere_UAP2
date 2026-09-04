@@ -137,6 +137,14 @@ export const routes: RouteRecordRaw[] = [
     title: 'Journal d’audit',
     subtitle: 'Traçabilité des actions'
   }),
+  appRoute('/historique-periodes', 'HistoriquePeriodes', () => import('@/features/archivage/HistoriquePeriodesView.vue'), {
+    title: 'Historique des périodes',
+    subtitle: 'Bilans mensuels archivés'
+  }),
+  appRoute('/historique-periodes/:periode', 'PeriodeArchivee', () => import('@/features/archivage/PeriodeArchiveeView.vue'), {
+    title: 'Période archivée',
+    subtitle: 'Consultation en lecture seule'
+  }),
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ];
 

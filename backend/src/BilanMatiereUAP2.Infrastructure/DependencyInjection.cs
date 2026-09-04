@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IAlerteRepository, AlerteRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
         services.AddScoped<IUtilisateurApplicationRepository, UtilisateurApplicationRepository>();
+        services.AddScoped<IPeriodeBilanArchiveRepository, PeriodeBilanArchiveRepository>();
         services.AddScoped<IRapportsReadRepository, RapportsReadRepository>();
         services.AddScoped<IReportMachineRepository, ReportMachineRepository>();
         services.AddScoped<IReportMachineReader, RapportMachineExcelReader>();

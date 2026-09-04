@@ -9,5 +9,6 @@ public enum DomaineAudit
     ReceptionUsinage2,
     RebutUsinage2,
     ImportX3,
-    Alerte
+    Alerte,
+    ArchivageBilans
 }

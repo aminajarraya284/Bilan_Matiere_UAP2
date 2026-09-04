@@ -85,8 +85,9 @@ const menuItems: { group: string; name: string; path: string; icon: Component; r
     name: 'Rapports',
     path: '/rapports',
     icon: FileText,
-    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+    roles: ['Admin']
   },
+  { group: 'Administration', name: 'Historique des périodes', path: '/historique-periodes', icon: History, roles: ['Admin'] },
   {
     group: 'Administration',
     name: 'Historique des imports',

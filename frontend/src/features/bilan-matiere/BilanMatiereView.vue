@@ -25,6 +25,8 @@ import { useAppDialog } from '@/composables/useAppDialog';
 import { BUSINESS_RULES } from '@/config/businessRules';
 import type { DataVertical } from '@/config/dataSources';
 import BilanMatiereUap2View from './BilanMatiereUap2View.vue';
+import { archivageService } from '@/features/archivage/archivage.service';
+import type { ArchiveDetail } from '@/features/archivage/archivage.types';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -61,6 +63,30 @@ const reports = ref<BilanMatiereReport[]>([]);
 const isLoading = ref(true);
 const isCalculating = ref(false);
 const successMessage = ref('');
+const archiveError = ref('');
+const isArchiving = ref(false);
+const lastArchive = ref<ArchiveDetail | null>(null);
+
+const enregistrerPeriode = async () => {
+  const confirme = await dialog.confirm(
+    `Enregistrer définitivement la période ${filterMois.value} ? Les résultats seront figés et consultables en lecture seule.`,
+    { title: 'Enregistrer la période', tone: 'warning', confirmLabel: 'Enregistrer' }
+  );
+  if (!confirme) return;
+  isArchiving.value = true;
+  archiveError.value = '';
+  try {
+    lastArchive.value = await archivageService.enregistrer(filterMois.value);
+    successMessage.value = `Période ${filterMois.value} enregistrée avec succès.`;
+  } catch (error) {
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    archiveError.value = status === 409
+      ? `La période ${filterMois.value} est déjà enregistrée.`
+      : `Impossible d'enregistrer la période ${filterMois.value}.`;
+  } finally {
+    isArchiving.value = false;
+  }
+};
 
 // Usinage state
 const bilanUsinage = ref<BilanUsinage2Api | null>(null);
@@ -405,6 +431,23 @@ onMounted(() => {
       description="Calculer, contrôler et valider les écarts de production de l’UAP2."
     />
     <DataSourceBadge :vertical="activeBilanVertical" />
+
+    <section v-if="isAdmin" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
+      <div>
+        <p class="text-sm font-black text-blue-950">Clôture mensuelle</p>
+        <p class="mt-1 text-xs text-blue-700">Le backend recalculera et figera les trois bilans de {{ filterMois }}.</p>
+      </div>
+      <button class="rounded-lg bg-blue-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50" :disabled="isArchiving" @click="enregistrerPeriode">
+        {{ isArchiving ? 'Enregistrement…' : 'Enregistrer la période' }}
+      </button>
+    </section>
+
+    <div v-if="archiveError" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-800" role="alert">{{ archiveError }}</div>
+    <div v-if="lastArchive" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
+      <strong>Enregistrée le {{ new Date(lastArchive.metadata.dateEnregistrementUtc).toLocaleString('fr-FR') }}</strong>
+      <span> par {{ lastArchive.metadata.enregistrePar }} · {{ lastArchive.metadata.statutGlobal }}</span>
+      <RouterLink :to="`/historique-periodes/${lastArchive.metadata.periode}`" class="ml-3 font-bold underline">Voir l’archive</RouterLink>
+    </div>
 
     <!-- Success notice -->
     <div

@@ -13,5 +13,6 @@ public enum ActionAudit
     Acquittement,
     Resolution,
     Ignorance,
-    Recalcul
+    Recalcul,
+    Cloture
 }

@@ -1373,6 +1373,64 @@ namespace BilanMatiereUAP2.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.PeriodeBilanArchivee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("DateEnregistrementUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EnregistrePar")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("NombreAlertes")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NombreAnomalies")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NombreDonneesManquantes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Periode")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("nvarchar(7)");
+
+                    b.Property<string>("RapportTemplateVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("StatutGlobal")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("VersionCalcul")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Periode")
+                        .IsUnique();
+
+                    b.ToTable("PeriodesBilansArchivees", (string)null);
+                });
+
             modelBuilder.Entity("BilanMatiereUAP2.Domain.Entities.RebutUsinage2", b =>
                 {
                     b.Property<Guid>("Id")

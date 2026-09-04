@@ -39,6 +39,7 @@ public sealed class BilanMatiereUAP2DbContext(
     public DbSet<AlerteMetier> AlertesMetier => Set<AlerteMetier>();
     public DbSet<TraceAudit> AuditTraces => Set<TraceAudit>();
     public DbSet<UtilisateurApplication> UtilisateursApplication => Set<UtilisateurApplication>();
+    public DbSet<PeriodeBilanArchivee> PeriodesBilansArchivees => Set<PeriodeBilanArchivee>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

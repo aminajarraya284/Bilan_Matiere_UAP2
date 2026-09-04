@@ -15,6 +15,7 @@ using BilanMatiereUAP2.Application.Features.Rapports;
 using BilanMatiereUAP2.Application.Features.TypesMatiere;
 using BilanMatiereUAP2.Application.Features.Audit;
 using BilanMatiereUAP2.Application.Features.Administration;
+using BilanMatiereUAP2.Application.Features.Archivage;
 using BilanMatiereUAP2.Application.Services;
 using BilanMatiereUAP2.Application.Abstractions;
 using FluentValidation;
@@ -60,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditQueryService, AuditQueryService>();
         services.AddScoped<IAdministrationService, AdministrationService>();
         services.AddScoped<IEntraUserProvisioningService, EntraUserProvisioningService>();
+        services.AddScoped<IPeriodeBilanArchiveService, PeriodeBilanArchiveService>();
         services.AddScoped<IImportDependencyRefreshService, ImportDependencyRefreshService>();
         services.AddScoped<IParametreApplicationService, ParametreApplicationService>();
         services.AddScoped<IParametreApplicationProvider>(provider =>

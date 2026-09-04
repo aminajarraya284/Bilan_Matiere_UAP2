@@ -151,6 +151,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
     options.AddPolicy(AuthorizationPolicies.ManageAdministration, policy =>
         policy.RequireRole("Admin"));
+    options.AddPolicy(AuthorizationPolicies.ManagePeriodArchives, policy =>
+        policy.RequireRole("Admin"));
     options.AddPolicy(DashboardAuthorizationPolicies.Read, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
     options.AddPolicy(AlertesAuthorizationPolicies.Read, policy =>
