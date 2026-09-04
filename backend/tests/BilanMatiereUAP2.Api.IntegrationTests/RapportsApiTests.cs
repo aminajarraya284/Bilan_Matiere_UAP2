@@ -40,18 +40,13 @@ public sealed class RapportsApiTests(ApiWebApplicationFactory factory) : IAsyncL
     }
 
     [Fact]
-    public async Task Get_CatalogueResponsableFonderie_NExposePasLesRapportsU2()
+    public async Task Get_CatalogueResponsableFonderie_RetourneForbidden()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/rapports/catalogue");
         request.Headers.Add("X-Development-Role", "ResponsableFonderie");
 
         var response = await _client.SendAsync(request);
-        var items = await response.Content.ReadFromJsonAsync<RapportCatalogueItemResponse[]>();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(items);
-        Assert.DoesNotContain(items!, item => item.Code is CodesRapports.BilanUsinage2 or CodesRapports.BilanUap2 or CodesRapports.ReceptionsNonReceptionnees);
-        Assert.Contains(items!, item => item.Code == CodesRapports.BilanFonderie);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

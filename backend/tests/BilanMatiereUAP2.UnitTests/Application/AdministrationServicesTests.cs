@@ -231,7 +231,7 @@ public sealed class AdministrationServicesTests
     {
         var type = typeof(UtilisateurApplication);
 
-        Assert.Empty(type.GetProperties().Where(p => p.SetMethod?.IsPublic == true));
+        Assert.DoesNotContain(type.GetProperties(), p => p.SetMethod?.IsPublic == true);
         Assert.DoesNotContain(type.GetProperties(), p =>
             p.Name.Contains("password", StringComparison.OrdinalIgnoreCase)
             || p.Name.Contains("token", StringComparison.OrdinalIgnoreCase)
