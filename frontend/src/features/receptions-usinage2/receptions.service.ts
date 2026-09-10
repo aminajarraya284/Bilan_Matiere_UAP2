@@ -1,4 +1,5 @@
 import api from '@/services/api';
+import { fetchAllPages } from '@/services/pagination';
 import { isApiSource } from '@/config/dataSources';
 import { ReceptionUsinage2Mouvement } from './receptions.types';
 import { testDataRepository } from '@/services/testDataRepository.service';
@@ -28,6 +29,16 @@ type ReceptionUsinage2ApiResponse = {
   poidsPhysiqueUnitaireKg: number | null;
   ecartPoidsUnitaireKg: number | null;
   tauxEcartPoidsPct: number | null;
+  ecartPoidsDepasseSeuil: boolean | null;
+  controlePoidsFonderieId: string | null;
+  totalPiecesReceptionneesU2MoisCourant: number | null;
+  statutArticle: string;
+  statutAtelier: string;
+  statutTypeMatiere: string;
+  statutNomenclature: string;
+  statutPoidsPhysique: string;
+  statutRapportMachine: string;
+  avertissements: string[];
   totalCtrlSci: number | null;
   totalCtrlEmr: number | null;
   totalCtrlTrn: number | null;
@@ -40,8 +51,6 @@ type ReceptionUsinage2ApiResponse = {
   dateCreationUtc: string;
 };
 
-type PagedReceptionsApiResponse = { items: ReceptionUsinage2ApiResponse[]; total: number };
-
 const toReceptionMouvementFromApi = (item: ReceptionUsinage2ApiResponse, index: number): ReceptionU2Response => ({
   id: index + 1,
   apiId: item.id,
@@ -53,17 +62,18 @@ const toReceptionMouvementFromApi = (item: ReceptionUsinage2ApiResponse, index: 
   atelierOrigine: item.atelierOrigine ?? '',
   codeTypeMatiere: item.codeTypeMatiere ?? '',
   designationTypeMatiere: `Matière ${item.codeTypeMatiere ?? ''}`,
-  quantiteLienUtilisee: item.quantiteLienUtilisee ?? 0,
-  uniteQuantiteLien: (item.uniteQuantiteLien ?? 'KG') as 'KG',
-  poidsTheoriqueUnitaireKg: item.poidsTheoriqueUnitaireKg ?? 0,
-  poidsTheoriqueTotalKg: item.poidsTheoriqueTotalKg ?? 0,
-  poidsPhysiqueUnitaireKg: item.poidsPhysiqueUnitaireKg ?? 0,
-  poidsTotalReceptionneKg: item.poidsTotalReceptionneKg ?? 0,
+  quantiteLienUtilisee: item.quantiteLienUtilisee,
+  uniteQuantiteLien: item.uniteQuantiteLien,
+  poidsTheoriqueUnitaireKg: item.poidsTheoriqueUnitaireKg,
+  poidsTheoriqueTotalKg: item.poidsTheoriqueTotalKg,
+  poidsPhysiqueUnitaireKg: item.poidsPhysiqueUnitaireKg,
+  poidsTotalReceptionneKg: item.poidsTotalReceptionneKg,
   nombrePiecesReceptionnees: item.nombrePiecesReceptionnees,
-  ecartPoidsUnitaireKg: item.ecartPoidsUnitaireKg ?? 0,
-  tauxEcartPoids: item.tauxEcartPoidsPct ?? 0,
-  statutAlertePoids: 'Conforme',
-  seuilAlertePoidsPourcentage: 0,
+  ecartPoidsUnitaireKg: item.ecartPoidsUnitaireKg,
+  tauxEcartPoids: item.tauxEcartPoidsPct,
+  statutAlertePoids: item.ecartPoidsDepasseSeuil === true ? 'Alerte' :
+    item.ecartPoidsDepasseSeuil === false ? 'Conforme' : null,
+  seuilAlertePoidsPourcentage: null,
   gammeFabricationId: 0,
   nomenclatureId: 0,
   mois: item.dateReception.slice(0, 7),
@@ -71,7 +81,7 @@ const toReceptionMouvementFromApi = (item: ReceptionUsinage2ApiResponse, index: 
   source: 'SaisieManuelle',
   utilisateur: item.creePar ?? '',
   creeLe: item.dateCreationUtc,
-  controlePoidsFonderieId: null,
+  controlePoidsFonderieId: item.controlePoidsFonderieId,
   sourcePoidsPhysique: null,
   totalCtrlSci: item.totalCtrlSci,
   totalCtrlEmr: item.totalCtrlEmr,
@@ -79,15 +89,15 @@ const toReceptionMouvementFromApi = (item: ReceptionUsinage2ApiResponse, index: 
   totalRebutSci: item.totalRebutSci,
   totalRebutEmr: item.totalRebutEmr,
   totalRebutTrn: item.totalRebutTrn,
-  piecesReceptionneesU2: null,
+  piecesReceptionneesU2: item.totalPiecesReceptionneesU2MoisCourant,
   quantiteNonReceptionnee: item.quantiteNonReceptionnee,
-  statutArticle: undefined,
-  statutAtelier: undefined,
-  statutTypeMatiere: undefined,
-  statutNomenclature: undefined,
-  statutPoidsPhysique: undefined,
-  statutRapportMachine: undefined,
-  avertissements: []
+  statutArticle: item.statutArticle,
+  statutAtelier: item.statutAtelier,
+  statutTypeMatiere: item.statutTypeMatiere,
+  statutNomenclature: item.statutNomenclature,
+  statutPoidsPhysique: item.statutPoidsPhysique,
+  statutRapportMachine: item.statutRapportMachine,
+  avertissements: item.avertissements
 });
 
 const toReceptionMouvement = (rec: ReceptionUsinage2Test): ReceptionUsinage2Mouvement => ({
@@ -167,9 +177,9 @@ export const receptionsService = {
       designationArticle: context.designationArticle ?? '',
       atelierOrigine: context.atelierOrigine ?? '',
       codeTypeMatiere: context.codeTypeMatiere ?? '',
-      quantiteLienUtilisee: context.quantiteLienUtilisee ?? 0,
-      uniteQuantiteLien: (context.uniteQuantiteLien ?? 'KG') as 'KG',
-      poidsTheoriqueUnitaireKg: context.poidsTheoriqueUnitaireKg ?? 0,
+      quantiteLienUtilisee: context.quantiteLienUtilisee,
+      uniteQuantiteLien: context.uniteQuantiteLien,
+      poidsTheoriqueUnitaireKg: context.poidsTheoriqueUnitaireKg,
       gammeFabricationId: 0,
       nomenclatureId: 0
     };
@@ -179,10 +189,8 @@ export const receptionsService = {
     if (!isApiSource('receptionsU2')) {
       return testDataRepository.getReceptions().map(toReceptionMouvement);
     }
-    const res = await api.get<PagedReceptionsApiResponse>('/v1/receptions-usinage2', {
-      params: { page: 1, pageSize: 100 }
-    });
-    return res.data.items.map(toReceptionMouvementFromApi);
+    const items = await fetchAllPages<ReceptionUsinage2ApiResponse>('/v1/receptions-usinage2', 100);
+    return items.map(toReceptionMouvementFromApi);
   },
 
   async createReception(data: ReceptionInput): Promise<ReceptionUsinage2Mouvement> {

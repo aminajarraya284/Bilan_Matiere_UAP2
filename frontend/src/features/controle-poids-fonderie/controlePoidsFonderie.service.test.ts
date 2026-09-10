@@ -13,6 +13,16 @@ import { controlePoidsFonderieApiService } from './controlePoidsFonderie.service
 describe('controle poids fonderie API service', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('loads the controls after the first 50 results', async () => {
+    mocks.get.mockResolvedValueOnce({ data: {
+      items: Array.from({ length: 50 }, (_, i) => ({ id: `c${i}` })), total: 51
+    } }).mockResolvedValueOnce({ data: { items: [{ id: 'c50' }], total: 51 } });
+    const result = await controlePoidsFonderieApiService.getAll();
+    expect(result).toHaveLength(51);
+    expect(result[50].id).toBe('c50');
+    expect(mocks.get).toHaveBeenLastCalledWith('/v1/controles-poids-fonderie', { params: { page: 2, pageSize: 50 } });
+  });
+
   it('loads all controls from the paged endpoint', async () => {
     mocks.get.mockResolvedValueOnce({ data: { items: [{ id: 'c1' }], total: 1 } });
 

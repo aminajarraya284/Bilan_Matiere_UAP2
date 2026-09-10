@@ -11,6 +11,7 @@ import type { AlerteNonReception, StatutAlerteNonReception } from './alerteNonRe
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
+import ErrorState from '@/components/ui/ErrorState.vue';
 import { formatNumber } from '@/utils/formatters';
 import { useAppDialog } from '@/composables/useAppDialog';
 import { BUSINESS_RULES } from '@/config/businessRules';
@@ -19,6 +20,7 @@ const authStore = useAuthStore();
 const dialog = useAppDialog();
 const receptions = ref<ReceptionUsinage2Mouvement[]>([]);
 const isLoading = ref(true);
+const receptionsError = ref('');
 const successMessage = ref('');
 const highlightedReceptionId = ref<number | null>(null);
 
@@ -48,9 +50,9 @@ const formRec = ref({
   designationArticle: '',
   atelierOrigine: '',
   codeTypeMatiere: '',
-  quantiteLienUtilisee: 0,
-  uniteQuantiteLien: 'KG',
-  poidsTheoriqueUnitaireKg: 0,
+  quantiteLienUtilisee: 0 as number | null,
+  uniteQuantiteLien: 'KG' as string | null,
+  poidsTheoriqueUnitaireKg: 0 as number | null,
   poidsPhysiqueUnitaireKg: null as number | null,
   statutArticle: '',
   statutAtelier: '',
@@ -127,9 +129,12 @@ const loadReceptionDefaults = async () => {
 
 const loadReceptions = async () => {
   isLoading.value = true;
+  receptionsError.value = '';
   try {
     receptions.value = await receptionsService.getReceptions();
   } catch (err) {
+    receptions.value = [];
+    receptionsError.value = 'Impossible de charger les réceptions. Veuillez réessayer.';
     console.error(err);
   } finally {
     isLoading.value = false;
@@ -824,6 +829,8 @@ onMounted(() => {
         <LoadingState />
       </div>
 
+      <ErrorState v-else-if="receptionsError" :message="receptionsError" @retry="loadReceptions" />
+
       <div v-else class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
           <thead>
@@ -859,12 +866,15 @@ onMounted(() => {
               <td class="p-3">
                 <span class="font-bold text-slate-800">{{ row.codeArticle }}</span>
                 <p class="text-[10px] text-slate-400 font-semibold mt-0.5">{{ row.designationArticle }}</p>
+                <p v-if="row.avertissements?.length" class="mt-1 text-xs text-amber-700">
+                  {{ row.avertissements.join(' · ') }}
+                </p>
               </td>
               <td class="p-3 text-right font-bold font-mono text-slate-700">
-                {{ formatNumber(row.poidsTotalReceptionneKg, 1) }}
+                {{ row.poidsTotalReceptionneKg == null ? '—' : formatNumber(row.poidsTotalReceptionneKg, 1) }}
               </td>
               <td class="p-3 text-right font-bold font-mono text-blue-900">
-                {{ formatNumber(row.poidsPhysiqueUnitaireKg, 1) }}
+                {{ row.poidsPhysiqueUnitaireKg == null ? '—' : formatNumber(row.poidsPhysiqueUnitaireKg, 1) }}
               </td>
               <td class="p-3 text-right font-mono">{{ formatNumber(row.nombrePiecesReceptionnees, 0) }} pcs</td>
               <td class="p-3 text-center">

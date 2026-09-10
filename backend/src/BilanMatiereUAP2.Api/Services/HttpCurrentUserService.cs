@@ -7,8 +7,16 @@ public sealed class HttpCurrentUserService(IHttpContextAccessor httpContextAcces
 {
     private ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
 
-    public Guid? UserId => Guid.TryParse(Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+    public Guid? UserId => Guid.TryParse(
+        Principal?.FindFirstValue("oid")
+        ?? Principal?.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier")
+        ?? Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? Principal?.FindFirstValue("sub"), out var id) ? id : null;
     public string? UserName => Principal?.Identity?.Name;
-    public string? Role => Principal?.FindFirstValue(ClaimTypes.Role);
+    // Les roles personnalises peuvent preceder leur correspondance applicative.
+    public string? Role => new[] { "Admin", "ResponsableFonderie", "ResponsableUsinage2" }
+        .FirstOrDefault(role => Principal?.IsInRole(role) == true)
+        ?? Principal?.Identities.SelectMany(identity => identity.FindAll(identity.RoleClaimType))
+            .Select(claim => claim.Value).FirstOrDefault();
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated == true;
 }

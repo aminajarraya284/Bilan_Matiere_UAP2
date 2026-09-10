@@ -24,7 +24,7 @@ public sealed class EntraIdRoleMappingTransformation(
 
         var rolesEntra = identity.FindAll(roleClaimType).Select(claim => claim.Value).ToArray();
         var dejaPresents = identity
-            .FindAll(ClaimTypes.Role)
+            .FindAll(identity.RoleClaimType)
             .Select(claim => claim.Value)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -32,7 +32,7 @@ public sealed class EntraIdRoleMappingTransformation(
         {
             if (!correspondance.TryGetValue(roleEntra, out var roleApplicatif)) continue;
             if (!dejaPresents.Add(roleApplicatif)) continue;
-            identity.AddClaim(new Claim(ClaimTypes.Role, roleApplicatif));
+            identity.AddClaim(new Claim(identity.RoleClaimType, roleApplicatif));
         }
 
         return Task.FromResult(principal);

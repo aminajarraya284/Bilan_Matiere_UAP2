@@ -55,11 +55,18 @@ public sealed class BilanUsinage2Service(
     public Task<BilanUsinage2Response> GetAsync(
         string periode,
         CancellationToken cancellationToken = default)
-        => QueryAsync(new GetBilanUsinage2Query(periode), cancellationToken);
+        => ConstruireReponseAsync(new GetBilanUsinage2Query(periode), false, cancellationToken);
 
-    public async Task<BilanUsinage2Response> QueryAsync(
+    public Task<BilanUsinage2Response> QueryAsync(
         GetBilanUsinage2Query query,
         CancellationToken cancellationToken = default)
+        => ConstruireReponseAsync(query, true, cancellationToken);
+
+    // Archives, alertes et rapports doivent recevoir le detail complet.
+    private async Task<BilanUsinage2Response> ConstruireReponseAsync(
+        GetBilanUsinage2Query query,
+        bool paginer,
+        CancellationToken cancellationToken)
     {
         ValidatePagination(query.Page, query.PageSize);
         var toutes = await ConstruireLignesAsync(query.Periode, cancellationToken);
@@ -77,10 +84,10 @@ public sealed class BilanUsinage2Service(
             .Where(ligne => query.AvecAnomalies is null || (ligne.Anomalies.Count > 0) == query.AvecAnomalies.Value)
             .ToArray();
 
-        var pageItems = filtrees
+        var pageItems = paginer ? filtrees
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
-            .ToArray();
+            .ToArray() : filtrees;
         var bilansConnus = filtrees
             .Where(ligne => ligne.BilanUsinage2Pieces is not null)
             .Select(ligne => ligne.BilanUsinage2Pieces!.Value)
@@ -98,7 +105,7 @@ public sealed class BilanUsinage2Service(
             filtrees.Sum(ligne => ligne.Anomalies.Count),
             filtrees.Length,
             query.Page,
-            query.PageSize,
+            paginer ? query.PageSize : Math.Max(1, filtrees.Length),
             filtrees.Count(ligne => ligne.Statut == "OK"),
             filtrees.Count(ligne => ligne.Statut == "AVerifier"),
             filtrees.Count(ligne => ligne.Statut == "ExcluAtelier"),

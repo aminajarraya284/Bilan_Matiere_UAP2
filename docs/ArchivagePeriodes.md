@@ -19,6 +19,7 @@ Un second enregistrement de la même période renvoie un conflit `PERIODE_DEJA_E
 
 ## Fidélité du snapshot
 
+- Le service interne `IBilanUsinage2Service.GetAsync` fournit toutes les lignes de la période, y compris au-delà de 50 ou 200 OF. La pagination reste réservée à `QueryAsync` pour les écrans de consultation.
 - Fonderie reste en kilogrammes.
 - Usinage 2 et UAP2 restent en pièces.
 - Les taux restent des pourcentages.
@@ -34,3 +35,4 @@ Le format officiel existant est [Template_Rapport_Bilan_Matiere.md](Template_Rap
 
 Une seule version officielle est autorisée par période. La création d’une nouvelle version et la génération PDF/Excel sont hors périmètre. Une archive peut être clôturée avec des anomalies ou des données manquantes ; son statut les expose explicitement.
 
+La correction du 9 septembre 2026 empêche la troncature des nouvelles archives Usinage 2 à la première page. Elle ne modifie pas les snapshots déjà enregistrés. Pour repérer une archive historiquement tronquée, comparer le nombre d'éléments de `snapshot.usinage2.lignes` avec `snapshot.usinage2.total`. Une éventuelle reprise de ces archives exige une procédure explicite conservant leur traçabilité ; aucun recalcul automatique n'est effectué à la lecture.

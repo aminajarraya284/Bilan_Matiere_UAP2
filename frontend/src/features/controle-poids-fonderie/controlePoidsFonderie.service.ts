@@ -1,4 +1,5 @@
 import api from '@/services/api';
+import { fetchAllPages } from '@/services/pagination';
 import { assertApiSource } from '@/config/dataSources';
 import type {
   ControlePoidsFonderieApi,
@@ -6,17 +7,12 @@ import type {
   UpdateControlePoidsFonderieRequest
 } from './controlePoidsFonderie.types';
 
-type PagedResponse<T> = { items: T[]; total: number };
-
 // Ecran d'administration relie a l'API reelle (le mode mock continue d'utiliser
 // controlePoidsFonderie.storage.ts, inchange).
 export const controlePoidsFonderieApiService = {
   async getAll(): Promise<ControlePoidsFonderieApi[]> {
     assertApiSource('controlePoids');
-    const { data } = await api.get<PagedResponse<ControlePoidsFonderieApi>>('/v1/controles-poids-fonderie', {
-      params: { page: 1, pageSize: 50 }
-    });
-    return data.items;
+    return fetchAllPages<ControlePoidsFonderieApi>('/v1/controles-poids-fonderie', 50);
   },
 
   async create(request: CreateControlePoidsFonderieRequest): Promise<ControlePoidsFonderieApi> {

@@ -23,11 +23,13 @@ public sealed class HttpAuditContext(IHttpContextAccessor httpContextAccessor)
 
     public string? Email => FirstClaim(
         ClaimTypes.Email,
+        "email",
         "preferred_username",
         "upn");
 
-    public IReadOnlyCollection<string> Roles => Principal?.Claims
-        .Where(claim => claim.Type is ClaimTypes.Role or "roles")
+    public IReadOnlyCollection<string> Roles => Principal?.Identities
+        .SelectMany(identity => identity.Claims.Where(claim =>
+            claim.Type == identity.RoleClaimType || claim.Type is ClaimTypes.Role or "roles"))
         .Select(claim => claim.Value)
         .Where(value => !string.IsNullOrWhiteSpace(value))
         .Distinct(StringComparer.OrdinalIgnoreCase)

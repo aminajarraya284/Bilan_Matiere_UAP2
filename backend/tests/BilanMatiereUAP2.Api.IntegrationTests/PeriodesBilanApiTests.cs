@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using BilanMatiereUAP2.Contracts.Archivage;
+using BilanMatiereUAP2.Domain.Entities;
+using BilanMatiereUAP2.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BilanMatiereUAP2.Api.IntegrationTests;
 
@@ -16,6 +19,35 @@ public sealed class PeriodesBilanApiTests(ApiWebApplicationFactory factory) : IA
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    [Fact]
+    public async Task Archive_ConserveLesReceptionsAuDelaDeLaPremierePage()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BilanMatiereUAP2DbContext>();
+            var snapshot = new ReceptionUsinage2.ContexteSnapshot(
+                "ART1", "Article test", "En cours", "16", "M3010L0", 2m, "KG", 2m, 2m,
+                null, 0m, 10m, 0m, 0m, 0m, 0m,
+                "Trouve", "Trouve", "Trouve", "Trouve", "Trouve", "Trouve", [],
+                "SortieMp", EligibleAtelier16: true);
+            foreach (var index in Enumerable.Range(1, 51))
+            {
+                var reception = ReceptionUsinage2.Creer($"OF{index:D4}", new DateOnly(2026, 7, 5),
+                    10m, 20m, "FONDERIE", null, snapshot, null, "Test", DateTime.UtcNow);
+                reception.Valider(false, null, null, "Test", DateTime.UtcNow);
+                db.ReceptionsUsinage2.Add(reception);
+            }
+            await db.SaveChangesAsync();
+        }
+        var creation = await _client.PostAsync("/api/v1/periodes-bilan/2026-07/enregistrer", null);
+        Assert.Equal(HttpStatusCode.Created, creation.StatusCode);
+        var archive = await _client.GetFromJsonAsync<PeriodeBilanArchiveDetailResponse>("/api/v1/periodes-bilan/2026-07");
+
+        Assert.Equal(51, archive!.Snapshot.Usinage2.Lignes.Count);
+        Assert.Equal(51, archive.Snapshot.Usinage2.Total);
+        Assert.Contains(archive.Snapshot.Usinage2.Lignes, ligne => ligne.NumeroOF == "OF0051");
+    }
 
     [Fact]
     public async Task Admin_ArchivePuisRelitLeSnapshotSansRecalcul()

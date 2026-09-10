@@ -32,6 +32,16 @@ const apiReception = {
   poidsPhysiqueUnitaireKg: 2.5,
   ecartPoidsUnitaireKg: 0,
   tauxEcartPoidsPct: 0,
+  ecartPoidsDepasseSeuil: false,
+  controlePoidsFonderieId: null,
+  totalPiecesReceptionneesU2MoisCourant: 100,
+  statutArticle: 'Trouve',
+  statutAtelier: 'Trouve',
+  statutTypeMatiere: 'Trouve',
+  statutNomenclature: 'Trouve',
+  statutPoidsPhysique: 'Trouve',
+  statutRapportMachine: 'Absent',
+  avertissements: [],
   totalCtrlSci: null,
   totalCtrlEmr: null,
   totalCtrlTrn: null,
@@ -46,6 +56,44 @@ const apiReception = {
 
 describe('receptions usinage 2 real API service', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('loads the 101st reception with unique view IDs', async () => {
+    mocks.get.mockResolvedValueOnce({ data: {
+      items: Array.from({ length: 100 }, (_, i) => ({ ...apiReception, id: `r${i}` })), total: 101
+    } }).mockResolvedValueOnce({ data: { items: [{ ...apiReception, id: 'r100' }], total: 101 } });
+    const result = await receptionsService.getReceptions();
+    expect(result).toHaveLength(101);
+    expect(result[100].apiId).toBe('r100');
+    expect(new Set(result.map(item => item.id)).size).toBe(101);
+    expect(mocks.get).toHaveBeenLastCalledWith('/v1/receptions-usinage2', { params: { page: 2, pageSize: 100 } });
+  });
+
+  it('preserves missing weights and the backend warnings instead of declaring compliance', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { items: [{ ...apiReception,
+      poidsTotalReceptionneKg: null, poidsPhysiqueUnitaireKg: null, poidsTheoriqueUnitaireKg: null,
+      ecartPoidsUnitaireKg: null, tauxEcartPoidsPct: null, ecartPoidsDepasseSeuil: null,
+      statutPoidsPhysique: 'Absent', avertissements: ['POIDS_PHYSIQUE_MANQUANT']
+    }], total: 1 } });
+    const [result] = await receptionsService.getReceptions();
+    expect(result.poidsTotalReceptionneKg).toBeNull();
+    expect(result.poidsPhysiqueUnitaireKg).toBeNull();
+    expect(result.poidsTheoriqueUnitaireKg).toBeNull();
+    expect(result.ecartPoidsUnitaireKg).toBeNull();
+    expect(result.tauxEcartPoids).toBeNull();
+    expect(result.statutAlertePoids).toBeNull();
+    expect(result.statutPoidsPhysique).toBe('Absent');
+    expect(result.avertissements).toEqual(['POIDS_PHYSIQUE_MANQUANT']);
+  });
+
+  it('preserves a measured zero and a backend weight alert', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { items: [{ ...apiReception,
+      poidsTotalReceptionneKg: 0, ecartPoidsDepasseSeuil: true, tauxEcartPoidsPct: 15
+    }], total: 1 } });
+    const [result] = await receptionsService.getReceptions();
+    expect(result.poidsTotalReceptionneKg).toBe(0);
+    expect(result.statutAlertePoids).toBe('Alerte');
+    expect(result.tauxEcartPoids).toBe(15);
+  });
 
   it('calls the real list endpoint (no hyphen) and maps the paged response', async () => {
     mocks.get.mockResolvedValueOnce({ data: { items: [apiReception], total: 1 } });

@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import { CheckCircle2, ClipboardCheck, Gauge, History, Plus, RotateCcw, Scale, Trash2 } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
+import ErrorState from '@/components/ui/ErrorState.vue';
+import LoadingState from '@/components/ui/LoadingState.vue';
 import { BUSINESS_RULES } from '@/config/businessRules';
 import { formatNumber } from '@/utils/formatters';
 import { useAppDialog } from '@/composables/useAppDialog';
@@ -18,6 +20,9 @@ import type { TypeMatiereResponse } from '@/features/dechets-fonderie/typesMatie
 import { isApiSource } from '@/config/dataSources';
 
 const pointKeys = ['P1', 'P2', 'P3', 'P4', 'P5'] as const;
+const controlesError = ref('');
+const typesMatiereError = ref('');
+const isLoadingControles = ref(false);
 type PointKey = (typeof pointKeys)[number];
 type PointValues = {
   poidsBrutKg: number | null;
@@ -147,19 +152,28 @@ const toControlePoidsFromApi = (item: Awaited<ReturnType<typeof controlePoidsFon
 });
 
 const loadTypesMatiere = async () => {
+  typesMatiereError.value = '';
   try {
     typesMatiere.value = await dechetsService.getTypesMatiere();
   } catch (err) {
+    typesMatiere.value = [];
+    typesMatiereError.value = 'Impossible de charger les types matière. Veuillez réessayer.';
     console.error(err);
   }
 };
 
 const loadControles = async () => {
+  controlesError.value = '';
   if (isRealApi) {
+    isLoadingControles.value = true;
     try {
       controles.value = (await controlePoidsFonderieApiService.getAll()).map(toControlePoidsFromApi);
     } catch (err) {
+      controles.value = [];
+      controlesError.value = 'Impossible de charger les contrôles poids. Veuillez réessayer.';
       console.error(err);
+    } finally {
+      isLoadingControles.value = false;
     }
     return;
   }
@@ -308,6 +322,8 @@ onMounted(() => {
         <span>{{ successMessage }}</span>
       </div>
     </Transition>
+
+    <ErrorState v-if="typesMatiereError" :message="typesMatiereError" @retry="loadTypesMatiere" />
 
     <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
       <article class="surface-card p-5">
@@ -554,7 +570,9 @@ onMounted(() => {
         </span>
       </header>
 
-      <div v-if="controles.length" class="table-wrapper">
+      <LoadingState v-if="isLoadingControles" />
+      <ErrorState v-else-if="controlesError" :message="controlesError" @retry="loadControles" />
+      <div v-else-if="controles.length" class="table-wrapper">
         <table class="w-full text-left">
           <thead>
             <tr class="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">

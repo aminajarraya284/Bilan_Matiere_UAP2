@@ -59,7 +59,8 @@ public sealed class EntraUserProvisioningMiddleware(RequestDelegate next, ILogge
             objectId,
             PremiereValeur(user, EmailClaims),
             PremiereValeur(user, NomClaims),
-            user.FindAll(ClaimTypes.Role).Concat(user.FindAll("roles"))
+            user.Identities.SelectMany(identity => identity.FindAll(identity.RoleClaimType))
+                .Concat(user.FindAll(ClaimTypes.Role)).Concat(user.FindAll("roles"))
                 .Select(claim => claim.Value)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray());

@@ -93,6 +93,8 @@ else
         .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
+            // Conserver les noms Entra (roles, oid, name) attendus par les policies.
+            options.MapInboundClaims = false;
             options.Authority = jwtOptions.Authority;
             options.Audience = jwtOptions.Audience;
             // Un jeton non signe ou d'un autre emetteur ne doit jamais etre accepte.

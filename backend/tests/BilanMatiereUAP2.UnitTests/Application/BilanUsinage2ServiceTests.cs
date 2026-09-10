@@ -17,6 +17,26 @@ public sealed class BilanUsinage2ServiceTests
     private static readonly DateTime Now = new(2026, 7, 26, 10, 0, 0, DateTimeKind.Utc);
     private const string Periode = "2026-07";
 
+    [Fact]
+    public async Task GetAsync_RetourneToutesLesLignes_QueryAsyncRestePagine()
+    {
+        var receptions = Enumerable.Range(1, 201)
+            .Select(index => ReceptionValidee(10m, numeroOF: $"OF{index:D4}"))
+            .ToArray();
+        var service = CreateService(receptions, entreeOf: 10m, rapport: Rapport(10m, 0m));
+
+        var complet = await service.GetAsync(Periode);
+        var page = await service.QueryAsync(new GetBilanUsinage2Query(Periode, Page: 5));
+
+        Assert.Equal(201, complet.Lignes.Count);
+        Assert.Equal(201, complet.Total);
+        Assert.Equal(2010m, complet.QuantiteTotaleReceptionneePieces);
+        Assert.Equal("OF0201", Assert.Single(page.Lignes).NumeroOF);
+        Assert.Equal(complet.Total, page.Total);
+        Assert.Equal(complet.TotalBilanUsinage2Pieces, page.TotalBilanUsinage2Pieces);
+        Assert.Equal(50, page.PageSize);
+    }
+
     // Valeur du parametre applicatif CodeAtelierUap2 utilisee par les fakes.
     // Elle n'est pas codee en dur dans le service, qui la lit via IParametreApplicationProvider.
     private const string CodeAtelierUap2 = "16";
