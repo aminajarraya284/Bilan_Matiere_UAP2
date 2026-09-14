@@ -3,7 +3,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import type { RouteLocationNormalized } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { rememberAuthReturnPath } from '@/features/auth/auth.navigation';
-import { authGuard } from './index';
+import router, { authGuard } from './index';
+import type { UserRole } from '@/types/common.types';
 
 const from = {} as RouteLocationNormalized;
 const next = vi.fn();
@@ -42,6 +43,18 @@ const setUser = (roles: Array<'Admin' | 'ResponsableFonderie' | 'ResponsableUsin
 const runGuard = (target: RouteLocationNormalized) => Promise.resolve(authGuard(target, from, next));
 
 describe('authentication router guard', () => {
+  it.each<[UserRole, string, boolean]>([
+    ['Admin', '/inventaire', true],
+    ['ResponsableFonderie', '/inventaire', true],
+    ['ResponsableUsinage2', '/inventaire', false],
+    ['Admin', '/receptions-usinage-2', true],
+    ['ResponsableFonderie', '/receptions-usinage-2', false],
+    ['ResponsableUsinage2', '/receptions-usinage-2', true]
+  ])('protège la route réelle %s / %s', async (role, path, autorise) => {
+    setUser([role]);
+    const target = router.resolve(path) as RouteLocationNormalized;
+    await expect(runGuard(target)).resolves.toEqual(autorise ? true : { name: 'Forbidden', query: { from: path } });
+  });
   beforeEach(() => {
     vi.stubEnv('VITE_AUTH_MODE', 'development');
     localStorage.clear();

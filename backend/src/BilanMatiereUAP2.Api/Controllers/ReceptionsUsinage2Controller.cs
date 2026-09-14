@@ -77,7 +77,7 @@ public sealed class ReceptionsUsinage2Controller(
         => Ok(await service.UpdateAsync(new UpdateReceptionUsinage2Command(id, request), cancellationToken));
 
     [HttpPost("{id:guid}/valider")]
-    [Authorize(Policy = AuthorizationPolicies.ManageReceptionsUsinage2)]
+    [Authorize(Policy = AuthorizationPolicies.ValidateReceptionsUsinage2)]
     public async Task<IActionResult> Valider(Guid id, ValiderReceptionUsinage2Request request, CancellationToken cancellationToken)
         => Ok(await service.ValiderAsync(new ValiderReceptionUsinage2Command(id, request), cancellationToken));
 

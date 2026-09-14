@@ -140,9 +140,40 @@ public sealed class BilanFonderieServiceTests
         await Assert.ThrowsAsync<ValidationException>(() => service.GetAsync("07-2026"));
     }
 
+    [Theory]
+    [InlineData("2026-07-10", "2026-07-20", false, false)]
+    [InlineData("2026-07-01", "2026-07-20", true, false)]
+    [InlineData("2026-07-10", "2026-07-31", false, true)]
+    [InlineData("2026-07-01", "2026-07-31", true, true)]
+    public async Task Intervalle_NExtrapolePasLesStocksMensuels(string debut, string fin, bool stockDebut, bool stockFin)
+    {
+        var repository = new FakeRepository { Stocks = { new BilanFonderieStock(TypeId, 100m, 90m) } };
+        var response = await new BilanFonderieService(repository).GetIntervalleAsync(debut, fin);
+        var ligne = Assert.Single(response.Bilan.Lignes);
+        Assert.Equal(stockDebut ? 100m : (decimal?)null, ligne.StockDebutKg);
+        Assert.Equal(stockFin ? 90m : (decimal?)null, ligne.StockFinKg);
+        Assert.Equal(stockDebut && stockFin ? 10m : (decimal?)null, ligne.EcartKg);
+        Assert.Equal(DateOnly.Parse(debut), response.DateDebut);
+        Assert.Equal(DateOnly.Parse(fin), response.DateFin);
+    }
+
+    [Fact]
+    public async Task Intervalle_MultiMois_UtiliseLesEtatsAuxBornesSansSommerLesStocks()
+    {
+        var repository = new FakeRepository();
+        repository.StocksParMois[new DateOnly(2026, 7, 1)] = [new(TypeId, 100m, 80m)];
+        repository.StocksParMois[new DateOnly(2026, 8, 1)] = [new(TypeId, 80m, 60m)];
+        var response = await new BilanFonderieService(repository).GetIntervalleAsync("2026-07-01", "2026-08-31");
+        var ligne = Assert.Single(response.Bilan.Lignes);
+        Assert.Equal(100m, ligne.StockDebutKg);
+        Assert.Equal(60m, ligne.StockFinKg);
+        Assert.Equal(40m, ligne.EcartKg);
+    }
+
     private sealed class FakeRepository : IBilanFonderieRepository
     {
         public List<BilanFonderieStock> Stocks { get; } = [];
+        public Dictionary<DateOnly, List<BilanFonderieStock>> StocksParMois { get; } = [];
         public List<BilanFonderieSortieX3> Sorties { get; } = [];
         public List<BilanFonderieDechet> Dechets { get; } = [];
         public List<BilanFonderieReception> Receptions { get; } = [];
@@ -152,18 +183,18 @@ public sealed class BilanFonderieServiceTests
             => Task.FromResult<IReadOnlyList<BilanFonderieTypeMatiere>>([new BilanFonderieTypeMatiere(TypeId, Code)]);
 
         public Task<IReadOnlyList<BilanFonderieStock>> GetStocksAsync(DateOnly periode, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<BilanFonderieStock>>(Stocks);
+            => Task.FromResult<IReadOnlyList<BilanFonderieStock>>(StocksParMois.GetValueOrDefault(periode) ?? Stocks);
 
-        public Task<IReadOnlyList<BilanFonderieSortieX3>> GetSortiesMagasinX3Async(DateOnly periode, CancellationToken ct = default)
+        public Task<IReadOnlyList<BilanFonderieSortieX3>> GetSortiesMagasinX3Async(DateOnly dateDebut, DateOnly dateFin, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<BilanFonderieSortieX3>>(Sorties);
 
-        public Task<IReadOnlyList<BilanFonderieDechet>> GetDechetsAsync(DateOnly periode, CancellationToken ct = default)
+        public Task<IReadOnlyList<BilanFonderieDechet>> GetDechetsAsync(DateOnly dateDebut, DateOnly dateFin, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<BilanFonderieDechet>>(Dechets);
 
-        public Task<IReadOnlyList<BilanFonderieReception>> GetReceptionsUsinage2Async(DateOnly periode, CancellationToken ct = default)
+        public Task<IReadOnlyList<BilanFonderieReception>> GetReceptionsUsinage2Async(DateOnly dateDebut, DateOnly dateFin, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<BilanFonderieReception>>(Receptions);
 
-        public Task<int> CompterReceptionsSansTypeMatiereAsync(DateOnly periode, CancellationToken ct = default)
+        public Task<int> CompterReceptionsSansTypeMatiereAsync(DateOnly dateDebut, DateOnly dateFin, CancellationToken ct = default)
             => Task.FromResult(ReceptionsSansTypeMatiere);
     }
 }

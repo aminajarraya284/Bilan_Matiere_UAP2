@@ -1,5 +1,11 @@
 namespace BilanMatiereUAP2.Contracts.Bilans;
 
+/// <summary>Consultation live par intervalle inclusif ; le contrat mensuel archivé reste inchangé.</summary>
+public sealed record BilanFonderieIntervalleResponse(
+    DateOnly DateDebut,
+    DateOnly DateFin,
+    BilanFonderieResponse Bilan);
+
 /// <summary>
 /// Une ligne de Bilan Fonderie, pour un type matiere et une periode (RM-FON-003).
 ///

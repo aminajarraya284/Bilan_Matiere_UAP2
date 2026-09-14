@@ -36,19 +36,23 @@ public interface IBilanFonderieRepository
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<BilanFonderieSortieX3>> GetSortiesMagasinX3Async(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<BilanFonderieDechet>> GetDechetsAsync(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<BilanFonderieReception>> GetReceptionsUsinage2Async(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default);
 
     /// <summary>Receptions validees dont le type matiere n'a pas pu etre resolu.</summary>
     Task<int> CompterReceptionsSansTypeMatiereAsync(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default);
 }

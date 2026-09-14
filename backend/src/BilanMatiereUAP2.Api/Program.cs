@@ -147,6 +147,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin", "ResponsableUsinage2"));
     options.AddPolicy(AuthorizationPolicies.ManageReceptionsUsinage2, policy =>
         policy.RequireRole("Admin", "ResponsableUsinage2"));
+    options.AddPolicy(AuthorizationPolicies.ValidateReceptionsUsinage2, policy =>
+        policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.ReadInventairesFonderie, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie"));
     options.AddPolicy(AuthorizationPolicies.ManageInventairesFonderie, policy =>

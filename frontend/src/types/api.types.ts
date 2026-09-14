@@ -168,7 +168,7 @@ export interface BilanFonderieResponse {
   outputTotal: number | null;
   ecartKg: number | null;
   tauxEcart: number | null;
-  statut: BilanStatus;
+  statut: BilanStatus | 'Complet' | 'Incomplet';
   justification?: string;
   dateCalcul: IsoDateString;
   /** Codes d'anomalie renvoyes par l'API (vide en mode demonstration). */
@@ -218,7 +218,7 @@ export interface BilanFonderieApiLigne {
   ecartKg: number | null;
   tauxEcartPourcent: number | null;
   anomalies: string[];
-  statut: string;
+  statut: 'Complet' | 'Incomplet';
 }
 
 export interface BilanFonderieApiResponse {

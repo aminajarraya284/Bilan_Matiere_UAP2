@@ -6,6 +6,12 @@ Une clôture appelle les services officiels `IBilanFonderieService`, `IBilanUsin
 
 Le snapshot utilise le schéma version 1 et la version de calcul `2026.09`. Une contrainte unique SQL sur `Periode` interdit le remplacement silencieux. Il n’existe aucun endpoint `PUT`, `PATCH` ou `DELETE` pour une archive.
 
+La consultation Fonderie par `dateDebut` / `dateFin` est distincte : elle ne crée pas
+d'archive d'intervalle. Le champ « Mois à archiver » sélectionne explicitement un
+`YYYY-MM`, indépendamment des deux dates live. L'archive appelle toujours le calcul
+mensuel, du premier au dernier jour inclus. Les contrats du snapshot, son schéma et
+sa version de calcul sont inchangés. Aucune archive antérieure n'est recalculée.
+
 ## API et droits
 
 Toutes les routes utilisent la policy `ManagePeriodArchives`, réservée au rôle `Admin` :

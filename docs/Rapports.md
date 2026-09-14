@@ -91,10 +91,10 @@ La période respecte `YYYY-MM`. La pagination commence à 1 et la taille de page
 | Rôle | Périmètre |
 |---|---|
 | `Admin` | RPT-001 à RPT-008 |
-| `ResponsableFonderie` | Fonderie, détail OF, alertes filtrées à ses sources, inventaire et imports |
-| `ResponsableUsinage2` | U2, UAP2, détail OF, alertes filtrées à ses sources, imports et non-réceptions |
+| `ResponsableFonderie` | Aucun accès au module Rapports |
+| `ResponsableUsinage2` | Aucun accès au module Rapports |
 
-La route frontend `/rapports` est visible pour les trois rôles. Le backend reste l'autorité : un appel direct hors périmètre retourne `403`.
+La route frontend `/rapports` est visible uniquement pour `Admin`. Le backend reste l'autorité : un appel direct par un autre rôle retourne `403`.
 
 ## Règles préservées
 

@@ -27,6 +27,25 @@ public sealed class InventaireComptageApiTests(ApiWebApplicationFactory factory)
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    [Theory]
+    [InlineData("Admin", true)]
+    [InlineData("ResponsableFonderie", true)]
+    [InlineData("ResponsableUsinage2", false)]
+    public async Task AccesInventaire_RespecteLesRolesLectureEtGestion(string role, bool autorise)
+    {
+        var type = await GetSeedAsync("M3000L0");
+        var conteneur = await CreateConteneurAsync(type.Id, "C-RBAC", 10m, new DateOnly(2026, 7, 1));
+        _client.DefaultRequestHeaders.Add("X-Development-Role", role);
+        var lecture = await _client.GetAsync("/api/v1/inventaires-fonderie/comptage/2026-07");
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, lecture.StatusCode);
+        var ajout = await _client.PostAsJsonAsync("/api/v1/inventaires-fonderie/comptage/conteneurs",
+            new CreateInventaireComptageConteneurRequest(new DateOnly(2026, 7, 15), "C-RBAC-2",
+                null, null, null, type.Id, 5m, null));
+        Assert.Equal(autorise ? HttpStatusCode.Created : HttpStatusCode.Forbidden, ajout.StatusCode);
+        var validation = await _client.PostAsync($"/api/v1/inventaires-fonderie/comptage/conteneurs/{conteneur.Id}/valider", null);
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, validation.StatusCode);
+    }
+
     [Fact]
     public async Task PostConteneur_ValidRequest_ReturnsCreatedAsBrouillon()
     {

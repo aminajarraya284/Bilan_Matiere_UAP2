@@ -4,6 +4,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 const mocks = vi.hoisted(() => ({
   getReceptions: vi.fn(),
   annulerReception: vi.fn(),
+  validerReception: vi.fn(),
+  role: 'Admin',
   confirm: vi.fn()
 }));
 vi.mock('./receptions.service', () => ({ receptionsService: mocks }));
@@ -14,7 +16,7 @@ vi.mock('./bilanUsinage2.service', () => ({
   }
 }));
 vi.mock('./alerteNonReception.service', () => ({ alerteNonReceptionService: { isAvailable: () => false } }));
-vi.mock('@/features/auth/auth.store', () => ({ useAuthStore: () => ({ userRole: 'Admin' }) }));
+vi.mock('@/features/auth/auth.store', () => ({ useAuthStore: () => ({ userRole: mocks.role }) }));
 vi.mock('@/composables/useAppDialog', () => ({ useAppDialog: () => ({ confirm: mocks.confirm }) }));
 import ReceptionsUsinage2View from './ReceptionsUsinage2View.vue';
 
@@ -38,6 +40,7 @@ describe('ReceptionsUsinage2View loading and missing weights', () => {
   let wrapper: VueWrapper;
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.role = 'Admin';
     vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.getReceptions.mockResolvedValue([reception]);
     mocks.annulerReception.mockResolvedValue(undefined);
@@ -51,6 +54,25 @@ describe('ReceptionsUsinage2View loading and missing weights', () => {
     wrapper = mount(ReceptionsUsinage2View, { global: { stubs: { PageHeader: true } } });
     await flushPromises();
   };
+
+  it.each(['Admin', 'ResponsableUsinage2', 'ResponsableFonderie'])('réserve le bouton Valider à Admin : %s', async (role) => {
+    mocks.role = role;
+    mocks.getReceptions.mockResolvedValue([{ ...reception, statut: 'Brouillon' }]);
+    await open();
+    const valider = wrapper.findAll('button').find((button) => button.text() === 'Valider');
+    expect(!!valider).toBe(role === 'Admin');
+    // Annuler et la saisie suivent la policy ManageReceptionsUsinage2, pas la validation.
+    const annuler = wrapper.findAll('button').find((button) => button.text() === 'Annuler');
+    expect(!!annuler).toBe(role !== 'ResponsableFonderie');
+    expect(wrapper.text().includes('Saisir un Nouveau Bon de Réception')).toBe(role !== 'ResponsableFonderie');
+    if (valider) {
+      await valider.trigger('click');
+      await flushPromises();
+      expect(mocks.validerReception).toHaveBeenCalledExactlyOnceWith('r1');
+    } else {
+      expect(mocks.validerReception).not.toHaveBeenCalled();
+    }
+  });
 
   it('shows dashes for absent weights and displays the backend warning', async () => {
     await open();

@@ -61,28 +61,32 @@ const tabs = computed(() => allTabs.filter((tab) => canOpenTab(tab.id)));
 // Fonderie state
 const reports = ref<BilanMatiereReport[]>([]);
 const isLoading = ref(true);
-const isCalculating = ref(false);
+const fonderieError = ref('');
+let fonderieRequest = 0;
 const successMessage = ref('');
 const archiveError = ref('');
 const isArchiving = ref(false);
 const lastArchive = ref<ArchiveDetail | null>(null);
+const archiveMois = ref<string>(BUSINESS_RULES.periodeParDefaut);
 
 const enregistrerPeriode = async () => {
+  if (!isAdmin.value || isArchiving.value) return;
+  const periode = archiveMois.value;
   const confirme = await dialog.confirm(
-    `Enregistrer définitivement la période ${filterMois.value} ? Les résultats seront figés et consultables en lecture seule.`,
+    `Enregistrer définitivement la période ${periode} ? Les résultats seront figés et consultables en lecture seule.`,
     { title: 'Enregistrer la période', tone: 'warning', confirmLabel: 'Enregistrer' }
   );
   if (!confirme) return;
   isArchiving.value = true;
   archiveError.value = '';
   try {
-    lastArchive.value = await archivageService.enregistrer(filterMois.value);
-    successMessage.value = `Période ${filterMois.value} enregistrée avec succès.`;
+    lastArchive.value = await archivageService.enregistrer(periode);
+    successMessage.value = `Période ${periode} enregistrée avec succès.`;
   } catch (error) {
     const status = (error as { response?: { status?: number } })?.response?.status;
     archiveError.value = status === 409
-      ? `La période ${filterMois.value} est déjà enregistrée.`
-      : `Impossible d'enregistrer la période ${filterMois.value}.`;
+      ? `La période ${periode} est déjà enregistrée.`
+      : `Impossible d'enregistrer la période ${periode}.`;
   } finally {
     isArchiving.value = false;
   }
@@ -131,51 +135,26 @@ const filterAlliage = ref<string>('TOUS');
 
 // ===== FONDERIE =====
 const loadBilans = async () => {
+  const request = ++fonderieRequest;
+  reports.value = [];
+  fonderieError.value = '';
+  const dateDebut = filterDateDebut.value;
+  const dateFin = filterDateFin.value;
+  if (!dateDebut || !dateFin || dateDebut > dateFin) {
+    fonderieError.value = 'Renseignez les deux dates, avec une date de début antérieure ou égale à la date de fin.';
+    isLoading.value = false;
+    return;
+  }
   isLoading.value = true;
   try {
-    reports.value = await bilanService.getBilans(filterMois.value, filterDateDebut.value, filterDateFin.value);
-  } catch (err) {
-    console.error(err);
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-const handleCalculer = async () => {
-  isCalculating.value = true;
-  successMessage.value = '';
-  try {
-    await bilanService.calculerBilan(filterMois.value, filterAlliage.value, filterDateDebut.value, filterDateFin.value);
-    successMessage.value = 'Calcul du bilan matière relancé avec succès.';
-    await loadBilans();
-    setTimeout(() => (successMessage.value = ''), 4000);
-  } catch (err) {
-    console.error(err);
-  } finally {
-    isCalculating.value = false;
-  }
-};
-
-const handleValiderAll = async () => {
-  if (
-    await dialog.confirm(
-      'Voulez-vous valider tous les bilans sélectionnés pour cette période et ce type de matière ?',
-      {
-        title: 'Valider les bilans',
-        tone: 'warning',
-        confirmLabel: 'Valider'
-      }
-    )
-  ) {
-    try {
-      const reportsToValidate = filteredReports.value.filter((r) => r.statut !== 'Valide' && r.statut !== 'Cloture');
-      await Promise.all(reportsToValidate.map((r) => bilanService.validerBilan(r.bilanKey)));
-      successMessage.value = 'Tous les bilans affichés ont été validés.';
-      await loadBilans();
-      setTimeout(() => (successMessage.value = ''), 4000);
-    } catch (err) {
-      console.error(err);
+    const result = await bilanService.getBilans(filterMois.value, dateDebut, dateFin);
+    if (request === fonderieRequest) reports.value = result;
+  } catch {
+    if (request === fonderieRequest) {
+      fonderieError.value = "Le bilan Fonderie n'a pas pu être chargé. Vérifiez les dates et la disponibilité de l'API.";
     }
+  } finally {
+    if (request === fonderieRequest) isLoading.value = false;
   }
 };
 
@@ -401,6 +380,8 @@ const annulerRebut = async (rebut: RebutUsinage2) => {
   }
 };
 
+// Une composante inconnue reste « — » : formatNumber renverrait « 0,00 » et ferait
+// passer un stock indisponible pour un stock nul (RM-COM-003).
 const formatNullable = (value: number | null, decimals = 0): string =>
   value === null ? '—' : formatNumber(value, decimals);
 
@@ -428,15 +409,19 @@ onMounted(() => {
     <!-- Page Header -->
     <PageHeader
       title="Bilan matière"
-      description="Calculer, contrôler et valider les écarts de production de l’UAP2."
+      description="Consulter les bilans et les écarts de production de l’UAP2."
     />
     <DataSourceBadge :vertical="activeBilanVertical" />
 
     <section v-if="isAdmin" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
       <div>
         <p class="text-sm font-black text-blue-950">Clôture mensuelle</p>
-        <p class="mt-1 text-xs text-blue-700">Le backend recalculera et figera les trois bilans de {{ filterMois }}.</p>
+        <p class="mt-1 text-xs text-blue-700">Le backend recalculera et figera les trois bilans du mois entier, indépendamment des dates de consultation.</p>
       </div>
+      <label class="text-xs font-bold text-blue-950">
+        Mois à archiver
+        <input v-model="archiveMois" type="month" required aria-label="Mois à archiver" :disabled="isArchiving" class="ml-2 rounded border border-blue-200 p-2" />
+      </label>
       <button class="rounded-lg bg-blue-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50" :disabled="isArchiving" @click="enregistrerPeriode">
         {{ isArchiving ? 'Enregistrement…' : 'Enregistrer la période' }}
       </button>
@@ -484,14 +469,11 @@ onMounted(() => {
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date Début</span>
             <input
               type="date"
+              aria-label="Date début"
+              required
               v-model="filterDateDebut"
               class="bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer text-slate-700"
-              @change="
-                () => {
-                  filterMois = filterDateDebut.slice(0, 7);
-                  loadBilans();
-                }
-              "
+              @change="loadBilans"
             />
           </div>
 
@@ -500,6 +482,8 @@ onMounted(() => {
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date Fin</span>
             <input
               type="date"
+              aria-label="Date fin"
+              required
               v-model="filterDateFin"
               class="bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer text-slate-700"
               @change="loadBilans"
@@ -527,24 +511,22 @@ onMounted(() => {
             Imprimer
           </button>
           <button
-            @click="handleValiderAll"
-            class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-5 rounded-xl flex items-center gap-2 cursor-pointer active:scale-95 transition-all"
-          >
-            <CheckCircle2 class="w-4 h-4" />
-            Valider tout
-          </button>
-          <button
-            @click="handleCalculer"
-            :disabled="isCalculating"
+            @click="loadBilans"
+            :disabled="isLoading"
             class="bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 px-6 rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 transition-all w-full md:w-auto justify-center"
           >
-            <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCalculating }" />
-            {{ isCalculating ? 'Calcul en cours...' : 'Calculer le Bilan Fonderie' }}
+            <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
+            {{ isLoading ? 'Actualisation...' : 'Actualiser le bilan' }}
           </button>
         </div>
       </div>
 
       <!-- Main Reports Table -->
+      <p class="text-xs text-slate-600">
+        Flux filtrés sur les deux dates incluses. Les stocks sont des états mensuels :
+        une borne en cours de mois reste indisponible (—), sans extrapolation.
+        « Complet » décrit les données, pas une validation métier.
+      </p>
       <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
         <div class="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
           <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -560,6 +542,10 @@ onMounted(() => {
           <LoadingState />
         </div>
 
+        <div v-else-if="fonderieError" role="alert" class="p-4 text-sm text-rose-800 bg-rose-50">
+          <p>{{ fonderieError }}</p>
+          <button type="button" class="mt-2 font-bold underline" @click="loadBilans">Réessayer</button>
+        </div>
         <div v-else class="overflow-x-auto">
           <table class="w-full text-left border-collapse">
             <thead>
@@ -581,35 +567,42 @@ onMounted(() => {
             </thead>
             <tbody class="divide-y divide-slate-100 text-xs font-medium">
               <tr v-for="report in filteredReports" :key="report.bilanKey" class="hover:bg-slate-50/30 transition-colors">
-                <td class="p-3 font-bold text-slate-800 font-mono">{{ report.typeMatiere }}</td>
-                <td class="p-3 text-right font-semibold font-mono">{{ formatNumber(report.encoursDebut, 0) }}</td>
+                <td class="p-3 font-bold text-slate-800 font-mono">
+                  {{ report.typeMatiere }}
+                  <ul v-if="report.anomalies?.length" class="mt-1 text-[10px] font-normal text-amber-800">
+                    <li v-for="anomalie in report.anomalies" :key="anomalie">{{ anomalie }}</li>
+                  </ul>
+                </td>
+                <td class="p-3 text-right font-semibold font-mono">{{ formatNullable(report.encoursDebut) }}</td>
                 <td class="p-3 text-right font-semibold font-mono text-slate-600">
-                  {{ formatNumber(report.sortiesX3, 0) }}
+                  {{ formatNullable(report.sortiesX3) }}
                 </td>
                 <td class="p-3 text-right font-black font-mono text-blue-900 bg-blue-50/10">
-                  {{ formatNumber(report.inputTotal, 0) }}
+                  {{ formatNullable(report.inputTotal) }}
                 </td>
-                <td class="p-3 text-right font-semibold font-mono">{{ formatNumber(report.encoursFinReel, 0) }}</td>
+                <td class="p-3 text-right font-semibold font-mono">{{ formatNullable(report.encoursFinReel) }}</td>
                 <td class="p-3 text-right font-semibold font-mono text-rose-600">
-                  {{ formatNumber(report.dechetsFonderie, 0) }}
+                  {{ formatNullable(report.dechetsFonderie) }}
                 </td>
                 <td class="p-3 text-right font-semibold font-mono text-blue-700">
-                  {{ formatNumber(report.receptionsUsinage2, 0) }}
+                  {{ formatNullable(report.receptionsUsinage2) }}
                 </td>
                 <td class="p-3 text-right font-black font-mono text-blue-900 bg-blue-50/20">
-                  {{ formatNumber(report.outputTotal, 0) }}
+                  {{ formatNullable(report.outputTotal) }}
                 </td>
                 <td
                   class="p-3 text-right font-black font-mono"
                   :class="depasseSeuilEcartKg(report.ecartKg) ? 'text-rose-600' : 'text-slate-700'"
                 >
-                  {{ formatNumber(report.ecartKg, 0) }} kg
+                  <template v-if="report.ecartKg === null">—</template>
+                  <template v-else>{{ formatNumber(report.ecartKg, 0) }} kg</template>
                 </td>
                 <td
                   class="p-3 text-right font-bold font-mono"
                   :class="depasseSeuilEcartPourcent(report.tauxEcart) ? 'text-rose-600' : 'text-slate-600'"
                 >
-                  {{ formatNumber(report.tauxEcart, 2) }} %
+                  <template v-if="report.tauxEcart === null">—</template>
+                  <template v-else>{{ formatNumber(report.tauxEcart, 2) }} %</template>
                 </td>
                 <td class="p-3">
                   <BadgeStatus :status="report.statut" />
@@ -626,20 +619,20 @@ onMounted(() => {
                 class="bg-slate-100 border-t border-slate-200 text-[10px] text-slate-600 font-bold uppercase tracking-wider"
               >
                 <td class="p-3">Total</td>
-                <td class="p-3 text-right font-black font-mono">{{ formatNumber(totalReport.encoursDebut, 0) }}</td>
-                <td class="p-3 text-right font-black font-mono">{{ formatNumber(totalReport.sortiesX3, 0) }}</td>
+                <td class="p-3 text-right font-black font-mono">{{ formatNullable(totalReport.encoursDebut) }}</td>
+                <td class="p-3 text-right font-black font-mono">{{ formatNullable(totalReport.sortiesX3) }}</td>
                 <td class="p-3 text-right font-black font-mono text-blue-900 bg-blue-50/10">
-                  {{ formatNumber(totalReport.inputTotal, 0) }}
+                  {{ formatNullable(totalReport.inputTotal) }}
                 </td>
-                <td class="p-3 text-right font-black font-mono">{{ formatNumber(totalReport.encoursFinReel, 0) }}</td>
+                <td class="p-3 text-right font-black font-mono">{{ formatNullable(totalReport.encoursFinReel) }}</td>
                 <td class="p-3 text-right font-black font-mono text-rose-600">
-                  {{ formatNumber(totalReport.dechetsFonderie, 0) }}
+                  {{ formatNullable(totalReport.dechetsFonderie) }}
                 </td>
                 <td class="p-3 text-right font-black font-mono text-blue-700">
-                  {{ formatNumber(totalReport.receptionsUsinage2, 0) }}
+                  {{ formatNullable(totalReport.receptionsUsinage2) }}
                 </td>
                 <td class="p-3 text-right font-black font-mono text-blue-900 bg-blue-50/20">
-                  {{ formatNumber(totalReport.outputTotal, 0) }}
+                  {{ formatNullable(totalReport.outputTotal) }}
                 </td>
                 <td
                   class="p-3 text-right font-black font-mono"
@@ -647,7 +640,8 @@ onMounted(() => {
                     depasseSeuilEcartKg(totalReport.ecartKg) ? 'text-rose-600' : 'text-slate-700'
                   "
                 >
-                  {{ formatNumber(totalReport.ecartKg, 0) }} kg
+                  <template v-if="totalReport.ecartKg === null">—</template>
+                  <template v-else>{{ formatNumber(totalReport.ecartKg, 0) }} kg</template>
                 </td>
                 <td
                   class="p-3 text-right font-bold font-mono"
@@ -655,7 +649,8 @@ onMounted(() => {
                     depasseSeuilEcartPourcent(totalReport.tauxEcart) ? 'text-rose-600' : 'text-slate-600'
                   "
                 >
-                  {{ formatNumber(totalReport.tauxEcart, 2) }} %
+                  <template v-if="totalReport.tauxEcart === null">—</template>
+                  <template v-else>{{ formatNumber(totalReport.tauxEcart, 2) }} %</template>
                 </td>
                 <td class="p-3">—</td>
               </tr>

@@ -175,6 +175,57 @@ public sealed class ReceptionsUsinage2ApiTests : IClassFixture<ApiWebApplication
         Assert.Equal("OF123", list.Items[0].NumeroOF);
     }
 
+    [Theory]
+    [InlineData("Admin", true)]
+    [InlineData("ResponsableUsinage2", false)]
+    [InlineData("ResponsableFonderie", false)]
+    public async Task Valider_ReserveAAdmin_MemeParAppelDirect(string role, bool autorise)
+    {
+        await _factory.ResetDatabaseAsync();
+        using var app = BuildFactory(FakeReceptionContextService.Complet());
+        using var client = app.CreateClient();
+        var creation = await client.PostAsJsonAsync("/api/v1/receptions-usinage2",
+            new CreateReceptionUsinage2Request("OF123", new DateOnly(2026, 7, 15), 10m, 25m, null, null));
+        creation.EnsureSuccessStatusCode();
+        var reception = (await creation.Content.ReadFromJsonAsync<ReceptionUsinage2Response>())!;
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/receptions-usinage2/{reception.Id}/valider")
+        { Content = JsonContent.Create(new ValiderReceptionUsinage2Request(false, null)) };
+        request.Headers.Add("X-Development-Role", role);
+        var response = await client.SendAsync(request);
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, response.StatusCode);
+        var persiste = await client.GetFromJsonAsync<ReceptionUsinage2Response>($"/api/v1/receptions-usinage2/{reception.Id}");
+        Assert.Equal(autorise ? "Valide" : "Brouillon", persiste!.StatutReception);
+    }
+
+    [Theory]
+    [InlineData("Admin", true)]
+    [InlineData("ResponsableUsinage2", true)]
+    [InlineData("ResponsableFonderie", false)]
+    public async Task LectureEtGestion_ConserventLesPoliciesExistantes(string role, bool autorise)
+    {
+        await _factory.ResetDatabaseAsync();
+        using var app = BuildFactory(FakeReceptionContextService.Complet());
+        using var admin = app.CreateClient();
+        var creation = await admin.PostAsJsonAsync("/api/v1/receptions-usinage2",
+            new CreateReceptionUsinage2Request("OF123", new DateOnly(2026, 7, 15), 10m, 25m, null, null));
+        creation.EnsureSuccessStatusCode();
+        var reception = (await creation.Content.ReadFromJsonAsync<ReceptionUsinage2Response>())!;
+        using var client = app.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Development-Role", role);
+        var lecture = await client.GetAsync("/api/v1/receptions-usinage2");
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, lecture.StatusCode);
+        var ajout = await client.PostAsJsonAsync("/api/v1/receptions-usinage2",
+            new CreateReceptionUsinage2Request("OF123", new DateOnly(2026, 7, 16), 10m, 25m, null, null));
+        Assert.Equal(autorise ? HttpStatusCode.Created : HttpStatusCode.Forbidden, ajout.StatusCode);
+        var modification = await client.PutAsJsonAsync($"/api/v1/receptions-usinage2/{reception.Id}",
+            new UpdateReceptionUsinage2Request(12m, 30m, null, null));
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, modification.StatusCode);
+        var contexte = await client.PostAsync($"/api/v1/receptions-usinage2/{reception.Id}/recalculer-contexte", null);
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, contexte.StatusCode);
+        var annulation = await client.PostAsync($"/api/v1/receptions-usinage2/{reception.Id}/annuler", null);
+        Assert.Equal(autorise ? HttpStatusCode.OK : HttpStatusCode.Forbidden, annulation.StatusCode);
+    }
+
     private sealed class FakeReceptionContextService(ReceptionU2ContextResponse? response) : IReceptionUsinage2ContextService
     {
         public Task<ReceptionU2ContextResponse?> GetAsync(string numeroOF, DateOnly dateReception, CancellationToken cancellationToken = default)

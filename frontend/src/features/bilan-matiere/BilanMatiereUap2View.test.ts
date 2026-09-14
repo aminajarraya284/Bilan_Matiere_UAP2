@@ -54,23 +54,9 @@ const response: BilanUap2ApiResponse = {
   pageSize: 1
 };
 
-const mountView = () =>
-  mount(BilanMatiereUap2View, {
-    global: {
-      stubs: {
-        PageHeader: {
-          props: ['title', 'description'],
-          template: '<header>{{ title }} {{ description }}</header>'
-        },
-        FormField: { template: '<label><slot /></label>' },
-        LoadingState: { template: '<div data-testid="loading">Chargement du bilan UAP2...</div>' },
-        BadgeStatus: {
-          props: ['status'],
-          template: '<span data-testid="status">{{ status }}</span>'
-        }
-      }
-    }
-  });
+// Les composants enfants sont importes dans `<script setup>` : un stub par nom n'est
+// jamais applique ici. La vue est donc montee avec ses vrais composants d'affichage.
+const mountView = () => mount(BilanMatiereUap2View);
 
 describe('BilanMatiereUap2View', () => {
   beforeEach(() => {
@@ -126,7 +112,7 @@ describe('BilanMatiereUap2View', () => {
     const wrapper = mountView();
     await flushPromises();
 
-    expect(wrapper.get('[data-testid="status"]').text()).toBe('DonneesManquantes');
+    expect(wrapper.get('tbody .status-badge').text()).toBe('DonneesManquantes');
     expect(wrapper.text()).toContain('POIDS_PHYSIQUE_NON_RESOLU');
     expect(wrapper.text()).toContain('ECART_HORS_SEUIL');
   });
@@ -146,7 +132,7 @@ describe('BilanMatiereUap2View', () => {
 
     const wrapper = mountView();
 
-    expect(wrapper.get('[data-testid="loading"]').text()).toContain('Chargement');
+    expect(wrapper.get('[role="status"]').text()).toContain('Chargement');
     expect(wrapper.text()).not.toContain('OF-REAL-001');
   });
 

@@ -75,7 +75,7 @@ const DEFAULTS: Readonly<Record<DataVertical, DataSourceMode>> = {
   audit: 'api',
 
   // Parametres et types matiere sont relies aux endpoints backend reels.
-  // La gestion des profils n'est pas appelee tant que son lot n'est pas valide.
+  // Les profils utilisateurs sont également reliés à /v1/admin/utilisateurs.
   administration: 'api',
 
   // Aucun endpoint backend ET aucune donnee de demonstration credible :

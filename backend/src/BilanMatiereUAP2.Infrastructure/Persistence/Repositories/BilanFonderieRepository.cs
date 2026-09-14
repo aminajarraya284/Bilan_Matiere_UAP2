@@ -10,7 +10,8 @@ namespace BilanMatiereUAP2.Infrastructure.Persistence.Repositories;
 /// Raison : EF Core 8 ne sait pas agreger un <c>decimal</c> sous SQLite (provider des
 /// tests d'integration). Le contournement habituel — caster en <c>double</c> — introduit
 /// une perte de precision inacceptable sur des poids qui alimentent un bilan matiere.
-/// Le volume est borne par le mois demande, ce qui rend le chargement acceptable.
+/// Le filtrage SQL limite le chargement à l'intervalle demandé. Une plage très longue
+/// reste à dimensionner en recette volumétrique (agrégations décimales en mémoire).
 /// </summary>
 public sealed class BilanFonderieRepository(BilanMatiereUAP2DbContext context) : IBilanFonderieRepository
 {
@@ -38,16 +39,16 @@ public sealed class BilanFonderieRepository(BilanMatiereUAP2DbContext context) :
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<BilanFonderieSortieX3>> GetSortiesMagasinX3Async(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default)
     {
-        var fin = periode.AddMonths(1);
         var lignes = await context.ConsommationsComposants
             .AsNoTracking()
             .Where(consommation =>
                 consommation.Statut == StatutRapprochementX3.Rapproche &&
-                consommation.DateImputation >= periode &&
-                consommation.DateImputation < fin)
+                consommation.DateImputation >= dateDebut &&
+                consommation.DateImputation <= dateFin)
             .Select(consommation => new
             {
                 consommation.CodeTypeMatiere,
@@ -67,17 +68,17 @@ public sealed class BilanFonderieRepository(BilanMatiereUAP2DbContext context) :
     }
 
     public async Task<IReadOnlyList<BilanFonderieDechet>> GetDechetsAsync(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default)
     {
-        var fin = periode.AddMonths(1);
         var lignes = await context.DechetsFonderie
             .AsNoTracking()
             .Where(dechet =>
                 !dechet.EstSupprime &&
                 dechet.Statut == StatutDechet.Valide &&
-                dechet.DateDeclaration >= periode &&
-                dechet.DateDeclaration < fin)
+                dechet.DateDeclaration >= dateDebut &&
+                dechet.DateDeclaration <= dateFin)
             .Select(dechet => new { dechet.TypeMatiereId, dechet.PoidsKg })
             .ToListAsync(cancellationToken);
 
@@ -88,16 +89,16 @@ public sealed class BilanFonderieRepository(BilanMatiereUAP2DbContext context) :
     }
 
     public async Task<IReadOnlyList<BilanFonderieReception>> GetReceptionsUsinage2Async(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default)
     {
-        var fin = periode.AddMonths(1);
         var lignes = await context.ReceptionsUsinage2
             .AsNoTracking()
             .Where(reception =>
                 reception.StatutReception == StatutReceptionUsinage2.Valide &&
-                reception.DateReception >= periode &&
-                reception.DateReception < fin &&
+                reception.DateReception >= dateDebut &&
+                reception.DateReception <= dateFin &&
                 reception.CodeTypeMatiere != null)
             .Select(reception => new { reception.CodeTypeMatiere, reception.PoidsTotalReceptionneKg })
             .ToListAsync(cancellationToken);
@@ -113,17 +114,17 @@ public sealed class BilanFonderieRepository(BilanMatiereUAP2DbContext context) :
     }
 
     public async Task<int> CompterReceptionsSansTypeMatiereAsync(
-        DateOnly periode,
+        DateOnly dateDebut,
+        DateOnly dateFin,
         CancellationToken cancellationToken = default)
     {
-        var fin = periode.AddMonths(1);
         return await context.ReceptionsUsinage2
             .AsNoTracking()
             .CountAsync(
                 reception =>
                     reception.StatutReception == StatutReceptionUsinage2.Valide &&
-                    reception.DateReception >= periode &&
-                    reception.DateReception < fin &&
+                    reception.DateReception >= dateDebut &&
+                    reception.DateReception <= dateFin &&
                     reception.CodeTypeMatiere == null,
                 cancellationToken);
     }

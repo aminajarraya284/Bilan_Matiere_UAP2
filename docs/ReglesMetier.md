@@ -191,8 +191,9 @@ ResponsableUsinage2    réceptions, rebuts, bilan Usinage 2
 - **Implémentation** : `Program.cs`, `EntraIdAuthenticationOptions`,
   `EntraIdRoleMappingTransformation`. Voir [`AuthentificationEntraId.md`](AuthentificationEntraId.md).
 - **Tests** : `ProductionAuthenticationGuardTests`, `EntraIdAuthenticationTests`.
-- **Reste à faire** : le **frontend** n'acquiert pas encore de jeton Entra ID (MSAL) ; il
-  utilise le flux de connexion de développement.
+- **Frontend** : acquisition de jetons Entra via MSAL implémentée ; le mode local
+  `development` reste distinct. Logique applicative validée par tests ; validation
+  sur tenant réel SOPAL encore requise.
 - **Statut** : **Confirmée**. Ce garde-fou ne doit jamais être affaibli.
 
 ### RM-SEC-004 — Mode d'authentification de développement
@@ -385,6 +386,11 @@ PARAMETRE_APPLICATION_MANQUANT:<clé>    paramètre requis absent
 - **Statut** : **Confirmée**.
 
 ### RM-U2-004 — Saisie d'une réception Usinage 2
+
+- **Droits** : lecture et gestion via API pour `Admin` et `ResponsableUsinage2` ;
+  `ResponsableFonderie` est exclu. La **validation est réservée à Admin** (UI et
+  policy `ValidateReceptionsUsinage2`). Une tentative directe des autres rôles
+  renvoie `403`, sans modifier le brouillon.
 
 - **Champs saisis** : `NumeroOF`, `DateReception`, `NombrePiecesReceptionnees`,
   `PoidsTotalReceptionneKg`, origine, observations.
@@ -586,10 +592,15 @@ ECART  = INPUT - OUTPUT
 - **Origine du stock de début** : voir `RM-INV-005`.
 - **Comportement en cas de donnée manquante** : une composante absente ne devient pas
   zéro ; le bilan est marqué en anomalie ou en donnée manquante (`RM-COM-003`).
-- **État d'implémentation** : implémentée côté serveur, `GET /api/v1/bilans/fonderie/{periode}`
-  (une ligne par type matière actif). Le frontend consomme cet endpoint
-  (`VITE_BILAN_FONDERIE_SOURCE=api`) ; le calcul frontend sur données de démonstration
-  n'est plus utilisé qu'en mode `mock`.
+- **État d'implémentation** : calcul côté serveur, une ligne par type matière actif.
+  `GET /api/v1/bilans/fonderie/{periode}` reste mensuel (archives, rapports, Dashboard).
+  L'écran Fonderie utilise `GET /api/v1/bilans/fonderie?dateDebut=YYYY-MM-DD&dateFin=YYYY-MM-DD` :
+  deux dates obligatoires, ordonnées, bornes inclusives ; sinon `400`.
+  Les flux sont filtrés en SQL. Les stocks ne sont pas des flux : seuls le stock
+  de début au premier jour du mois et le stock de fin au dernier jour du mois
+  sont repris des projections mensuelles. Toute autre borne reste `null`.
+  Voir [`BilanFonderieIntervalle.md`](BilanFonderieIntervalle.md). Le mode démonstration
+  mensuel historique ne simule pas un intervalle arbitraire.
 - **Origine de chaque composante** :
 
 | Composante | Source persistée | Unité |
@@ -817,20 +828,6 @@ en corrigeant au passage la formule documentée.
 - **Reste ouvert** : le signe du Rebut U2 (`RM-UAP2-002`).
 - **Statut** : **Résolue**.
 
---- | --- | --- | --- |
-| B1 | **Référence CTRL** — `RM-UAP2-001` somme `SCI + EMR + TRN`, mais `TODO_METIER_UAP2_CTRL_REFERENCE` demande laquelle est *la* référence | Contradiction interne | Sommer les trois ou n'en retenir qu'une donne des résultats sans commune mesure |
-| B2 | **Unité d'`EntreeOF`** — `EntreeOfComposant.Unite` vaut `"UN"` (pièces) alors que `RM-UAP2-002` attend des kg | Unité | Additionner pièces et kg viole `RM-COM-005` ; convertir exige `PoidsPhysiqueUnitaireKg`, souvent non résolu (`RM-U2-009`) |
-| B3 | **`EntreesSemiFiniesKg`** — terme de la formule `RM-UAP2-002` | **Donnée inexistante** | Aucune entité, aucun import, aucun champ ne la porte : la retenir à zéro fausserait tout écart |
-
-- **Décision retenue** : ne pas implémenter. Le service frontend lève une erreur
-  explicite si la verticale est passée en `api` (`bilan.service.ts`), plutôt que
-  d'appeler des routes inexistantes. La verticale reste en `mock`, où le calcul de
-  démonstration est assumé comme tel.
-- **Précédent** : un écart matière faux mais d'apparence crédible est plus nuisible
-  qu'une fonctionnalité absente — même principe que le mode `disabled` de la
-  synchronisation X3.
-- **Statut** : **Bloquée** — B1, B2 et B3 **À valider** par SOPAL.
-
 ---
 
 ## RM-ALERT — Alertes métier persistées
@@ -907,15 +904,17 @@ catalogue ne doit être émis par le générateur.
 ### RM-VAL-001 — Workflow de bilan
 
 - **Opérations attendues** : vérifier, justifier, clôturer un bilan.
-- **État actuel** : **aucun endpoint backend n'existe**, quel que soit le bilan — y
-  compris le Bilan Usinage 2 dont seul le calcul en lecture est exposé. Les opérations
-  sont simulées côté frontend sur données de démonstration et **ne sont pas persistées**.
-- **Conséquence métier** : un bilan ne peut pas être clôturé durablement. L'application
-  ne remplace pas encore le classeur Excel sur ce point précis.
-- **Décision attendue de SOPAL** : définir les statuts de bilan, les rôles autorisés à
-  valider et à clôturer, et le comportement d'une période clôturée (saisies encore
-  possibles ou non).
-- **Statut** : **À valider** — fonctionnalité absente.
+- **État actuel** : la fausse validation « Valider tout » et ses méthodes de
+  démonstration ont été retirées. « Actualiser le bilan » effectue un seul GET ;
+  `Complet` / `Incomplet` décrivent la disponibilité des données, pas une validation métier.
+- **Archivage officiel existant** : « Enregistrer la période », réservé à `Admin`,
+  persiste un snapshot mensuel immuable des trois bilans via
+  `POST /api/v1/periodes-bilan/{periode}/enregistrer`. Voir
+  [`ArchivagePeriodes.md`](ArchivagePeriodes.md). Cet archivage n'est pas retiré ni
+  remplacé par un workflow de vérification/justification.
+- **Décision attendue de SOPAL** : un éventuel circuit métier supplémentaire de
+  vérification/justification et les règles de saisie après clôture.
+- **Statut** : archivage implémenté ; circuit métier supplémentaire **À valider**.
 
 ### RM-VAL-002 — Comportement en période clôturée
 
@@ -933,7 +932,7 @@ comportement actuel est conservé tel quel.
 | Règle | Sujet | Impact |
 | --- | --- | --- |
 | `RM-U2-010` | Colonne, unité et conversion du poids théorique | **Bloquant** : écart de poids inerte |
-| `RM-VAL-001` | Workflow vérifier / justifier / clôturer | **Bloquant** : aucun bilan clôturable |
+| `RM-VAL-001` | Circuit métier vérifier / justifier | À définir ; archivage mensuel déjà disponible |
 | `RM-U2-009` | Choix entre plusieurs contrôles poids validés | Poids physique non résolu si pluralité |
 | `RM-U2-011` | Seuil d'alerte `> 3 %` ou `>= 3 %`, écarts négatifs | Alerte non paramétrée |
 | `RM-UAP2-002` | Signe du Rebut U2 dans l'écart | Écart faussé de deux fois le rebut U2 |
@@ -946,7 +945,7 @@ comportement actuel est conservé tel quel.
 
 | Règle | Sujet | État |
 | --- | --- | --- |
-| `RM-VAL-001` | Workflow vérifier / justifier / clôturer | Démonstration uniquement ; aucun endpoint |
+| `RM-VAL-001` | Circuit métier vérifier / justifier | Non implémenté ; fausse validation retirée, archivage mensuel réel conservé |
 
 Les bilans Fonderie (`RM-FON-003`) et UAP2 (`RM-UAP2-001`, `RM-UAP2-002`) sont désormais
 calculés côté serveur — voir le tableau ci-dessous.
@@ -956,6 +955,7 @@ calculés côté serveur — voir le tableau ci-dessous.
 | Règle | Endpoint | Unité du résultat |
 | --- | --- | --- |
 | `RM-FON-003` | `GET /api/v1/bilans/fonderie/{periode}` | kilogrammes |
+| `RM-FON-003` | `GET /api/v1/bilans/fonderie?dateDebut=YYYY-MM-DD&dateFin=YYYY-MM-DD` | kilogrammes, consultation live |
 | `RM-UAP2-001` | `GET /api/v1/bilans/uap2/{periode}` (`sortieMpKg`) | kilogrammes |
 | `RM-UAP2-002` | `GET /api/v1/bilans/uap2/{periode}` (`ecartUap2Pieces`) | **pièces** |
 | `RM-U2-*` | `GET /api/v1/bilans/usinage2/{periode}` | pièces |

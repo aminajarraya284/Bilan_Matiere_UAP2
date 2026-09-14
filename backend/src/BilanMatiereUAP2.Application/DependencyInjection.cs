@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IAlerteNonReceptionService, AlerteNonReceptionService>();
         services.AddScoped<IBilanUsinage2Service, BilanUsinage2Service>();
         services.AddScoped<IBilanFonderieService, BilanFonderieService>();
+        services.AddScoped<IBilanFonderieIntervalleService, BilanFonderieService>();
         services.AddScoped<IBilanUap2Service, BilanUap2Service>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IAlerteDetectionService, AlerteDetectionService>();

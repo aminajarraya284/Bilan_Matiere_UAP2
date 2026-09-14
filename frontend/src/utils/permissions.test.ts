@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hasPermission } from './permissions';
+import type { UserRole } from '@/types/common.types';
 
 describe('route permissions', () => {
   it('réserve les rapports et les archives au rôle Admin', () => {
@@ -23,7 +24,8 @@ describe('route permissions', () => {
   it('autorise Responsable Fonderie sur ses operations', () => {
     expect(hasPermission('ResponsableFonderie', 'ControlePoidsFonderie')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'DechetsFonderie')).toBe(true);
-    expect(hasPermission('ResponsableFonderie', 'ReceptionsUsinage2')).toBe(true);
+    expect(hasPermission('ResponsableFonderie', 'ReceptionsUsinage2')).toBe(false);
+    expect(hasPermission('ResponsableFonderie', 'Inventaire')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'Dashboard')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'BilanMatiere')).toBe(true);
   });
@@ -37,5 +39,14 @@ describe('route permissions', () => {
 
   it('refuse une route protegee non declaree', () => {
     expect(hasPermission('Admin', 'RouteInconnue')).toBe(false);
+  });
+
+  it.each<[UserRole, boolean, boolean]>([
+    ['Admin', true, true],
+    ['ResponsableFonderie', true, false],
+    ['ResponsableUsinage2', false, true]
+  ])('aligne inventaire et réceptions pour %s', (role, inventaire, receptions) => {
+    expect(hasPermission(role, 'Inventaire')).toBe(inventaire);
+    expect(hasPermission(role, 'ReceptionsUsinage2')).toBe(receptions);
   });
 });

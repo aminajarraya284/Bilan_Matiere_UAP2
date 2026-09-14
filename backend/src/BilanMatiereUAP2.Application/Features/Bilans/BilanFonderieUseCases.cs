@@ -13,6 +13,12 @@ public interface IBilanFonderieService
     Task<BilanFonderieResponse> GetAsync(string periode, CancellationToken cancellationToken = default);
 }
 
+public interface IBilanFonderieIntervalleService
+{
+    Task<BilanFonderieIntervalleResponse> GetIntervalleAsync(
+        string? dateDebut, string? dateFin, CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Bilan Fonderie mensuel, une ligne par type matiere actif, uniquement en kilogrammes.
 ///
@@ -24,7 +30,8 @@ public interface IBilanFonderieService
 /// L'inventaire Four est exclu (RM-INV-004) : il ne participe pas au stock de fin,
 /// c'est la projection d'inventaire qui applique deja cette exclusion.
 /// </summary>
-public sealed class BilanFonderieService(IBilanFonderieRepository repository) : IBilanFonderieService
+public sealed class BilanFonderieService(IBilanFonderieRepository repository)
+    : IBilanFonderieService, IBilanFonderieIntervalleService
 {
     /// <summary>
     /// Seule unite directement sommable. Les consommations X3 arrivent en unites mixtes
@@ -39,30 +46,71 @@ public sealed class BilanFonderieService(IBilanFonderieRepository repository) : 
     public const string AnomalieReceptionsPoids = "RECEPTIONS_U2_POIDS_MANQUANT";
     public const string AnomalieReceptionsTypeMatiere = "RECEPTIONS_U2_TYPE_MATIERE_NON_RESOLU";
 
-    public async Task<BilanFonderieResponse> GetAsync(
+    public Task<BilanFonderieResponse> GetAsync(
         string periode,
         CancellationToken cancellationToken = default)
     {
         var premierJour = ParsePeriode(periode);
+        var dernierJour = new DateOnly(premierJour.Year, premierJour.Month,
+            DateTime.DaysInMonth(premierJour.Year, premierJour.Month));
+        return CalculerAsync(premierJour, dernierJour, periode, cancellationToken);
+    }
+
+    public async Task<BilanFonderieIntervalleResponse> GetIntervalleAsync(
+        string? dateDebut, string? dateFin, CancellationToken cancellationToken = default)
+    {
+        var debut = ParseDate(dateDebut, nameof(dateDebut));
+        var fin = ParseDate(dateFin, nameof(dateFin));
+        if (debut > fin)
+            throw new ValidationException([new ValidationFailure(nameof(dateFin),
+                "La date de fin doit être supérieure ou égale à la date de début.")]);
+
+        var bilan = await CalculerAsync(debut, fin, $"{debut:yyyy-MM-dd}/{fin:yyyy-MM-dd}", cancellationToken);
+        return new BilanFonderieIntervalleResponse(debut, fin, bilan);
+    }
+
+    private static DateOnly ParseDate(string? valeur, string champ)
+    {
+        if (!DateOnly.TryParseExact(valeur, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var date))
+            throw new ValidationException([new ValidationFailure(champ,
+                "La date est obligatoire et doit respecter le format YYYY-MM-DD.")]);
+        return date;
+    }
+
+    private async Task<BilanFonderieResponse> CalculerAsync(
+        DateOnly dateDebut, DateOnly dateFin, string periode, CancellationToken cancellationToken)
+    {
+        var moisDebut = new DateOnly(dateDebut.Year, dateDebut.Month, 1);
+        var moisFin = new DateOnly(dateFin.Year, dateFin.Month, 1);
 
         var types = await repository.GetTypesMatiereActifsAsync(cancellationToken);
-        var stocks = (await repository.GetStocksAsync(premierJour, cancellationToken))
-            .ToDictionary(stock => stock.TypeMatiereId);
-        var sorties = (await repository.GetSortiesMagasinX3Async(premierJour, cancellationToken))
+        // Un état mensuel n'est utilisable qu'à sa borne naturelle. Aucun stock
+        // journalier n'est extrapolé et les inventaires ne sont jamais additionnés.
+        var stocksDebut = dateDebut.Day == 1
+            ? (await repository.GetStocksAsync(moisDebut, cancellationToken)).ToDictionary(x => x.TypeMatiereId)
+            : new Dictionary<Guid, BilanFonderieStock>();
+        var stocksFin = dateFin.Day == DateTime.DaysInMonth(dateFin.Year, dateFin.Month)
+            ? dateDebut.Day == 1 && moisDebut == moisFin
+                ? stocksDebut
+                : (await repository.GetStocksAsync(moisFin, cancellationToken)).ToDictionary(x => x.TypeMatiereId)
+            : new Dictionary<Guid, BilanFonderieStock>();
+        var sorties = (await repository.GetSortiesMagasinX3Async(dateDebut, dateFin, cancellationToken))
             .GroupBy(sortie => sortie.CodeTypeMatiere, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(groupe => groupe.Key, groupe => groupe.ToArray(), StringComparer.OrdinalIgnoreCase);
-        var dechets = (await repository.GetDechetsAsync(premierJour, cancellationToken))
+        var dechets = (await repository.GetDechetsAsync(dateDebut, dateFin, cancellationToken))
             .GroupBy(dechet => dechet.TypeMatiereId)
             .ToDictionary(groupe => groupe.Key, groupe => groupe.Sum(dechet => dechet.PoidsKg));
-        var receptions = (await repository.GetReceptionsUsinage2Async(premierJour, cancellationToken))
+        var receptions = (await repository.GetReceptionsUsinage2Async(dateDebut, dateFin, cancellationToken))
             .ToDictionary(reception => reception.CodeTypeMatiere, StringComparer.OrdinalIgnoreCase);
-        var receptionsSansType = await repository.CompterReceptionsSansTypeMatiereAsync(premierJour, cancellationToken);
+        var receptionsSansType = await repository.CompterReceptionsSansTypeMatiereAsync(dateDebut, dateFin, cancellationToken);
 
         var lignes = types
             .Select(type => ConstruireLigne(
                 type,
                 periode,
-                stocks.GetValueOrDefault(type.Id),
+                stocksDebut.GetValueOrDefault(type.Id)?.StockDebutKg,
+                stocksFin.GetValueOrDefault(type.Id)?.StockFinKg,
                 sorties.GetValueOrDefault(type.Code) ?? [],
                 dechets.GetValueOrDefault(type.Id),
                 receptions.GetValueOrDefault(type.Code),
@@ -84,7 +132,8 @@ public sealed class BilanFonderieService(IBilanFonderieRepository repository) : 
     private static BilanFonderieLigneResponse ConstruireLigne(
         BilanFonderieTypeMatiere type,
         string periode,
-        BilanFonderieStock? stock,
+        decimal? stockDebutKg,
+        decimal? stockFinKg,
         IReadOnlyList<BilanFonderieSortieX3> sortiesDuType,
         decimal? dechetsKg,
         BilanFonderieReception? reception,
@@ -92,11 +141,9 @@ public sealed class BilanFonderieService(IBilanFonderieRepository repository) : 
     {
         var anomalies = new List<string>();
 
-        var stockDebutKg = stock?.StockDebutKg;
         if (stockDebutKg is null) anomalies.Add(AnomalieStockDebut);
 
-        decimal? stockFinKg = stock?.StockFinKg;
-        if (stock is null) anomalies.Add(AnomalieStockFin);
+        if (stockFinKg is null) anomalies.Add(AnomalieStockFin);
 
         // Seules les lignes deja en kg sont sommees ; les autres sont signalees avec leur
         // unite pour que l'ecart affiche ne soit jamais pris pour un total exhaustif.

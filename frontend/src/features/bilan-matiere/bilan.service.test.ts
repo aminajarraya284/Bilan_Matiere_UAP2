@@ -115,7 +115,7 @@ describe('bilanService - Bilan Fonderie réel', () => {
     expect(report.ecartKg).toBeNull();
     expect(report.encoursFinReel).toBe(90);
     expect(report.anomalies).toContain('STOCK_DEBUT_INDISPONIBLE');
-    expect(report.statut).toBe('AvecEcart');
+    expect(report.statut).toBe('Incomplet');
   });
 
   it('filtre par type matière sans endpoint de calcul dédié', async () => {
@@ -128,6 +128,27 @@ describe('bilanService - Bilan Fonderie réel', () => {
     expect(resultats).toHaveLength(1);
     expect(resultats[0].typeMatiere).toBe('M3010L0');
     expect(mocks.apiPost).not.toHaveBeenCalled();
+  });
+
+  it('transmet les deux dates au GET de consultation sans validation fictive', async () => {
+    mocks.apiGet.mockResolvedValue({ data: {
+      dateDebut: '2026-07-10', dateFin: '2026-07-20',
+      bilan: { lignes: [{ ...ligneApi, statut: 'Complet' }] }
+    } });
+    const [report] = await bilanService.getBilans('2026-07', '2026-07-10', '2026-07-20');
+    expect(mocks.apiGet).toHaveBeenCalledExactlyOnceWith('/v1/bilans/fonderie', {
+      params: { dateDebut: '2026-07-10', dateFin: '2026-07-20' }
+    });
+    expect(report.statut).toBe('Complet');
+    expect(mocks.apiPost).not.toHaveBeenCalled();
+  });
+
+  it('ne retombe pas sur le mois lorsque la date de fin manque', async () => {
+    mocks.apiGet.mockRejectedValue(new Error('400'));
+    await expect(bilanService.getBilans('2026-07', '2026-07-10')).rejects.toThrow('400');
+    expect(mocks.apiGet).toHaveBeenCalledWith('/v1/bilans/fonderie', {
+      params: { dateDebut: '2026-07-10', dateFin: undefined }
+    });
   });
 
   it("propage l'erreur API sans repli sur les données de démonstration", async () => {
@@ -189,6 +210,12 @@ describe('bilanService - bilans de démonstration', () => {
     expect(mocks.calculateBilanFonderie).toHaveBeenCalled();
     expect(mocks.apiGet).not.toHaveBeenCalled();
     expect(mocks.apiPost).not.toHaveBeenCalled();
+  });
+
+  it('refuse un intervalle en démonstration plutôt que de simuler son filtrage', async () => {
+    await expect(bilanService.getBilans('2026-07', '2026-07-10', '2026-07-20')).rejects.toThrow();
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+    expect(mocks.calculateBilanFonderie).not.toHaveBeenCalled();
   });
 
   it("ne contacte pas l'API pour le Bilan UAP2", async () => {

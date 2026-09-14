@@ -9,8 +9,7 @@ import { testDataRepository } from '@/services/testDataRepository.service';
 import type {
   BilanFonderieApiLigne,
   BilanFonderieApiResponse,
-  BilanUap2ApiResponse,
-  VerifyBilanRequest
+  BilanUap2ApiResponse
 } from '@/types/api.types';
 import type { RebutUap2Saisie, RebutUsinage2 } from '@/mocks/sopalTestDataset';
 import type {
@@ -22,11 +21,7 @@ import type {
 } from './bilan.types';
 import { assertApiSource, isMockSource } from '@/config/dataSources';
 
-type BilanResult = BilanMatiereReport | BilanUsinage2ParPiece | BilanUap2ParOF;
-type ViewBilanType = 'fonderie' | 'usinage' | 'uap2';
-
-// Chaque bilan a sa propre source : Fonderie et UAP2 n'ont pas d'endpoint backend,
-// contrairement au Bilan Usinage 2 qui est calcule server-side.
+// Chaque bilan dispose d'une API de calcul en lecture et d'une source configurable.
 const isMockFonderie = (): boolean => isMockSource('bilanFonderie');
 const isMockUap2 = (): boolean => isMockSource('bilanUap2');
 
@@ -97,22 +92,11 @@ const toBilanFonderieReport = (ligne: BilanFonderieApiLigne): BilanMatiereReport
   outputTotal: ligne.outputKg,
   ecartKg: ligne.ecartKg,
   tauxEcart: ligne.tauxEcartPourcent,
-  // Une ligne incomplete n'est pas « valide » : elle reste a controler.
-  statut: ligne.statut === 'Complet' ? 'Valide' : 'AvecEcart',
+  // La complétude des données ne constitue pas une validation métier.
+  statut: ligne.statut,
   dateCalcul: new Date().toISOString(),
   anomalies: ligne.anomalies
 });
-
-const findMockBilan = (bilanKey: string, type: ViewBilanType): BilanResult | undefined => {
-  const dataset = testDataRepository.getDataset();
-  if (type === 'fonderie') {
-    return calculateBilanFonderie(dataset).find((item) => item.bilanKey === bilanKey);
-  }
-  if (type === 'usinage') {
-    return calculateBilanUsinage2(dataset).find((item) => item.bilanKey === bilanKey);
-  }
-  return calculateBilanUap2(dataset).find((item) => item.bilanKey === bilanKey);
-};
 
 export const bilanService = {
   async getBilans(
@@ -134,9 +118,16 @@ export const bilanService = {
 
   async getBilansFonderie(
     periode: string = BUSINESS_RULES.periodeParDefaut,
-    _dateDebut?: string,
-    _dateFin?: string
+    dateDebut?: string,
+    dateFin?: string
   ): Promise<BilanMatiereReport[]> {
+    if (dateDebut !== undefined || dateFin !== undefined) {
+      assertApiSource('bilanFonderie');
+      const response = await api.get<{ dateDebut: string; dateFin: string; bilan: BilanFonderieApiResponse }>(
+        '/v1/bilans/fonderie', { params: { dateDebut, dateFin } }
+      );
+      return response.data.bilan.lignes.map(toBilanFonderieReport);
+    }
     if (isMockFonderie()) return calculateBilanFonderie(testDataRepository.getDataset(), periode);
     const response = await api.get<BilanFonderieApiResponse>(
       `/v1/bilans/fonderie/${encodeURIComponent(periode)}`
@@ -227,15 +218,8 @@ export const bilanService = {
     throw new Error(BILAN_UAP2_ANCIEN_CONTRAT);
   },
 
-  // ---------------------------------------------------------------------------
-  // Saisies et workflow de contrôle ci-dessous : AUCUN endpoint backend n'existe,
-  // quel que soit le bilan concerné (y compris le Bilan U2, dont seul le calcul en
-  // lecture est exposé par `GET /v1/bilans/usinage2/{periode}`). Ces opérations
-  // restent donc en données de démonstration. Les appels API correspondants ont
-  // été retirés : ils visaient des routes inexistantes (`/rebuts-usinage-2`,
-  // `/rebuts-uap2`, `/bilans/{cle}/verifier|justifier|cloturer`) et produisaient
-  // systématiquement des 404. Ils seront réintroduits avec les contrôleurs réels.
-  // ---------------------------------------------------------------------------
+  // Anciennes saisies du jeu de démonstration uniquement. Les saisies U2 réelles
+  // passent par rebutsUsinage2.service.ts et son API dédiée.
 
   async createRebutUsinage2(data: Omit<RebutUsinage2, 'id' | 'statut' | 'creePar'>): Promise<RebutUsinage2> {
     const current = testDataRepository.getRebutsUsinage2();
@@ -267,63 +251,5 @@ export const bilanService = {
       ...current.filter((item) => !(item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode)))
     ]);
     return created;
-  },
-
-  async verifierBilan(
-    bilanKey: string,
-    type: ViewBilanType,
-    payload: Omit<VerifyBilanRequest, 'bilanType'>
-  ): Promise<BilanResult> {
-    const current = findMockBilan(bilanKey, type);
-    if (!current) throw new Error('Bilan non trouvé');
-    if (type === 'fonderie') {
-      return {
-        ...(current as BilanMatiereReport),
-        statut: payload.statutControle as BilanMatiereReport['statut'],
-        justification: payload.justification ?? (current as BilanMatiereReport).justification
-      };
-    }
-    if (type === 'usinage') {
-      const currentUsinage = current as BilanUsinage2ParPiece;
-      return {
-        ...currentUsinage,
-        statutControle: payload.statutControle as BilanUsinage2ParPiece['statutControle'],
-        observation: payload.observation ?? currentUsinage.observation
-      };
-    }
-    const currentUap2 = current as BilanUap2ParOF;
-    return {
-      ...currentUap2,
-      statut: payload.statutControle as BilanUap2ParOF['statut'],
-      observation: payload.observation ?? currentUap2.observation
-    };
-  },
-
-  async justifierBilan(bilanKey: string, type: ViewBilanType, justification: string): Promise<BilanResult> {
-    const current = findMockBilan(bilanKey, type);
-    if (!current) throw new Error('Bilan non trouvé');
-    return type === 'fonderie'
-      ? { ...(current as BilanMatiereReport), justification }
-      : { ...current, observation: justification };
-  },
-
-  async cloturerBilan(bilanKey: string, type: ViewBilanType): Promise<BilanResult> {
-    const current = findMockBilan(bilanKey, type);
-    if (!current) throw new Error('Bilan non trouvé');
-    if (type === 'fonderie') return { ...(current as BilanMatiereReport), statut: 'Cloture' };
-    if (type === 'usinage') {
-      return { ...(current as BilanUsinage2ParPiece), statutControle: 'Regularise' };
-    }
-    return { ...(current as BilanUap2ParOF), statut: 'Cloture' };
-  },
-
-  async validerBilan(bilanKey: string): Promise<BilanMatiereReport> {
-    return this.verifierBilan(bilanKey, 'fonderie', {
-      statutControle: 'Valide'
-    }) as Promise<BilanMatiereReport>;
-  },
-
-  async justifierEcart(bilanKey: string, justification: string): Promise<BilanMatiereReport> {
-    return this.justifierBilan(bilanKey, 'fonderie', justification) as Promise<BilanMatiereReport>;
   }
 };

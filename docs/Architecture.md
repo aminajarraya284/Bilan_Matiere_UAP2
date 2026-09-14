@@ -67,7 +67,7 @@ La source de donnees de chaque verticale est pilotee par `frontend/src/config/da
 | **Alertes** | `api` | `/api/v1/alertes` |
 | Rapports | `api` | `/api/v1/rapports` |
 | Journal d'audit | `api` | `/api/v1/audit` |
-| Administration | `mock` | aucun |
+| Administration | `api` | `/api/v1/parametres`, `/api/v1/types-matiere`, `/api/v1/admin/utilisateurs` |
 | Synchronisation Sage X3 | `disabled` | aucun |
 
 Les verticales qui restent en `mock` sont isolées du réseau. Une erreur d'une verticale en mode `api` est affichée telle quelle : aucun repli silencieux vers une donnée de démonstration n'est autorisé.
@@ -150,7 +150,7 @@ RapportsService
 
 Chaque réponse contient des métadonnées (`code`, date UTC, période, unité principale, caractère partiel et avertissements). Les exports CSV rappellent les unités dans les en-têtes et sont produits à partir des mêmes projections applicatives que l'aperçu. Les valeurs absentes restent vides dans le CSV et `null` dans le JSON.
 
-La policy HTTP autorise les trois rôles métier. `RapportsService` applique ensuite un périmètre par code : Fonderie/Inventaire pour `ResponsableFonderie`, U2/UAP2/non-réceptions pour `ResponsableUsinage2`, rapports transverses selon les sources déjà filtrées, et totalité pour `Admin`. Voir [`Rapports.md`](Rapports.md).
+Les rapports sont réservés à `Admin`, côté policy HTTP, service applicatif et navigation frontend. Les deux rôles responsables n'y ont pas accès, même par appel direct. Voir [`Rapports.md`](Rapports.md).
 
 ### Journal d'audit persistant
 

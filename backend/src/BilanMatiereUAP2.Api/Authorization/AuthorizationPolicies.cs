@@ -12,6 +12,7 @@ public static class AuthorizationPolicies
     public const string ReadReferences = nameof(ReadReferences);
     public const string ReadReceptionsUsinage2 = nameof(ReadReceptionsUsinage2);
     public const string ManageReceptionsUsinage2 = nameof(ManageReceptionsUsinage2);
+    public const string ValidateReceptionsUsinage2 = nameof(ValidateReceptionsUsinage2);
     public const string ReadInventairesFonderie = nameof(ReadInventairesFonderie);
     public const string ManageInventairesFonderie = nameof(ManageInventairesFonderie);
     public const string ManageAdministration = nameof(ManageAdministration);

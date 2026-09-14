@@ -10,8 +10,8 @@ namespace BilanMatiereUAP2.Api.Controllers;
 ///
 /// Ce controleur debloque l'usage de l'application en Development (VITE_USE_REAL_API=true)
 /// en fournissant au frontend un token exploitable. Il ne constitue en aucun cas
-/// l'authentification de production : celle-ci passera par Entra ID
-/// (voir TODO_METIER Entra ID dans Program.cs) et fera l'objet d'un lot separe.
+/// l'authentification de production : Entra ID est implémenté séparément (JWT/OIDC,
+/// MSAL côté frontend). La validation sur le tenant réel SOPAL reste nécessaire.
 /// </summary>
 [ApiController]
 [Route("api/auth")]

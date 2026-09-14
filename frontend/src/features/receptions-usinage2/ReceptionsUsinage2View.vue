@@ -33,7 +33,9 @@ const bilanIndisponible = ref(false);
 
 // Access checks
 const isAdmin = computed(() => authStore.userRole === 'Admin');
-const canAdd = computed(() => authStore.userRole === 'Admin' || authStore.userRole === 'ResponsableUsinage2');
+// Reflet exact de la policy backend ManageReceptionsUsinage2 : saisir, modifier,
+// annuler et supprimer. La validation, elle, reste reservee a l'Admin.
+const peutGerer = computed(() => authStore.userRole === 'Admin' || authStore.userRole === 'ResponsableUsinage2');
 
 // Le workflow Brouillon -> Valide/Annule n'existe que cote API reelle : les receptions mock
 // sont creees directement en statut Valide (voir receptions.service.ts), pas de bouton necessaire.
@@ -251,7 +253,7 @@ const handleDelete = async (id: number) => {
 };
 
 const handleValider = async (row: ReceptionUsinage2Mouvement) => {
-  if (!row.apiId) return;
+  if (!isAdmin.value || !row.apiId) return;
   try {
     await receptionsService.validerReception(row.apiId);
     successMessage.value = 'Réception validée.';
@@ -652,7 +654,7 @@ onMounted(() => {
     </div>
 
     <!-- Saisie form only for Admin & Responsable Usinage 2 -->
-    <div v-if="canAdd" class="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-6">
+    <div v-if="peutGerer" class="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-6">
       <div class="flex items-center gap-2 border-b border-slate-50 pb-3">
         <ArrowLeftRight class="w-4.5 h-4.5 text-blue-900" />
         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">Saisir un Nouveau Bon de Réception</h3>
@@ -847,7 +849,7 @@ onMounted(() => {
               <th class="p-3 text-center">Atelier Origine</th>
               <th class="p-3">Mois</th>
               <th class="p-3">Statut</th>
-              <th class="p-3 text-right" v-if="authStore.userRole === 'Admin'">Actions</th>
+              <th class="p-3 text-right" v-if="peutGerer">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 text-xs font-medium">
@@ -902,10 +904,10 @@ onMounted(() => {
                   {{ row.statut }}
                 </span>
               </td>
-              <td class="p-3 text-right" v-if="authStore.userRole === 'Admin'">
+              <td class="p-3 text-right" v-if="peutGerer">
                 <div v-if="isReceptionsRealApi" class="flex justify-end gap-1">
                   <button
-                    v-if="row.statut === 'Brouillon'"
+                    v-if="isAdmin && row.statut === 'Brouillon'"
                     @click="handleValider(row)"
                     class="px-2 py-1 rounded text-[10px] font-bold uppercase bg-emerald-50 hover:bg-emerald-100 text-emerald-700 cursor-pointer"
                   >

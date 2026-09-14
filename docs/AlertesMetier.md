@@ -12,6 +12,11 @@ POST /api/v1/alertes/recalculer?periode=YYYY-MM
 
 Aucune tâche planifiée et aucun branchement automatique aux validations métier n'ont été ajoutés. Cette limitation réduit le risque d'effet de bord ; l'automatisation des déclencheurs reste `TODO_INFRA`.
 
+L'audit transactionnel et la solution recommandée après commit sont détaillés dans
+[`AutomatisationAlertes.md`](AutomatisationAlertes.md). Le recalcul manuel reste
+nécessaire après les mutations des sources ; aucun déclencheur automatique n'est
+annoncé comme livré.
+
 ## Modèle persistant
 
 La table SQL Server `AlertesMetier` conserve :
