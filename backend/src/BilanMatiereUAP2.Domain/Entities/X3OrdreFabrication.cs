@@ -28,6 +28,7 @@ public sealed class X3OrdreFabrication
     public string? Atelier { get; private set; }
     public DateOnly? DateObjectifOF { get; private set; }
     public string? StatutX3 { get; private set; }
+    public string StatutArticle { get; private set; } = "ArticleIntrouvable";
     public Guid DernierImportBatchId { get; private set; }
     public ImportX3Batch DernierImportBatch { get; private set; } = null!;
     public DateTime DateCreationUtc { get; private set; }
@@ -58,7 +59,8 @@ public sealed class X3OrdreFabrication
         DateOnly? dateObjectifOF,
         string? statutX3,
         Guid dernierImportBatchId,
-        DateTime dateModificationUtc)
+        DateTime dateModificationUtc,
+        string statutArticle = "Trouve")
     {
         ArticlePrincipal = ImportX3Batch.NormaliserTexte(articlePrincipal, 80);
         DesignationPrincipale = ImportX3Batch.NormaliserTexte(designationPrincipale, 250);
@@ -66,6 +68,7 @@ public sealed class X3OrdreFabrication
         Atelier = ImportX3Batch.NormaliserTexte(atelier, 30);
         DateObjectifOF = dateObjectifOF;
         StatutX3 = ImportX3Batch.NormaliserTexte(statutX3, 80);
+        StatutArticle = ImportX3Batch.NormaliserTexte(statutArticle, 50) ?? "ArticleIntrouvable";
         DernierImportBatchId = dernierImportBatchId;
         DateModificationUtc = dateModificationUtc;
     }

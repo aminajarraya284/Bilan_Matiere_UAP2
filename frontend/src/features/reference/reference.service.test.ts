@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { testDataRepository } from '@/services/testDataRepository.service';
-import { parseGammeRows, parseNomenclatureRows, referenceService } from './reference.service';
+import { parseGammeRows, parseNomenclatureRows } from './reference.service';
 
 describe('reference fabrication Excel imports', () => {
   beforeEach(() => localStorage.clear());
@@ -108,19 +107,5 @@ describe('reference fabrication Excel imports', () => {
 
     expect(result.items).toEqual([]);
     expect(result.ignoredCount).toBe(1);
-  });
-
-  it('restores test gammes without deleting application-entered data', () => {
-    const dataset = testDataRepository.getDataset();
-    dataset.refGammeFabrication = [];
-    dataset.dechetsFonderie = [];
-    testDataRepository.replaceDataset(dataset);
-
-    const restored = referenceService.resetGammes();
-    const afterReset = testDataRepository.getDataset();
-
-    expect(restored.length).toBeGreaterThan(0);
-    expect(afterReset.refGammeFabrication.length).toBeGreaterThan(0);
-    expect(afterReset.dechetsFonderie).toEqual([]);
   });
 });

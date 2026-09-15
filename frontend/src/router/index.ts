@@ -1,26 +1,31 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHistory, type NavigationGuard, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '@/features/auth/auth.store';
-import { hasPermission } from '@/utils/permissions';
+import { consumeAuthReturnPath, rememberAuthReturnPath } from '@/features/auth/auth.navigation';
+import { getDefaultRouteForRoles, type ApplicationRole } from '@/features/auth/auth.roles';
+import { routePermissions } from '@/utils/permissions';
+
+type AppRouteRecord = RouteRecordRaw & { children: RouteRecordRaw[] };
 
 const appRoute = (
   path: string,
   name: string,
   component: RouteRecordRaw['component'],
   meta: RouteRecordRaw['meta']
-): RouteRecordRaw => ({
-  path,
-  component: () => import('@/components/layout/AppLayout.vue'),
-  children: [
-    {
-      path: '',
-      name,
-      component,
-      meta: { ...meta, requiresAuth: true }
-    }
-  ]
-});
+): AppRouteRecord =>
+  ({
+    path,
+    component: () => import('@/components/layout/AppLayout.vue'),
+    children: [
+      {
+        path: '',
+        name,
+        component,
+        meta: { ...meta, requiresAuth: true, roles: routePermissions[name] ?? [] }
+      }
+    ]
+  }) as AppRouteRecord;
 
-const routes: Array<RouteRecordRaw> = [
+export const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('@/components/layout/AuthLayout.vue'),
@@ -45,15 +50,16 @@ const routes: Array<RouteRecordRaw> = [
       }
     ]
   },
+  { path: '/access-denied', redirect: '/forbidden' },
   {
-    path: '/access-denied',
+    path: '/forbidden',
     component: () => import('@/components/layout/AuthLayout.vue'),
     children: [
       {
         path: '',
-        name: 'AccessDenied',
-        component: () => import('@/features/auth/LoginView.vue'),
-        meta: { title: 'Accès refusé', subtitle: 'Permissions insuffisantes' }
+        name: 'Forbidden',
+        component: () => import('@/features/auth/ForbiddenView.vue'),
+        meta: { title: 'Accès interdit', subtitle: 'Permissions insuffisantes' }
       }
     ]
   },
@@ -65,6 +71,10 @@ const routes: Array<RouteRecordRaw> = [
     title: 'Bilan matière',
     subtitle: 'Suivi par atelier'
   }),
+  appRoute('/bilan-uap2', 'BilanUap2', () => import('@/features/bilan-matiere/BilanMatiereUap2View.vue'), {
+    title: 'Bilan UAP2 par OF',
+    subtitle: 'Sortie matière et écart par ordre de fabrication'
+  }),
   appRoute('/inventaire', 'Inventaire', () => import('@/features/inventaire/InventaireView.vue'), {
     title: 'Inventaire Fonderie',
     subtitle: 'Stock physique'
@@ -73,10 +83,7 @@ const routes: Array<RouteRecordRaw> = [
     '/controle-poids-fonderie',
     'ControlePoidsFonderie',
     () => import('@/features/controle-poids-fonderie/ControlePoidsFonderieView.vue'),
-    {
-      title: 'Résultat de contrôle poids',
-      subtitle: 'Opérations Fonderie'
-    }
+    { title: 'Résultat de contrôle poids', subtitle: 'Opérations Fonderie' }
   ),
   appRoute('/sorties-x3', 'SortiesX3', () => import('@/features/sorties-x3/SortiesX3View.vue'), {
     title: 'Consommations composants',
@@ -99,24 +106,25 @@ const routes: Array<RouteRecordRaw> = [
     '/dechets-fonderie',
     'DechetsFonderie',
     () => import('@/features/dechets-fonderie/DechetsFonderieView.vue'),
-    {
-      title: 'Déchets Fonderie',
-      subtitle: 'Suivi des déchets'
-    }
+    { title: 'Déchets Fonderie', subtitle: 'Suivi des déchets' }
   ),
   appRoute(
     '/receptions-usinage-2',
     'ReceptionsUsinage2',
     () => import('@/features/receptions-usinage2/ReceptionsUsinage2View.vue'),
-    {
-      title: 'Réceptions Usinage 2',
-      subtitle: 'Quantités reçues'
-    }
+    { title: 'Réceptions Usinage 2', subtitle: 'Quantités reçues' }
   ),
+  { path: '/receptions-usinage2', redirect: '/receptions-usinage-2' },
   appRoute('/rapports', 'Rapports', () => import('@/features/rapports/RapportsView.vue'), {
     title: 'Rapports',
     subtitle: 'Résultats et exports'
   }),
+  appRoute(
+    '/imports-historique',
+    'ImportsHistorique',
+    () => import('@/features/imports-historique/ImportsHistoriqueView.vue'),
+    { title: 'Historique des imports', subtitle: 'Fichiers sources et téléchargement' }
+  ),
   appRoute('/admin', 'Admin', () => import('@/features/admin/AdminView.vue'), {
     title: 'Administration',
     subtitle: 'Utilisateurs et paramètres'
@@ -129,63 +137,60 @@ const routes: Array<RouteRecordRaw> = [
     title: 'Journal d’audit',
     subtitle: 'Traçabilité des actions'
   }),
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/'
-  }
+  appRoute('/historique-periodes', 'HistoriquePeriodes', () => import('@/features/archivage/HistoriquePeriodesView.vue'), {
+    title: 'Historique des périodes',
+    subtitle: 'Bilans mensuels archivés'
+  }),
+  appRoute('/historique-periodes/:periode', 'PeriodeArchivee', () => import('@/features/archivage/PeriodeArchiveeView.vue'), {
+    title: 'Période archivée',
+    subtitle: 'Consultation en lecture seule'
+  }),
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior() {
-    return { top: 0, left: 0 };
-  }
+  scrollBehavior: () => ({ top: 0, left: 0 })
 });
 
-router.beforeEach((to, from, next) => {
+export const authGuard: NavigationGuard = async (to) => {
   const authStore = useAuthStore();
-  const isAuthenticated = authStore.isAuthenticated;
-  const role = authStore.userRole;
+  const isLoginRoute = to.name === 'Home' || to.name === 'Login';
 
-  if ((to.path === '/' || to.path === '/login') && isAuthenticated) {
-    if (role === 'Admin') {
-      return next('/dashboard');
-    } else if (role === 'ResponsableFonderie') {
-      return next('/dechets-fonderie');
-    } else if (role === 'ResponsableUsinage2') {
-      return next('/receptions-usinage-2');
+  if (!authStore.initialized) {
+    try {
+      await authStore.initialize();
+    } catch {
+      if (isLoginRoute || to.name === 'Forbidden') return true;
+      rememberAuthReturnPath(to.fullPath);
+      return { name: 'Login', query: { error: 'configuration', redirect: to.fullPath } };
     }
   }
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    return next({ name: 'Login' });
+  if (isLoginRoute && authStore.isAuthenticated) {
+    return consumeAuthReturnPath() ?? getDefaultRouteForRoles(authStore.roles);
   }
 
-  if (to.name && to.meta.requiresAuth) {
-    const authorized = hasPermission(role, to.name as string);
-    if (!authorized) {
-      if (role === 'ResponsableFonderie') {
-        return next('/dechets-fonderie');
-      } else if (role === 'ResponsableUsinage2') {
-        return next('/receptions-usinage-2');
-      } else {
-        return next('/login');
-      }
-    }
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    rememberAuthReturnPath(to.fullPath);
+    return { name: 'Login', query: { redirect: to.fullPath } };
   }
 
-  next();
-});
+  const allowedRoles = (to.meta.roles ?? []) as ApplicationRole[];
+  if (to.meta.requiresAuth && allowedRoles.length > 0 && !authStore.hasAnyRole(allowedRoles)) {
+    return { name: 'Forbidden', query: { from: to.fullPath } };
+  }
+
+  return true;
+};
+
+router.beforeEach(authGuard);
 
 router.afterEach((to, from, failure) => {
-  if (failure) {
-    console.error('Navigation failed:', failure);
-  }
+  if (failure) console.error('Navigation failed:', failure);
 });
 
-router.onError((error) => {
-  console.error('Router error:', error);
-});
+router.onError((error) => console.error('Router error:', error));
 
 export default router;

@@ -1,9 +1,10 @@
 import { UserRole } from '@/types/common.types';
 
 export const routePermissions: Record<string, UserRole[]> = {
-  Dashboard: ['Admin'],
-  BilanMatiere: ['Admin'],
-  Inventaire: ['Admin'],
+  Dashboard: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
+  BilanMatiere: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
+  BilanUap2: ['Admin', 'ResponsableUsinage2'],
+  Inventaire: ['Admin', 'ResponsableFonderie'],
   ControlePoidsFonderie: ['Admin', 'ResponsableFonderie'],
   SortiesX3: ['Admin'],
   EtatsX3: ['Admin'],
@@ -11,9 +12,12 @@ export const routePermissions: Record<string, UserRole[]> = {
   DechetsFonderie: ['Admin', 'ResponsableFonderie'],
   ReceptionsUsinage2: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Rapports: ['Admin'],
-  Alertes: ['Admin'],
+  ImportsHistorique: ['Admin'],
+  Alertes: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Admin: ['Admin'],
-  Audit: ['Admin']
+  Audit: ['Admin'],
+  HistoriquePeriodes: ['Admin'],
+  PeriodeArchivee: ['Admin']
 };
 
 export const hasPermission = (userRole: UserRole | undefined, routeName: string): boolean => {
@@ -21,4 +25,10 @@ export const hasPermission = (userRole: UserRole | undefined, routeName: string)
   const allowedRoles = routePermissions[routeName];
   if (!allowedRoles) return false;
   return allowedRoles.includes(userRole);
+};
+
+export const hasAnyPermission = (userRoles: readonly UserRole[], routeName: string): boolean => {
+  const allowedRoles = routePermissions[routeName];
+  if (!allowedRoles) return false;
+  return userRoles.some((role) => allowedRoles.includes(role));
 };

@@ -87,20 +87,21 @@ public sealed record ConsommationsComposantsFilter(
 
 public interface IX3ImportRepository
 {
-    Task<ImportX3Batch?> GetBatchByPairHashAsync(string pairHash, CancellationToken cancellationToken);
+    Task<ImportX3Batch?> GetCompletedBatchByPairHashAsync(string pairHash, CancellationToken cancellationToken);
     Task<ImportX3Batch?> GetBatchByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<ImportX3Anomaly>> GetAnomaliesAsync(Guid batchId, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<string, X3OrdreFabrication>> GetOrdresByNumeroAsync(
         IReadOnlyCollection<string> numerosOF,
         CancellationToken cancellationToken);
     Task<X3OrdreFabrication?> GetOrdreContexteAsync(string numeroOF, CancellationToken cancellationToken);
-    Task<IReadOnlyDictionary<string, Composant>> GetComposantsByCodeAsync(
-        IReadOnlyCollection<string> codes,
+    Task<IReadOnlyDictionary<string, ConsommationComposant>> GetConsommationsByCleMetierAsync(
+        IReadOnlyCollection<string> clesMetier,
         CancellationToken cancellationToken);
     Task<PagedResult<ConsommationComposant>> GetConsommationsAsync(
         ConsommationsComposantsFilter filter,
         CancellationToken cancellationToken);
     Task AddBatchAsync(ImportX3Batch batch, CancellationToken cancellationToken);
     Task AddOrdresAsync(IEnumerable<X3OrdreFabrication> ordres, CancellationToken cancellationToken);
-    Task AddComposantsAsync(IEnumerable<Composant> composants, CancellationToken cancellationToken);
+    Task AddConsommationsAsync(IEnumerable<ConsommationComposant> consommations, CancellationToken cancellationToken);
+    Task SaveChangesAsync(CancellationToken cancellationToken);
 }

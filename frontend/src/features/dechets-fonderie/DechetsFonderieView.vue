@@ -163,7 +163,10 @@ const handleSubmit = async () => {
     typeMatiereId: formDechet.value.typeMatiereId,
     typeDechet: formDechet.value.typeDechet,
     poidsKg: formDechet.value.poidsKg!,
-    observation: formDechet.value.observation.trim() || null
+    observation: formDechet.value.observation.trim() || null,
+    // Cet ecran ne declare que des dechets Fonderie : l'origine est constante et
+    // envoyee explicitement plutot que laissee au defaut du serveur.
+    origine: 'Fonderie'
   };
 
   try {

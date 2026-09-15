@@ -51,6 +51,23 @@ Ce projet est un tableau de bord interne construit avec Vue 3, Pinia, Vue Router
 - Vue Router
 - Tailwind CSS
 - axios
+- SheetJS (`xlsx`) — lecture des fichiers Excel importés
+
+### À propos de la dépendance `xlsx`
+
+Elle est installée depuis le CDN de l'éditeur, **et non depuis npm** :
+
+```jsonc
+"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+```
+
+C'est le mode d'installation **officiel** de SheetJS depuis la version 0.20 : l'éditeur
+ne publie plus sur npm. Le `package-lock.json` porte l'empreinte `sha512` de l'archive,
+donc l'intégrité est vérifiée à l'installation comme pour n'importe quel paquet.
+
+**Ne pas « corriger » cette ligne** en revenant au paquet npm `xlsx` : celui-ci est figé
+à la version 0.18.5, abandonnée, et porte des vulnérabilités connues (pollution de
+prototype, ReDoS). Ce serait une régression de sécurité.
 
 ## Structure principale
 
@@ -122,7 +139,6 @@ Si une nouvelle ligne est ajoutee dans `testData.ts`, elle doit respecter cette 
 - `testBilans` : bilans calcules ou precharges pour Fonderie, Usinage 2 et UAP2.
 - `testAlertes` : alertes de demonstration liees aux ecarts de bilan.
 - `testDashboard` : indicateurs consolides affiches sur le tableau de bord.
-- `testRapports` : liste des rapports visibles dans la page Rapports.
 
 ### Coherence metier attendue
 
@@ -156,7 +172,7 @@ Les services doivent consommer la data locale au lieu des anciennes references X
 - `src/features/rapports/exporter.ts` : generation des exports PDF texte et CSV
 - `src/utils/storage.ts` : persistance mock dans `localStorage`
 
-Les Types matiere et les Dechets Fonderie selectionnent explicitement leur source avec `VITE_TYPES_MATIERE_SOURCE` et `VITE_DECHETS_SOURCE`. Les autres services continuent d'utiliser `VITE_USE_REAL_API`. En mode mock local, ils restent autonomes avec `testData.ts` et `localStorage`.
+Chaque verticale sélectionne sa source dans `src/config/dataSources.ts` avec une variable `VITE_*_SOURCE`. Les services métier ne lisent jamais directement les variables Vite. `VITE_USE_REAL_API` reste uniquement un repli temporaire et déprécié dans ce module central.
 
 ### Inventaire ESR
 
@@ -174,25 +190,11 @@ Difference importante :
 - `totalInventaireBilan` inclut seulement Partie 1 + Partie 2
 - les fours sont suivis pour information ESR, mais restent hors bilan pour eviter un double comptage
 
-### Rapports de test
+### Rapports réels
 
-La page Rapports affiche les rapports fournis par `testRapports`.
+La page Rapports charge le catalogue autorisé depuis `/api/v1/rapports/catalogue`, puis demande un aperçu typé au backend. Elle couvre les bilans Fonderie, U2 et UAP2, le détail OF, les alertes, l'inventaire, les imports et les non-réceptions.
 
-- `id: 1` : Rapport Bilan Matiere Mensuel
-- `id: 2` : Rapport Dechets Fonderie
-- `id: 3` : Rapport Receptions Usinage 2
-- `id: 4` : Rapport Sorties magasin
-- `id: 5` : Rapport Inventaire ESR
-- `id: 6` : Rapport Alertes
-
-L'export du rapport Inventaire ESR est gere dans `src/features/rapports/exporter.ts` avec `reportId === 5`. Il consolide les conteneurs, les categories incluses dans le bilan fonderie et les fours hors bilan visibles dans le rapport inventaire.
-
-Les exports disponibles sont :
-
-- `PDF` : export texte telecharge avec une extension `.txt`
-- `Excel` : export CSV telecharge avec une extension `.csv`
-
-Quand un rapport est ajoute dans `testRapports`, il faut aussi verifier que son `id` est gere dans `src/features/rapports/exporter.ts`. Sinon la carte du rapport sera visible, mais le telechargement echouera.
+Le seul export annoncé est CSV. Le fichier est produit par le backend depuis la même projection que l'aperçu ; `exporter.ts` se limite au téléchargement du `Blob`. Aucun calcul métier et aucun accès à `testDataRepository` ne subsistent dans le module Rapports.
 
 ### Reinitialisation des donnees mock
 
@@ -244,7 +246,7 @@ Cette operation recharge les donnees de test propres depuis `src/data/testData.t
 
 ### Mode mock local
 
-Le projet supporte un mode mock local. Pour les Types matiere et les Dechets Fonderie, il est selectionne avec `VITE_TYPES_MATIERE_SOURCE=mock` et `VITE_DECHETS_SOURCE=mock`. Les autres modules restent pilotes par `VITE_USE_REAL_API` :
+Le projet supporte un mode hybride par verticale. Dashboard, bilans, inventaire, alertes et rapports utilisent désormais l'API réelle. Les modules encore sans endpoint backend (`Audit` et `Administration`) restent explicitement configurés sur `mock` :
 
 - les donnees initiales proviennent de `src/data/testData.ts`
 - `src/utils/storage.ts` persiste les donnees dans `localStorage`
@@ -254,7 +256,7 @@ Le projet supporte un mode mock local. Pour les Types matiere et les Dechets Fon
 ### Mode API réelle
 
 - configure `VITE_API_URL` pour pointer vers le backend réel
-- configure `VITE_TYPES_MATIERE_SOURCE=api` et `VITE_DECHETS_SOURCE=api` pour activer la verticale connectee
+- configure la variable `VITE_*_SOURCE=api` de la verticale connectée
 - les endpoints de cette verticale sont exposes sous `/api/v1`
 - le client Axios ajoute automatiquement le token Bearer
 - les erreurs `401` redirigent vers la page de login
@@ -278,9 +280,9 @@ npm run lint
 ### Variables d'environnement
 
 - `VITE_API_URL` : URL du backend API
-- `VITE_USE_REAL_API` : `true` pour utiliser l'API réelle, `false` pour utiliser les données mock
-- `VITE_TYPES_MATIERE_SOURCE` : `api` ou `mock` pour le referentiel Types matiere
-- `VITE_DECHETS_SOURCE` : `api` ou `mock` pour les Dechets Fonderie
+- `VITE_*_SOURCE` : `api`, `mock` ou `disabled` pour chaque verticale
+- `VITE_USE_REAL_API` : repli global temporaire déprécié, à ne plus utiliser dans une nouvelle configuration
+- la liste complète et les valeurs recommandées figurent dans `.env.example`
 
 ## Notes de développement
 

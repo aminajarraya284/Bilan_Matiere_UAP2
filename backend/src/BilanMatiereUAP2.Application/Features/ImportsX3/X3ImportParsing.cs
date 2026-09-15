@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace BilanMatiereUAP2.Application.Features.ImportsX3;
@@ -137,13 +136,4 @@ public static class X3ImportParsing
         return DateOnly.TryParse(raw, FrenchCulture, DateTimeStyles.None, out result);
     }
 
-    public static string CalculerSha256(byte[] content)
-    {
-        return Convert.ToHexString(SHA256.HashData(content));
-    }
-
-    public static string CalculerHashCouple(string encoursHash, string mouvementsHash)
-    {
-        return CalculerSha256(Encoding.UTF8.GetBytes($"{encoursHash}:{mouvementsHash}"));
-    }
 }

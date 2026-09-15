@@ -1,11 +1,13 @@
 using System.Globalization;
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Contracts.ImportsX3;
 using BilanMatiereUAP2.Domain.Entities;
 using BilanMatiereUAP2.Domain.Enums;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.Extensions.Options;
 
 namespace BilanMatiereUAP2.Application.Features.ImportsX3;
 
@@ -52,8 +54,16 @@ public sealed class X3ImportService(
     IX3ImportRepository repository,
     ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider,
-    IValidator<ImportSortiesMatiereX3Command> importValidator) : IX3ImportService
+    IValidator<ImportSortiesMatiereX3Command> importValidator,
+    IOptions<ImportX3Options> importOptions,
+    IImportArchiveService archiveService,
+    IImportHashCalculator hashCalculator,
+    ITypeMatiereRepository typeMatiereRepository) : IX3ImportService
 {
+    // Regles de rapprochement externalisees en configuration (section "ImportX3").
+    private readonly HashSet<string> _unitesConservees =
+        new(importOptions.Value.UnitesConservees, StringComparer.OrdinalIgnoreCase);
+
     public async Task<ImportX3Response> ImportAsync(
         ImportSortiesMatiereX3Command command,
         CancellationToken cancellationToken)
@@ -61,10 +71,22 @@ public sealed class X3ImportService(
         await importValidator.ValidateAndThrowAsync(command, cancellationToken);
         var encoursFile = command.EncoursProductFile!;
         var mouvementsFile = command.MouvementsStockFile!;
-        var encoursHash = X3ImportParsing.CalculerSha256(encoursFile.Content);
-        var mouvementsHash = X3ImportParsing.CalculerSha256(mouvementsFile.Content);
-        var pairHash = X3ImportParsing.CalculerHashCouple(encoursHash, mouvementsHash);
-        // First X3 import step: read, reconcile and return JSON without persistence.
+        var encoursHash = hashCalculator.CalculateSha256(encoursFile.Content);
+        var mouvementsHash = hashCalculator.CalculateSha256(mouvementsFile.Content);
+        var pairHash = hashCalculator.CalculateCoupleHash(encoursHash, mouvementsHash);
+        var typesMatiereAutorises = new HashSet<string>(
+            (await typeMatiereRepository.GetAllAsync(true, cancellationToken))
+                .Select(type => X3ImportParsing.NormaliserCode(type.Code))
+                .Where(code => !string.IsNullOrWhiteSpace(code)),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Check for existing successful batch with the same pair hash (idempotency)
+        var existingBatch = await repository.GetCompletedBatchByPairHashAsync(pairHash, cancellationToken);
+        if (existingBatch is not null)
+        {
+            return ToImportResponse(existingBatch, true);
+        }
+
         var encoursRead = await encoursReader.ReadAsync(encoursFile, cancellationToken);
         var mouvementsRead = await mouvementReader.ReadAsync(mouvementsFile, cancellationToken);
         var now = dateTimeProvider.UtcNow;
@@ -91,7 +113,13 @@ public sealed class X3ImportService(
         var encoursGroups = encoursRead.Rows
             .GroupBy(row => row.NumeroOF, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        var existingOrdres = await repository.GetOrdresByNumeroAsync(
+            encoursGroups.Select(g => g.Key).ToArray(),
+            cancellationToken);
+
         var ordersByNumber = new Dictionary<string, X3OrdreFabrication>(StringComparer.OrdinalIgnoreCase);
+        var newOrdres = new List<X3OrdreFabrication>();
         var articleStatuses = new Dictionary<string, StatutRapprochementX3>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var group in encoursGroups)
@@ -111,7 +139,11 @@ public sealed class X3ImportService(
             };
             articleStatuses[group.Key] = articleStatus;
 
-            var order = X3OrdreFabrication.Creer(group.Key, batch.Id, now);
+            if (!existingOrdres.TryGetValue(group.Key, out var order))
+            {
+                order = X3OrdreFabrication.Creer(group.Key, batch.Id, now);
+                newOrdres.Add(order);
+            }
             ordersByNumber.Add(group.Key, order);
 
             var contextRow = rows[0];
@@ -133,7 +165,8 @@ public sealed class X3ImportService(
                 contextRow.DateObjectifOF,
                 contextRow.Statut,
                 batch.Id,
-                now);
+                now,
+                articleStatus.ToString());
 
             foreach (var row in rows)
             {
@@ -170,8 +203,7 @@ public sealed class X3ImportService(
             }
         }
 
-        var componentsByCode = new Dictionary<string, Composant>(StringComparer.OrdinalIgnoreCase);
-        var matchedMovements = new List<(X3MouvementStock Movement, X3OrdreFabrication Order, Composant Component)>();
+        var matchedMovements = new List<(MouvementStockX3Row Row, X3OrdreFabrication Order, string CodeTypeMatiere)>();
 
         foreach (var row in mouvementsRead.Rows)
         {
@@ -181,88 +213,15 @@ public sealed class X3ImportService(
             }
 
             if (string.IsNullOrWhiteSpace(row.NumeroOFNormalise) ||
-                !ordersByNumber.ContainsKey(row.NumeroOFNormalise))
+                !ordersByNumber.TryGetValue(row.NumeroOFNormalise, out var order))
             {
                 continue;
             }
 
             var normalizedCode = X3ImportParsing.NormaliserCode(row.Code);
-            if (string.IsNullOrWhiteSpace(normalizedCode) || !EstTypeMatiereAutorise(normalizedCode))
+            if (string.IsNullOrWhiteSpace(normalizedCode) || !EstTypeMatiereAutorise(normalizedCode, typesMatiereAutorises))
             {
                 continue;
-            }
-
-            var movement = X3MouvementStock.Creer(
-                batch.Id,
-                row.NumeroLigneSource,
-                row.NomFeuilleSource,
-                row.DateImputation,
-                row.Code,
-                row.Designation,
-                row.DateCreation,
-                row.HeureCreation,
-                row.Utilisateur,
-                row.QuantiteX3Signee,
-                row.Unite,
-                row.Transaction,
-                row.TypePiece,
-                row.Lot,
-                row.PieceOrigine,
-                row.NumeroOFNormalise,
-                row.DesignationMouvement,
-                row.Emplacement,
-                row.Statut,
-                now);
-            if (!EstSortieMatiere(row))
-            {
-                movement.DefinirRapprochement(null, null, StatutRapprochementX3.MouvementInvalide);
-                batch.AjouterAnomalie(ImportX3Anomaly.Creer(
-                    batch.Id,
-                    TypeFichierImportX3.MouvementsStock,
-                    movement.NumeroLigneSource,
-                    StatutRapprochementX3.MouvementInvalide,
-                    "Le mouvement ne respecte pas le filtre Transaction = Sortie OF et Type Pce = Suivi matière.",
-                    movement.NumeroOFNormalise,
-                    movement.Code,
-                    now,
-                    movement.NomFeuilleSource));
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(row.NumeroOFNormalise) ||
-                !ordersByNumber.TryGetValue(row.NumeroOFNormalise, out var order))
-            {
-                AjouterAnomalieMouvement(
-                    batch,
-                    movement,
-                    StatutRapprochementX3.OFIntrouvable,
-                    string.IsNullOrWhiteSpace(row.NumeroOFNormalise)
-                        ? "La piece origine du mouvement est vide."
-                        : $"L'OF {row.NumeroOFNormalise} est introuvable dans EncoursProduct.",
-                    now);
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(normalizedCode))
-            {
-                AjouterAnomalieMouvement(
-                    batch,
-                    movement,
-                    StatutRapprochementX3.ComposantIntrouvable,
-                    "Le code composant du mouvement est obligatoire.",
-                    now,
-                    order.Id);
-                continue;
-            }
-
-            if (!componentsByCode.TryGetValue(normalizedCode, out var component))
-            {
-                component = Composant.Creer(normalizedCode, row.Designation, now);
-                componentsByCode.Add(component.Code, component);
-            }
-            else
-            {
-                component.MettreAJourDesignation(row.Designation, now);
             }
 
             var articleStatus = articleStatuses.GetValueOrDefault(
@@ -270,32 +229,66 @@ public sealed class X3ImportService(
                 StatutRapprochementX3.ArticlePrincipalIntrouvable);
             if (articleStatus != StatutRapprochementX3.Rapproche)
             {
-                movement.DefinirRapprochement(order.Id, component.Id, articleStatus);
                 continue;
             }
 
-            movement.DefinirRapprochement(order.Id, component.Id, StatutRapprochementX3.Rapproche);
-            matchedMovements.Add((movement, order, component));
+            matchedMovements.Add((row, order, normalizedCode));
         }
 
-        foreach (var group in matchedMovements.GroupBy(item => new
-                 {
-                      item.Movement.DateImputation,
-                      OrderId = item.Order.Id,
-                      ComponentId = item.Component.Id,
-                      item.Movement.Unite
-                 }))
+        // Group matched movements by business key: (NumeroOF, CodeTypeMatiere, Unite, DateImputation)
+        var groupedConsommations = matchedMovements
+            .GroupBy(m => new
+            {
+                m.Order.NumeroOF,
+                m.CodeTypeMatiere,
+                Unite = m.Row.Unite!,
+                DateImputation = m.Row.DateImputation
+            })
+            .Select(g => new
+            {
+                CleMetier = ConsommationComposant.GenererCleMetier(g.Key.NumeroOF, g.Key.CodeTypeMatiere, g.Key.Unite, g.Key.DateImputation),
+                g.Key.DateImputation,
+                Order = g.First().Order,
+                g.Key.CodeTypeMatiere,
+                DesignationComposant = g.First().Row.Designation,
+                g.Key.Unite,
+                SommeQuantite = g.Sum(x => x.Row.QuantiteX3Signee)
+            })
+            .ToArray();
+
+        var existingConsommations = await repository.GetConsommationsByCleMetierAsync(
+            groupedConsommations.Select(c => c.CleMetier).ToArray(),
+            cancellationToken);
+
+        var newConsommations = new List<ConsommationComposant>();
+        var allConsommationsForBatch = new List<ConsommationComposant>();
+
+        foreach (var c in groupedConsommations)
         {
-            var first = group.First();
-            var signedTotal = group.Sum(item => item.Movement.QuantiteX3Signee);
-            batch.AjouterConsommation(ConsommationComposant.Creer(
-                batch.Id,
-                group.Key.DateImputation,
-                first.Order,
-                first.Component,
-                first.Movement.Unite!,
-                signedTotal,
-                now));
+            if (existingConsommations.TryGetValue(c.CleMetier, out var existingConsom))
+            {
+                existingConsom.MettreAJour(
+                    c.Order,
+                    c.DesignationComposant,
+                    c.SommeQuantite,
+                    batch.Id,
+                    now);
+                allConsommationsForBatch.Add(existingConsom);
+            }
+            else
+            {
+                var newConsom = ConsommationComposant.Creer(
+                    batch.Id,
+                    c.DateImputation,
+                    c.Order,
+                    c.CodeTypeMatiere,
+                    c.DesignationComposant,
+                    c.Unite,
+                    c.SommeQuantite,
+                    now);
+                newConsommations.Add(newConsom);
+                allConsommationsForBatch.Add(newConsom);
+            }
         }
 
         batch.Terminer(
@@ -303,8 +296,35 @@ public sealed class X3ImportService(
             encoursRead.Rows.Count,
             mouvementsRead.TotalRows,
             mouvementsRead.Rows.Count,
-            dateTimeProvider.UtcNow);
-        return ToImportResponse(batch, false);
+            dateTimeProvider.UtcNow,
+            allConsommationsForBatch.Count,
+            batch.Anomalies.Count);
+
+        // Save to SQL Database
+        await repository.AddBatchAsync(batch, cancellationToken);
+        if (newOrdres.Count > 0)
+        {
+            await repository.AddOrdresAsync(newOrdres, cancellationToken);
+        }
+        if (newConsommations.Count > 0)
+        {
+            await repository.AddConsommationsAsync(newConsommations, cancellationToken);
+        }
+        await repository.SaveChangesAsync(cancellationToken);
+
+        // Best-effort : l'archivage des deux fichiers sources ne doit jamais faire echouer un
+        // import metier deja reussi (donnees deja persistees).
+        try
+        {
+            await archiveService.ArchiveAsync(batch.Id, TypeImport.SortiesMatiereX3, "ENCOURSPRODUCT_V1", encoursFile.FileName, encoursFile.Content, currentUser.UserId, currentUser.UserName, cancellationToken);
+            await archiveService.ArchiveAsync(batch.Id, TypeImport.SortiesMatiereX3, "MOUVEMENTSSTOCK_V1", mouvementsFile.FileName, mouvementsFile.Content, currentUser.UserId, currentUser.UserName, cancellationToken);
+        }
+        catch
+        {
+            // best-effort : ne pas masquer le succes de l'import metier
+        }
+
+        return ToImportResponse(batch, false, allConsommationsForBatch);
     }
 
     public async Task<ImportX3Response> GetByIdAsync(
@@ -394,19 +414,7 @@ public sealed class X3ImportService(
                     item.QuantiteRestante,
                     item.DateOperation))
                 .ToArray(),
-            order.Mouvements
-                .Select(item => new X3MouvementStockResponse(
-                    item.Id,
-                    item.NumeroLigneSource,
-                    item.DateImputation,
-                    item.Code,
-                    item.QuantiteX3Signee,
-                    item.Unite,
-                    item.Transaction,
-                    item.TypePiece,
-                    item.PieceOrigine,
-                    item.StatutRapprochement.ToString()))
-                .ToArray(),
+            Array.Empty<X3MouvementStockResponse>(),
             order.Consommations.Select(ToConsommationResponse).ToArray());
     }
 
@@ -431,27 +439,6 @@ public sealed class X3ImportService(
         }
     }
 
-    private static void AjouterAnomalieMouvement(
-        ImportX3Batch batch,
-        X3MouvementStock movement,
-        StatutRapprochementX3 status,
-        string message,
-        DateTime now,
-        Guid? orderId = null)
-    {
-        movement.DefinirRapprochement(orderId, null, status);
-        batch.AjouterAnomalie(ImportX3Anomaly.Creer(
-            batch.Id,
-            TypeFichierImportX3.MouvementsStock,
-            movement.NumeroLigneSource,
-            status,
-            message,
-            movement.NumeroOFNormalise,
-            movement.Code,
-            now,
-            movement.NomFeuilleSource));
-    }
-
     private static bool EstSortieMatiere(MouvementStockX3Row row)
     {
         return X3ImportParsing.NormaliserEntete(row.Transaction) == "sortieof" &&
@@ -459,26 +446,24 @@ public sealed class X3ImportService(
                X3ImportParsing.EstNumeroOF(row.PieceOrigine);
     }
 
-    private static bool EstUniteConservee(string? unite)
+    private bool EstUniteConservee(string? unite)
     {
-        return X3ImportParsing.NormaliserCode(unite) is "UN" or "KG" or "BA" or "M" or "LI";
+        var normalized = X3ImportParsing.NormaliserCode(unite);
+        return !string.IsNullOrEmpty(normalized) && _unitesConservees.Contains(normalized);
     }
 
-    private static readonly HashSet<string> TypesMatiereAutorises = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "M3000L0",
-        "M3010L0",
-        "M3060L0"
-    };
-
-    private static bool EstTypeMatiereAutorise(string? code)
+    private static bool EstTypeMatiereAutorise(string? code, ISet<string> typesMatiereAutorises)
     {
         var normalized = X3ImportParsing.NormaliserCode(code);
-        return !string.IsNullOrEmpty(normalized) && TypesMatiereAutorises.Contains(normalized);
+        return !string.IsNullOrEmpty(normalized) && typesMatiereAutorises.Contains(normalized);
     }
 
-    private static ImportX3Response ToImportResponse(ImportX3Batch batch, bool duplicate)
+    private static ImportX3Response ToImportResponse(
+        ImportX3Batch batch,
+        bool duplicate,
+        IReadOnlyCollection<ConsommationComposant>? consommationsOverride = null)
     {
+        var consommationsList = consommationsOverride ?? (IReadOnlyCollection<ConsommationComposant>)batch.Consommations;
         return new ImportX3Response(
             batch.Id,
             batch.Statut.ToString(),
@@ -502,7 +487,7 @@ public sealed class X3ImportService(
                     file.TailleOctets,
                     file.HashSha256))
                 .ToArray(),
-            batch.Consommations.OrderBy(item => item.DateImputation).ThenBy(item => item.NumeroOF)
+            consommationsList.OrderBy(item => item.DateImputation).ThenBy(item => item.NumeroOF)
                 .Select(ToConsommationResponse)
                 .ToArray(),
             batch.Anomalies.OrderBy(item => item.NumeroLigneSource).Select(ToAnomalyResponse).ToArray(),
@@ -518,8 +503,6 @@ public sealed class X3ImportService(
             entity.NumeroOF,
             entity.ArticlePrincipal,
             entity.DesignationPrincipale,
-            entity.ComposantId,
-            entity.CodeComposant,
             entity.CodeTypeMatiere,
             entity.DesignationComposant,
             entity.Unite,

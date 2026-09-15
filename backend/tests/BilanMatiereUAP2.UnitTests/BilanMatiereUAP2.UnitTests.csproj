@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\src\BilanMatiereUAP2.Application\BilanMatiereUAP2.Application.csproj" />
     <ProjectReference Include="..\..\src\BilanMatiereUAP2.Contracts\BilanMatiereUAP2.Contracts.csproj" />
     <ProjectReference Include="..\..\src\BilanMatiereUAP2.Domain\BilanMatiereUAP2.Domain.csproj" />
+    <ProjectReference Include="..\..\src\BilanMatiereUAP2.Infrastructure\BilanMatiereUAP2.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

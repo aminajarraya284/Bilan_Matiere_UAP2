@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BilanMatiereUAP2.Application.Common;
 using BilanMatiereUAP2.Domain.Common;
 using FluentValidation;
@@ -29,6 +30,7 @@ public sealed class GlobalExceptionMiddleware(
                 DomainValidationException => (StatusCodes.Status400BadRequest, "Règle métier invalide"),
                 NotFoundException => (StatusCodes.Status404NotFound, "Ressource introuvable"),
                 ConflictException => (StatusCodes.Status409Conflict, "Conflit métier"),
+                ForbiddenException => (StatusCodes.Status403Forbidden, "Accès interdit"),
                 ImportFileException => (StatusCodes.Status400BadRequest, "Fichier d'import invalide"),
                 _ => (StatusCodes.Status500InternalServerError, "Une erreur interne est survenue.")
             };
@@ -58,6 +60,7 @@ public sealed class GlobalExceptionMiddleware(
             problem.Title = title;
             problem.Instance = context.Request.Path;
             problem.Detail = status < 500 || environment.IsDevelopment() ? exception.Message : null;
+            problem.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
 
             if (problem is ValidationProblemDetails validationProblem)
             {

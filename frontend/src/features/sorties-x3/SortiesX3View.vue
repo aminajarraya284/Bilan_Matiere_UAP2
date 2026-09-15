@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { FileSpreadsheet, Filter, Link2, Loader2, RefreshCw, Upload } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { FileSpreadsheet, Filter, Link2, Loader2, RefreshCw, Search, Upload } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import LoadingState from '@/components/ui/LoadingState.vue';
 import ProgressSteps from '@/components/ui/ProgressSteps.vue';
@@ -21,7 +21,11 @@ const isUploading = ref(false);
 const isRefreshing = ref(false);
 const unmatchedCount = ref(0);
 const filtreMatiere = ref<TypeMatiere>('tous');
+const rechercheOF = ref('');
+const numeroOFNormalise = computed(() => rechercheOF.value.trim().toUpperCase().replace(/\s+/g, ''));
 const toast = useAppToast();
+let mouvementsController: AbortController | null = null;
+let rechercheOFTimer: ReturnType<typeof setTimeout> | undefined;
 
 const mouvementsFiltres = computed(() => {
   if (filtreMatiere.value === 'tous') return mouvements.value;
@@ -29,17 +33,35 @@ const mouvementsFiltres = computed(() => {
 });
 
 const loadMouvements = async () => {
+  mouvementsController?.abort();
+  const controller = new AbortController();
+  mouvementsController = controller;
   isLoading.value = true;
   try {
-    const response = await sortiesX3Service.getMouvements();
+    const response = await sortiesX3Service.getMouvements({
+      numeroOF: numeroOFNormalise.value || undefined,
+      signal: controller.signal
+    });
+    if (controller.signal.aborted) return;
     mouvements.value = response.items;
     total.value = response.total;
   } catch (error) {
+    if (controller.signal.aborted) return;
     console.error(error);
     toast.error('Le chargement des consommations composants a échoué.');
   } finally {
-    isLoading.value = false;
+    if (mouvementsController === controller) {
+      mouvementsController = null;
+      isLoading.value = false;
+    }
   }
+};
+
+const handleRechercheOF = () => {
+  if (rechercheOFTimer) clearTimeout(rechercheOFTimer);
+  rechercheOFTimer = setTimeout(() => {
+    void loadMouvements();
+  }, 300);
 };
 
 const selectFile = (event: Event, type: 'mouvement' | 'encours') => {
@@ -62,6 +84,7 @@ const handleImport = async () => {
     mouvements.value = result.consommations;
     total.value = result.consommations.length;
     filtreMatiere.value = 'tous';
+    rechercheOF.value = '';
     toast.success(
       `${result.successCount} consommation(s) par OF générée(s)` +
         (result.unmatchedCount ? `, ${result.unmatchedCount} mouvement(s) sans correspondance.` : '.')
@@ -90,6 +113,10 @@ const formatDate = (value: string): string => {
 };
 
 onMounted(loadMouvements);
+onBeforeUnmount(() => {
+  mouvementsController?.abort();
+  if (rechercheOFTimer) clearTimeout(rechercheOFTimer);
+});
 </script>
 
 <template>
@@ -200,6 +227,18 @@ onMounted(loadMouvements);
           <p class="mt-1 text-[11px] text-slate-500">Résultat consolidé issu des deux fichiers Excel. Seuls les types matière M3000L0, M3010L0, M3060L0 sont affichés.</p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
+          <div class="relative min-w-64 flex-1 sm:flex-none">
+            <label for="sorties-of-search" class="sr-only">Rechercher par numéro OF exact</label>
+            <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              id="sorties-of-search"
+              v-model="rechercheOF"
+              type="search"
+              class="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:w-72"
+              placeholder="Rechercher par OF exact"
+              @input="handleRechercheOF"
+            />
+          </div>
           <!-- Filtre par type matière -->
           <div class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5">
             <Filter class="h-3.5 w-3.5 text-slate-400" />
@@ -212,7 +251,7 @@ onMounted(loadMouvements);
               <option v-for="tm in TYPES_MATIERE_AUTORISES" :key="tm" :value="tm">{{ tm }}</option>
             </select>
           </div>
-          <span class="font-mono text-xs text-slate-500">{{ mouvementsFiltres.length }} / {{ mouvements.length }} ligne(s)</span>
+          <span class="font-mono text-xs text-slate-500">{{ mouvementsFiltres.length }} / {{ total }} ligne(s)</span>
           <button
             class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             :disabled="isRefreshing"
@@ -256,7 +295,8 @@ onMounted(loadMouvements);
             </tr>
             <tr v-if="!mouvementsFiltres.length">
               <td colspan="7" class="p-8 text-center text-slate-500">
-                <span v-if="!mouvements.length">Importez les deux fichiers Excel pour générer les consommations.</span>
+                <span v-if="numeroOFNormalise">Aucune sortie magasin trouvée pour l’OF « {{ numeroOFNormalise }} ».</span>
+                <span v-else-if="!mouvements.length">Importez les deux fichiers Excel pour générer les consommations.</span>
                 <span v-else>Aucune ligne pour le filtre « {{ filtreMatiere }} ».</span>
               </td>
             </tr>

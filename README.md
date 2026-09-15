@@ -1,6 +1,6 @@
 # Bilan Matière UAP2
 
-Application SOPAL de bilan matiere pour l'UAP2. Le depot rassemble le frontend Vue.js et une API ASP.NET Core active, connectee a SQL Server pour la verticale Types matiere / Dechets Fonderie.
+Application SOPAL de bilan matière pour l'UAP2. Le dépôt rassemble le frontend Vue.js et une API ASP.NET Core connectée à SQL Server. Les saisies opérationnelles, les imports, les trois bilans matière, leur tableau de bord mensuel et les alertes métier persistantes sont désormais servis par le backend.
 
 ## Architecture
 
@@ -88,7 +88,14 @@ Pour les migrations EF Core, le projet cible est `BilanMatiereUAP2.Infrastructur
 
 ## Etat actuel
 
-- Le frontend reste principalement alimente par les donnees de test, tandis que les Types matiere et les Dechets Fonderie peuvent utiliser l'API reelle via `VITE_TYPES_MATIERE_SOURCE` et `VITE_DECHETS_SOURCE`.
-- Le backend fournit une premiere verticale metier operationnelle pour les Types matiere et les Dechets Fonderie sous `/api/v1` : validations, Entity Framework Core, migration SQL Server, seed des trois matieres `M3000L0`, `M3010L0` et `M3060L0`, suppression logique, resume et tests.
-- Les imports Excel, les bilans, la synchronisation X3 et les autres verticales metier ne sont pas encore connectes au backend. Les policies sont preparees, mais l'authentification JWT doit encore remplacer le mode de developpement avant la production.
-- La configuration et les commandes de cette premiere verticale sont documentees dans `docs/VerticaleTypesMatiereDechetsFonderie.md`.
+- **Connecté au backend** : Types matière, Déchets Fonderie, Contrôle poids Fonderie, Réceptions et Rebuts Usinage 2, États X3 et sorties magasin, Références de fabrication, Historique des imports, Inventaire Fonderie, les **trois bilans** (Fonderie, Usinage 2, UAP2), le **Dashboard mensuel**, les **Alertes métier persistantes** (`/api/v1/alertes`), les **Rapports réels** (`/api/v1/rapports`) et le **Journal d'audit persistant** (`/api/v1/audit`).
+- Le Dashboard orchestre les trois services de bilan existants et complète leur résultat avec des compteurs SQL d'inventaires, réceptions et imports. Il conserve séparément l'écart Fonderie en `kg` et les écarts Usinage 2/UAP2 en `pièces` ; aucune somme inter-unités n'est produite et une donnée absente reste `null`.
+- **Administration connectée à l'API** : paramètres, types matière et profils utilisateurs persistés. La synchronisation directe Sage X3 reste `disabled` : aucun endpoint de synchronisation.
+- La source de chaque verticale est pilotee par `frontend/src/config/dataSources.ts` (variables `VITE_*_SOURCE`). Aucun repli silencieux : en mode `api`, une erreur reste une erreur. Le tableau complet est dans [`docs/Architecture.md`](docs/Architecture.md#etat-des-verticales).
+- Les regles metier sont le referentiel unique : [`docs/ReglesMetier.md`](docs/ReglesMetier.md). La moyenne des controles poids valides, le signe du rebut U2 et les regles UAP2 d'absence/unite sont implementes. La conversion des sorties X3 en unites non-KG reste interdite tant que SOPAL ne l'a pas definie.
+- Le modèle, le catalogue, les statuts, la déduplication et les endpoints Alertes sont détaillés dans [`docs/AlertesMetier.md`](docs/AlertesMetier.md).
+- Le catalogue RPT-001 à RPT-008, les projections, les filtres, les droits et l'export CSV sont détaillés dans [`docs/Rapports.md`](docs/Rapports.md).
+- Le modèle immuable, les actions tracées, le sanitizer, le Correlation ID, les droits et la migration Audit sont détaillés dans [`docs/JournalAudit.md`](docs/JournalAudit.md).
+- **Authentification** : le frontend prend en charge le mode local `development` et le mode Microsoft Entra ID `entra` via MSAL. Le démarrage backend hors `Development` reste bloqué tant que l'autorité et l'audience Entra ne sont pas configurées (`RM-SEC-003`).
+- **Entra** : logique applicative validée par tests ; validation sur tenant réel SOPAL encore requise.
+- **Consultation Fonderie** : les deux dates visibles filtrent les flux, bornes incluses. Les stocks restent des états mensuels ; une borne en cours de mois reste `null`. L'archivage conserve un mois entier indépendant des dates de consultation. Voir [`docs/BilanFonderieIntervalle.md`](docs/BilanFonderieIntervalle.md).

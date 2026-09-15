@@ -1,44 +1,38 @@
+import { assertEnabled, isApiSource, isMockSource } from '@/config/dataSources';
 import api from '@/services/api';
-import { calculateDashboard } from '@/services/bilanCalculation.service';
-import { testDataRepository } from '@/services/testDataRepository.service';
-import type {
-  DashboardAlert,
-  DashboardBilanRow,
-  DashboardDataSourceStatus,
-  DashboardFilterOptions,
-  DashboardStats
-} from './dashboard.types';
+import type { DashboardResponse } from './dashboard.types';
 
-export type DashboardData = {
-  stats: DashboardStats;
-  alerts: DashboardAlert[];
-  rows: DashboardBilanRow[];
-  sources?: DashboardDataSourceStatus[];
-  filterOptions?: DashboardFilterOptions;
+const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+export const isDashboardPeriod = (value: string): boolean => PERIOD_PATTERN.test(value);
+
+export const validateDashboardPeriod = (periode: string): string => {
+  const normalized = periode.trim();
+  if (!isDashboardPeriod(normalized)) {
+    throw new Error('La période doit respecter le format AAAA-MM.');
+  }
+  return normalized;
 };
 
 export const dashboardService = {
-  async getDashboardData(periode: string, dateDebut?: string, dateFin?: string): Promise<DashboardData> {
-    if (import.meta.env.VITE_USE_REAL_API === 'true') {
-      const [stats, alerts, rows] = await Promise.all([
-        api.get<DashboardStats>('/dashboard/summary', { params: { periode, dateDebut, dateFin } }),
-        api.get<DashboardAlert[]>('/dashboard/alerts', { params: { periode, dateDebut, dateFin } }),
-        api.get<DashboardBilanRow[]>('/dashboard/bilan-par-matiere', { params: { periode, dateDebut, dateFin } })
-      ]);
-      return { stats: stats.data, alerts: alerts.data, rows: rows.data };
+  async getDashboard(periode: string): Promise<DashboardResponse> {
+    assertEnabled('dashboard');
+    const normalizedPeriod = validateDashboardPeriod(periode);
+
+    if (isApiSource('dashboard')) {
+      const response = await api.get<DashboardResponse>('/v1/dashboard', {
+        params: { periode: normalizedPeriod }
+      });
+      return response.data;
     }
-    return calculateDashboard(testDataRepository.getDataset(), periode);
-  },
 
-  async getStats(periode: string, dateDebut?: string, dateFin?: string): Promise<DashboardStats> {
-    return (await this.getDashboardData(periode, dateDebut, dateFin)).stats;
-  },
+    // Le mock est explicitement réservé à Development/test. Cette branche est
+    // éliminée du bundle de production par Vite et ne sert jamais de fallback API.
+    if (isMockSource('dashboard') && (import.meta.env.DEV || import.meta.env.MODE === 'test')) {
+      const { createDashboardMock } = await import('./dashboard.mock');
+      return createDashboardMock(normalizedPeriod);
+    }
 
-  async getAlerts(periode: string, dateDebut?: string, dateFin?: string): Promise<DashboardAlert[]> {
-    return (await this.getDashboardData(periode, dateDebut, dateFin)).alerts;
-  },
-
-  async getBilanParMatiere(periode: string, dateDebut?: string, dateFin?: string): Promise<DashboardBilanRow[]> {
-    return (await this.getDashboardData(periode, dateDebut, dateFin)).rows;
+    throw new Error('Le mode démonstration du Dashboard est indisponible dans ce build.');
   }
 };

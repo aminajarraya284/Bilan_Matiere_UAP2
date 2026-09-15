@@ -30,6 +30,7 @@ public sealed class X3MouvementStock
         string? designationMouvement,
         string? emplacement,
         string? statutX3,
+        NatureMouvementStock nature,
         DateTime dateCreationUtc)
     {
         if (importBatchId == Guid.Empty || numeroLigneSource <= 0)
@@ -57,13 +58,13 @@ public sealed class X3MouvementStock
         DesignationMouvement = ImportX3Batch.NormaliserTexte(designationMouvement, 250);
         Emplacement = ImportX3Batch.NormaliserTexte(emplacement, 80);
         StatutX3 = ImportX3Batch.NormaliserTexte(statutX3, 80);
+        Nature = nature;
         StatutRapprochement = StatutRapprochementX3.MouvementInvalide;
         DateCreationUtc = dateCreationUtc;
     }
 
     public Guid Id { get; private set; }
     public Guid ImportBatchId { get; private set; }
-    public ImportX3Batch ImportBatch { get; private set; } = null!;
     public int NumeroLigneSource { get; private set; }
     public string? NomFeuilleSource { get; private set; }
     public DateOnly DateImputation { get; private set; }
@@ -82,10 +83,7 @@ public sealed class X3MouvementStock
     public string? DesignationMouvement { get; private set; }
     public string? Emplacement { get; private set; }
     public string? StatutX3 { get; private set; }
-    public Guid? OrdreFabricationId { get; private set; }
-    public X3OrdreFabrication? OrdreFabrication { get; private set; }
-    public Guid? ComposantId { get; private set; }
-    public Composant? Composant { get; private set; }
+    public NatureMouvementStock Nature { get; private set; }
     public StatutRapprochementX3 StatutRapprochement { get; private set; }
     public DateTime DateCreationUtc { get; private set; }
 
@@ -109,6 +107,7 @@ public sealed class X3MouvementStock
         string? designationMouvement,
         string? emplacement,
         string? statutX3,
+        NatureMouvementStock nature,
         DateTime dateCreationUtc,
         Guid? id = null)
     {
@@ -133,16 +132,7 @@ public sealed class X3MouvementStock
             designationMouvement,
             emplacement,
             statutX3,
+            nature,
             dateCreationUtc);
-    }
-
-    public void DefinirRapprochement(
-        Guid? ordreFabricationId,
-        Guid? composantId,
-        StatutRapprochementX3 statut)
-    {
-        OrdreFabricationId = ordreFabricationId;
-        ComposantId = composantId;
-        StatutRapprochement = statut;
     }
 }

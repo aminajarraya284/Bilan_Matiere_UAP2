@@ -2,9 +2,9 @@
 
 ## Objectif
 
-La migration progressive consiste à connecter les fonctionnalités au backend une par une, sans interrompre le fonctionnement des écrans qui utilisent encore les données de démonstration.
+La migration progressive consiste à connecter les fonctionnalités au backend une par une, sans interrompre le fonctionnement des écrans qui utilisent encore les données de démonstration. Le présent document conserve le point de départ historique puis décrit l'état atteint après le Lot 3.
 
-À ce jour, le frontend fonctionne principalement selon le flux suivant :
+Au démarrage de la migration, le frontend fonctionnait principalement selon le flux suivant :
 
 ```text
 Dataset de test
@@ -16,15 +16,15 @@ localStorage
 Écrans Vue
 ```
 
-Le backend ASP.NET Core est actif. Il expose le health check `/health` ainsi que la verticale métier Types matière / Déchets Fonderie sous `/api/v1`.
+Le backend ASP.NET Core est actif. Il expose le health check `/health` et les verticales métier décrites dans [`Architecture.md`](Architecture.md#etat-des-verticales) sous `/api/v1`.
 
-Le frontend possède actuellement un interrupteur global :
+Le frontend possédait initialement un interrupteur global :
 
 ```env
 VITE_USE_REAL_API=false
 ```
 
-Le passage direct à `true` demanderait encore à plusieurs modules non migrés d'appeler simultanément des endpoints qui n'existent pas :
+Une bascule directe à `true` aurait demandé aux modules non migrés d'appeler simultanément des endpoints qui n'existaient pas encore :
 
 - authentification ;
 - réceptions Usinage 2 ;
@@ -44,7 +44,7 @@ La stratégie recommandée est donc :
 
 > Connecter un module au backend, le tester de bout en bout, puis migrer le module suivant tout en conservant explicitement les autres modules en mode mock.
 
-## État actuel : première verticale Déchets Fonderie
+## Point de départ historique : première verticale Déchets Fonderie
 
 À l'issue de la première migration :
 
@@ -339,7 +339,79 @@ VITE_TYPES_MATIERE_SOURCE=api
 VITE_DECHETS_SOURCE=api
 ```
 
-Les autres modules restent explicitement en mode mock.
+À cette étape historique, les autres modules restaient explicitement en mode mock.
+
+## État actuel après le Lot 3 — Dashboard réel
+
+Le Dashboard a rejoint les verticales API. Sa configuration par défaut est :
+
+```env
+VITE_DASHBOARD_SOURCE=api
+```
+
+Son flux est volontairement réduit à un seul appel réseau :
+
+```text
+DashboardView.vue
+        ↓
+dashboard.store.ts
+        ↓
+dashboard.service.ts
+        ↓
+GET /api/v1/dashboard?periode=YYYY-MM
+        ↓
+DashboardService + services de bilan existants
+        ↓
+SQL Server
+```
+
+La période est obligatoire et strictement validée au format `YYYY-MM`. Une erreur HTTP efface la donnée précédente du store et reste visible ; elle ne déclenche aucun fallback mock. Le mock Dashboard restant est un état vide explicite, réservé au développement et aux tests, sans valeur métier fictive.
+
+Les écarts ne sont ni recalculés dans la vue ni additionnés entre unités : la Fonderie reste en kilogrammes, Usinage 2 et UAP2 restent en pièces. Les zéros retournés par un calcul réel sont affichés, tandis qu'une absence de source est conservée sous forme de `null` avec le statut `NonDisponible` ou `Partiel`.
+
+Le Dashboard ne nécessite ni nouvelle table ni migration EF Core. Il réutilise les bilans existants et ajoute des projections de lecture mensuelles sur les inventaires, les réceptions et les lots d'import.
+
+## État actuel après le Lot 4 — Alertes persistantes
+
+La verticale Alertes a rejoint les sources API :
+
+```env
+VITE_ALERTES_SOURCE=api
+```
+
+Le flux complet est désormais :
+
+```text
+AlertesView.vue
+        ↓
+alertes.store.ts
+        ↓
+alertes.service.ts
+        ↓
+/api/v1/alertes
+        ↓
+services de détection et génération
+        ↓
+AlertesMetier / SQL Server
+```
+
+Le recalcul est explicite et dédupliqué. Il conserve la première date de détection, actualise la dernière, et ne résout automatiquement que les codes dont la condition courante est sûre. Les actions utilisateur sont persistées avec date UTC, utilisateur et commentaire. Une erreur API efface la liste courante et reste visible ; aucun mock n'est chargé en remplacement.
+
+La migration `AddPersistentBusinessAlerts` crée la table et les index nécessaires. Elle n'est pas appliquée automatiquement et ne doit jamais être exécutée sur une base distante sans autorisation.
+
+## État actuel après le Lot 6 — Journal d'audit persistant
+
+La verticale Audit utilise désormais :
+
+```env
+VITE_AUDIT_SOURCE=api
+```
+
+Le frontend interroge uniquement `GET /api/v1/audit` et `GET /api/v1/audit/{id}`. La liste est paginée et filtrée côté serveur ; le détail restitue des valeurs ciblées avant/après sans afficher un JSON brut. Une panne API reste visible et n'active aucun mock ou `localStorage`.
+
+La production des traces est transverse : les services Application d'inventaire, déchets, contrôle poids, réceptions, rebuts, imports X3 et alertes appellent `IAuditService`. Les lectures Dashboard, Bilans et Rapports ne créent aucune trace. La migration `AddPersistentAuditTrail` crée uniquement `AuditTraces` et ses index ; elle n'est pas appliquée automatiquement.
+
+La page et l'API sont limitées à `Admin`. Les étapes suivantes concernent l'Administration réelle, puis la recette et le déploiement SOPAL ; elles ne doivent pas réintroduire de fallback Audit.
 
 ## Migrations suivantes
 
@@ -395,20 +467,31 @@ Chaque calcul backend devra être comparé aux résultats du dataset et des test
 ## Ordre recommandé
 
 ```text
-0. Validation des règles métier et des contrats
-1. Configuration progressive des sources frontend
-2. Types matière minimaux + Déchets Fonderie
-3. Référentiels OF, gammes et nomenclatures
-4. Contrôle poids Fonderie
-5. Réceptions Usinage 2
-6. Inventaire
-7. Imports et synchronisation X3
-8. Bilan Usinage 2
-9. Bilan Fonderie
-10. Bilan UAP2
-11. Dashboard, alertes et rapports
-12. Administration et audit complet
+0. Validation des règles métier et des contrats          [fait]
+1. Configuration progressive des sources frontend        [fait]
+2. Types matière minimaux + Déchets Fonderie             [fait]
+3. Référentiels OF, gammes et nomenclatures              [fait]
+4. Contrôle poids Fonderie                               [fait]
+5. Réceptions Usinage 2                                  [fait]
+6. Inventaire                                            [fait]
+7. Imports et synchronisation X3                         [imports faits ; synchronisation disabled]
+8. Bilan Usinage 2                                       [fait]
+9. Bilan Fonderie                                        [fait]
+10. Bilan UAP2                                           [fait]
+11. Dashboard                                             [fait — API]
+12. Alertes                                               [fait — API persistante]
+13. Rapports                                              [fait — API réelle]
+14. Journal d'audit                                      [fait — API persistante, Admin]
+15. Administration                                       [à faire — mock]
 ```
+
+L'état détaillé, verticale par verticale, est tenu à jour dans
+[`Architecture.md`](Architecture.md#etat-des-verticales).
+
+Deux points d'arbitrage métier restent ouverts sur les bilans déjà livrés
+(voir [`ReglesMetier.md`](ReglesMetier.md#index-des-règles-à-valider)) :
+conversion des sorties X3 en unités non-KG (`RM-FON-003`) et signe du rebut U2
+dans l'écart UAP2 (`RM-UAP2-002`).
 
 L'authentification et les autorisations backend sont obligatoires avant toute mise en production avec de vrais utilisateurs. Elles peuvent être développées parallèlement aux premières verticales, mais aucun endpoint métier ne doit être exposé en production sans contrôle d'accès serveur.
 
@@ -458,4 +541,4 @@ Infrastructure / SQL Server
 Tests et observabilité
 ```
 
-La première verticale **Types matière minimaux + Déchets Fonderie** est opérationnelle. Les prochaines migrations doivent conserver la même approche progressive, après stabilisation et validation métier de cette verticale.
+Les verticales **Dashboard**, **Alertes**, **Rapports** et **Journal d'audit** sont opérationnelles sur les données réelles disponibles. `audit` utilise `api` par défaut, ne lit plus `localStorage` et n'a aucun fallback vers les anciennes traces fictives. L'API Audit est en lecture seule et réservée à `Admin`; les événements sont produits par les services métier instrumentés. La prochaine verticale est l'Administration réelle et sécurisée.

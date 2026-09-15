@@ -1,10 +1,14 @@
 using BilanMatiereUAP2.Application.Abstractions;
 using BilanMatiereUAP2.Application.Common;
+using BilanMatiereUAP2.Application.Features.Imports;
 using BilanMatiereUAP2.Application.Features.ImportsX3;
+using BilanMatiereUAP2.Contracts.Imports;
 using BilanMatiereUAP2.Contracts.ImportsX3;
 using BilanMatiereUAP2.Domain.Entities;
+using BilanMatiereUAP2.Domain.Enums;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.Extensions.Options;
 
 namespace BilanMatiereUAP2.UnitTests.Application;
 
@@ -187,7 +191,11 @@ public sealed class X3ImportServiceTests
             repository,
             currentUser,
             dateTimeProvider,
-            validator);
+            validator,
+            Options.Create(new ImportX3Options()),
+            new NoopImportArchiveService(),
+            new TestImportHashCalculator(),
+            new TestTypeMatiereRepository("M3000L0", "M3060L0"));
 
         var command = new ImportSortiesMatiereX3Command(
             new X3ImportFileContent("Encours.xlsx", 100, [1, 2, 3]),
@@ -197,9 +205,9 @@ public sealed class X3ImportServiceTests
 
         Assert.Equal(2, response.SortiesGenerees);
         Assert.Equal(2, response.Consommations.Count);
-        Assert.Contains(response.Consommations, c => c.CodeComposant == "M3000L0");
-        Assert.Contains(response.Consommations, c => c.CodeComposant == "M3060L0");
-        Assert.DoesNotContain(response.Consommations, c => c.CodeComposant == "AUTRE99");
+        Assert.Contains(response.Consommations, c => c.CodeTypeMatiere == "M3000L0");
+        Assert.Contains(response.Consommations, c => c.CodeTypeMatiere == "M3060L0");
+        Assert.DoesNotContain(response.Consommations, c => c.CodeTypeMatiere == "AUTRE99");
     }
 
     private sealed class FakeEncoursReader(IReadOnlyList<EncoursProductRow> rows) : IEncoursProductReader
@@ -216,21 +224,46 @@ public sealed class X3ImportServiceTests
 
     private sealed class FakeX3ImportRepository : IX3ImportRepository
     {
-        public Task<ImportX3Batch?> GetBatchByPairHashAsync(string pairHash, CancellationToken cancellationToken) => Task.FromResult<ImportX3Batch?>(null);
+        public Task<ImportX3Batch?> GetCompletedBatchByPairHashAsync(string pairHash, CancellationToken cancellationToken) => Task.FromResult<ImportX3Batch?>(null);
         public Task<ImportX3Batch?> GetBatchByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<ImportX3Batch?>(null);
         public Task<IReadOnlyList<ImportX3Anomaly>> GetAnomaliesAsync(Guid batchId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ImportX3Anomaly>>([]);
         public Task<IReadOnlyDictionary<string, X3OrdreFabrication>> GetOrdresByNumeroAsync(IReadOnlyCollection<string> numerosOF, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyDictionary<string, X3OrdreFabrication>>(new Dictionary<string, X3OrdreFabrication>());
         public Task<X3OrdreFabrication?> GetOrdreContexteAsync(string numeroOF, CancellationToken cancellationToken) => Task.FromResult<X3OrdreFabrication?>(null);
-        public Task<IReadOnlyDictionary<string, Composant>> GetComposantsByCodeAsync(IReadOnlyCollection<string> codes, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyDictionary<string, Composant>>(new Dictionary<string, Composant>());
+        public Task<IReadOnlyDictionary<string, ConsommationComposant>> GetConsommationsByCleMetierAsync(IReadOnlyCollection<string> clesMetier, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyDictionary<string, ConsommationComposant>>(new Dictionary<string, ConsommationComposant>());
         public Task<PagedResult<ConsommationComposant>> GetConsommationsAsync(ConsommationsComposantsFilter filter, CancellationToken cancellationToken) => Task.FromResult(new PagedResult<ConsommationComposant>([], 0));
         public Task AddBatchAsync(ImportX3Batch batch, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task AddOrdresAsync(IEnumerable<X3OrdreFabrication> ordres, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task AddComposantsAsync(IEnumerable<Composant> composants, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task AddConsommationsAsync(IEnumerable<ConsommationComposant> consommations, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeDateTimeProvider : IDateTimeProvider
     {
         public DateTime UtcNow => Now;
+    }
+
+    private sealed class TestTypeMatiereRepository(params string[] codes) : ITypeMatiereRepository
+    {
+        private readonly List<TypeMatiere> values = codes
+            .Select(code => TypeMatiere.Creer(code, $"Type {code}", Now))
+            .ToList();
+
+        public Task<IReadOnlyList<TypeMatiere>> GetAllAsync(bool? actif, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<TypeMatiere>>(values
+                .Where(type => actif is null || type.EstActif == actif)
+                .ToArray());
+
+        public Task<TypeMatiere?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+            => Task.FromResult(values.SingleOrDefault(type => type.Id == id));
+
+        public Task<TypeMatiere?> GetByCodeAsync(string normalizedCode, CancellationToken cancellationToken)
+            => Task.FromResult(values.SingleOrDefault(type => type.Code == normalizedCode));
+
+        public Task AddAsync(TypeMatiere typeMatiere, CancellationToken cancellationToken)
+        {
+            values.Add(typeMatiere);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeCurrentUserService : ICurrentUserService
@@ -249,5 +282,33 @@ public sealed class X3ImportServiceTests
         public Task<ValidationResult> ValidateAsync(IValidationContext context, CancellationToken cancellation = default) => Task.FromResult(new ValidationResult());
         public IValidatorDescriptor CreateDescriptor() => throw new NotImplementedException();
         public bool CanValidateInstancesOfType(Type type) => true;
+    }
+
+    private sealed class NoopImportArchiveService : IImportArchiveService
+    {
+        public Task ArchiveAsync(Guid importBatchId, TypeImport typeImport, string? profilImport, string nomFichierOriginal, byte[] content, Guid? uploadeParUtilisateurId, string? uploadeParNom, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task<IReadOnlyList<ImportSourceFileResponse>> GetFilesAsync(Guid importBatchId, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyList<ImportSourceFileResponse>)Array.Empty<ImportSourceFileResponse>());
+        public Task<StoredFileContent> DownloadAsync(Guid importBatchId, Guid fileId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class TestImportHashCalculator : IImportHashCalculator
+    {
+        public string CalculateSha256(byte[] content) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));
+        public string CalculateCoupleHash(string firstHash, string secondHash) => CalculateSha256(System.Text.Encoding.UTF8.GetBytes($"{firstHash}:{secondHash}"));
+    }
+
+    private sealed class TestParametreApplicationProvider : IParametreApplicationProvider
+    {
+        public Task<string?> GetValueAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>(null);
+
+        public Task<decimal?> GetDecimalAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<decimal?>(null);
+
+        public Task<IReadOnlyList<string>> GetCsvValuesAsync(string cle, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>(["M3000L0", "M3010L0", "M3060L0"]);
     }
 }

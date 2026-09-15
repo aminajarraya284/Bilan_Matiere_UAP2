@@ -39,7 +39,6 @@ public sealed class ImportX3Batch
     public DateTime? DateFinUtc { get; private set; }
     public ICollection<ImportX3File> Fichiers { get; private set; } = new List<ImportX3File>();
     public ICollection<ImportX3Anomaly> Anomalies { get; private set; } = new List<ImportX3Anomaly>();
-    public ICollection<X3MouvementStock> Mouvements { get; private set; } = new List<X3MouvementStock>();
     public ICollection<ConsommationComposant> Consommations { get; private set; } = new List<ConsommationComposant>();
 
     public static ImportX3Batch Demarrer(
@@ -69,8 +68,6 @@ public sealed class ImportX3Batch
 
     public void AjouterAnomalie(ImportX3Anomaly anomalie) => Anomalies.Add(anomalie);
 
-    public void AjouterMouvement(X3MouvementStock mouvement) => Mouvements.Add(mouvement);
-
     public void AjouterConsommation(ConsommationComposant consommation) => Consommations.Add(consommation);
 
     public void Terminer(
@@ -78,7 +75,9 @@ public sealed class ImportX3Batch
         int lignesEncoursValides,
         int lignesMouvementsLues,
         int lignesMouvementsValides,
-        DateTime dateFinUtc)
+        DateTime dateFinUtc,
+        int? nombreSortiesGenerees = null,
+        int? nombreAnomalies = null)
     {
         if (dateFinUtc < DateCreationUtc)
         {
@@ -89,8 +88,8 @@ public sealed class ImportX3Batch
         LignesEncoursValides = ValiderCompteur(lignesEncoursValides);
         LignesMouvementsLues = ValiderCompteur(lignesMouvementsLues);
         LignesMouvementsValides = ValiderCompteur(lignesMouvementsValides);
-        NombreSortiesGenerees = Consommations.Count;
-        NombreAnomalies = Anomalies.Count;
+        NombreSortiesGenerees = nombreSortiesGenerees ?? Consommations.Count;
+        NombreAnomalies = nombreAnomalies ?? Anomalies.Count;
         Statut = NombreAnomalies == 0
             ? StatutRapprochementX3.Rapproche
             : StatutRapprochementX3.ImportPartiel;

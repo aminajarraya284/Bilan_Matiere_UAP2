@@ -1,66 +1,87 @@
-import { BilanStatus } from '@/types/common.types';
+export type DashboardStatus = 'OK' | 'AVerifier' | 'Anomalie' | 'Partiel' | 'NonDisponible';
 
-export interface DashboardStats {
-  inputMatiere: number;
-  outputMatiere: number;
-  stockDebut?: number;
-  sortiesMagasinX3?: number;
-  ecartMatiere: number;
-  tauxEcart: number;
-  periodeLabel: string;
-  dechetsFonderie: number;
-  encoursFinUtiliseBilan: number;
-  receptionsU2: number;
-  alertesPoids: number;
-  alertesBilan: number;
+export type DashboardUnit = 'kg' | 'pieces';
+
+export interface DashboardBilanSummary {
+  code: 'FONDERIE' | 'USINAGE2' | 'UAP2';
+  ecart: number | null;
+  unite: DashboardUnit;
+  nombreLignes: number;
+  nombreOf: number | null;
+  nombreOk: number;
+  nombreAVerifier: number;
+  nombreAnomalies: number;
+  nombreDonneesManquantes: number;
+  statut: DashboardStatus;
 }
 
-export interface DashboardAlert {
-  id: number;
-  type: 'danger' | 'warning' | 'info';
-  category?: 'weight' | 'bilan';
-  title: string;
-  description: string;
-  actionLabel?: string;
-  actionTo?: string;
-  numeroOF?: string;
-  codeArticle?: string;
-  typeMatiere?: string;
-  poidsTheoriqueUnitaireKg?: number;
-  poidsPhysiqueUnitaireKg?: number;
-  tauxEcart?: number;
-  ecartKg?: number;
-  seuil?: number;
-  statut?: string;
+export interface DashboardOperationsSummary {
+  inventairesBrouillon: number;
+  inventairesValides: number;
+  receptionsNonReceptionnees: number;
+  receptionsValidees: number;
+  controlesPoidsAmbigus: number | null;
+  ofReferencesManquantes: number;
 }
 
-export interface DashboardBilanRow {
-  typeMatiere: string;
-  inputX3: number;
-  stockDebut?: number;
-  sortiesX3?: number;
-  encoursFin: number;
-  dechets: number;
-  usinage2: number;
-  poidsNonReceptionne: number;
-  ecartKg: number;
-  statut: BilanStatus;
+export interface DashboardFonderieSummary {
+  totalInputKg: number | null;
+  totalOutputKg: number | null;
+  totalEcartKg: number | null;
+  tauxEcartPourcent: number | null;
+  nombreTypesComplets: number;
+  nombreTypesAvecDonneesManquantesOuAnomalies: number;
+  types: DashboardFonderieTypeSummary[];
 }
 
-export type DashboardDataSourceGroup = 'X3' | 'Application';
-export type DashboardDataSourceStatusValue = 'À jour' | 'Ancien' | 'Non disponible';
-
-export interface DashboardDataSourceStatus {
-  id: string;
-  group: DashboardDataSourceGroup;
-  name: string;
-  updatedAt?: string;
-  rowCount?: number;
-  status: DashboardDataSourceStatusValue;
+export interface DashboardFonderieTypeSummary {
+  codeTypeMatiere: string;
+  stockDebutKg: number | null;
+  sortiesMagasinX3Kg: number | null;
+  inputKg: number | null;
+  stockFinKg: number | null;
+  dechetsFonderieKg: number | null;
+  receptionsUsinage2Kg: number | null;
+  outputKg: number | null;
+  ecartKg: number | null;
+  tauxEcartPourcent: number | null;
+  anomalies: string[];
+  statut: string;
 }
 
-export interface DashboardFilterOptions {
-  typeMatieres: string[];
-  numerosOF: string[];
-  ofTypeMatieres?: Record<string, string[]>;
+export interface DashboardImportSummary {
+  reussis: number;
+  partiels: number;
+  echoues: number;
+  fichiersIdentiques: number;
+  dernierImportUtc: string | null;
+}
+
+export interface DashboardDataQualitySummary {
+  nombreAnomalies: number;
+  nombreDonneesManquantes: number;
+  nombreConversionsImpossibles: number;
+  nombreReferencesManquantes: number;
+  statutGlobal: DashboardStatus;
+}
+
+export interface DashboardWarning {
+  code: string;
+  source: string;
+  message: string;
+  statut: DashboardStatus;
+}
+
+export interface DashboardResponse {
+  periode: string;
+  calculeLeUtc: string;
+  statutGlobal: DashboardStatus;
+  fonderie: DashboardBilanSummary;
+  fonderieDetail: DashboardFonderieSummary;
+  usinage2: DashboardBilanSummary;
+  uap2: DashboardBilanSummary;
+  operations: DashboardOperationsSummary;
+  imports: DashboardImportSummary;
+  qualiteDonnees: DashboardDataQualitySummary;
+  avertissements: DashboardWarning[];
 }

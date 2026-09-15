@@ -54,14 +54,18 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
     [Fact]
     public async Task PostDechet_ValidRequest_ReturnsCreatedAndCanBeListed()
     {
+        // Ce test porte sur la CREATION seule : il n'utilise pas le helper qui valide ensuite.
         var type = await GetSeedAsync("M3000L0");
-        var response = await CreateWasteAsync(type.Id, 125.5m);
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/dechets-fonderie",
+            new CreateDechetFonderieRequest(new DateOnly(2026, 6, 30), type.Id, "Bavure", 125.5m, "Test intégration"));
         var created = await response.Content.ReadFromJsonAsync<DechetFonderieResponse>(JsonOptions);
         var list = await _client.GetFromJsonAsync<PagedDechetsFonderieResponse>(
             "/api/v1/dechets-fonderie?periode=2026-06");
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.Equal(27, created!.SemaineIso);
+        Assert.Equal("Brouillon", created!.Statut);
+        Assert.Equal(27, created.SemaineIso);
         Assert.Contains(list!.Items, item => item.Id == created.Id);
     }
 
@@ -76,8 +80,10 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
         Assert.Contains("poidsKg", payload);
     }
 
+    // Un dechet annule reste TRACABLE dans l'historique : il n'est jamais supprime
+    // physiquement ni masque. Il sort en revanche des totaux du resume.
     [Fact]
-    public async Task DeleteDechet_HidesItFromStandardLists()
+    public async Task DeleteDechet_LeConserveDansLHistoriqueEnAnnule()
     {
         var type = await GetSeedAsync("M3000L0");
         var createResponse = await CreateWasteAsync(type.Id, 10m);
@@ -86,9 +92,13 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
         var deleteResponse = await _client.DeleteAsync($"/api/v1/dechets-fonderie/{created!.Id}");
         var list = await _client.GetFromJsonAsync<PagedDechetsFonderieResponse>(
             "/api/v1/dechets-fonderie?periode=2026-06");
+        var resume = await _client.GetFromJsonAsync<ResumeDechetsFonderieResponse>(
+            "/api/v1/dechets-fonderie/resume?periode=2026-06");
 
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
-        Assert.DoesNotContain(list!.Items, item => item.Id == created.Id);
+        var conserve = Assert.Single(list!.Items, item => item.Id == created.Id);
+        Assert.Equal("Annule", conserve.Statut);
+        Assert.Equal(0m, resume!.TotalGeneralKg);
     }
 
     [Fact]
@@ -180,13 +190,17 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
         return items!.Single(item => item.Code == code);
     }
 
-    private Task<HttpResponseMessage> CreateWasteAsync(
+    /// <summary>
+    /// Cree un dechet puis le VALIDE : depuis l'introduction du cycle de vie, la creation
+    /// produit un Brouillon, exclu des totaux. Seuls les dechets valides alimentent le resume.
+    /// </summary>
+    private async Task<HttpResponseMessage> CreateWasteAsync(
         Guid typeMatiereId,
         decimal weight,
         string kind = "Bavure",
         DateOnly? date = null)
     {
-        return _client.PostAsJsonAsync(
+        var response = await _client.PostAsJsonAsync(
             "/api/v1/dechets-fonderie",
             new CreateDechetFonderieRequest(
                 date ?? new DateOnly(2026, 6, 30),
@@ -194,5 +208,9 @@ public sealed class TypesMatiereDechetsApiTests(ApiWebApplicationFactory factory
                 kind,
                 weight,
                 "Test intégration"));
+        if (!response.IsSuccessStatusCode) return response;
+
+        var created = await response.Content.ReadFromJsonAsync<DechetFonderieResponse>(JsonOptions);
+        return await _client.PostAsync($"/api/v1/dechets-fonderie/{created!.Id}/valider", null);
     }
 }

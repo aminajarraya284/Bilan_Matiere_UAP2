@@ -19,12 +19,42 @@ public static class DependencyInjection
                 "La chaine de connexion 'DefaultConnection' est absente.");
 
         services.AddDbContext<BilanMatiereUAP2DbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options.UseSqlServer(connectionString, sqlOptions => sqlOptions.CommandTimeout(180)));
         services.AddScoped<ITypeMatiereRepository, TypeMatiereRepository>();
         services.AddScoped<IDechetFonderieRepository, DechetFonderieRepository>();
-        services.AddScoped<IX3ImportRepository, InMemoryX3ImportRepository>();
+        services.AddScoped<IControlePoidsFonderieRepository, ControlePoidsFonderieRepository>();
+        services.AddScoped<IInventaireFonderieRepository, InventaireFonderieRepository>();
+        services.AddScoped<IInventaireComptageRepository, InventaireComptageRepository>();
+        services.AddScoped<IRebutUsinage2Repository, RebutUsinage2Repository>();
+        services.AddScoped<IX3ImportRepository, X3ImportRepository>();
+        services.AddScoped<IOfContextDataRepository, OfContextDataRepository>();
+        services.AddScoped<IParametreApplicationRepository, ParametreApplicationRepository>();
+        services.AddScoped<IPosteProcessusRepository, PosteProcessusRepository>();
         services.AddScoped<IEncoursProductReader, EncoursProductExcelReader>();
         services.AddScoped<IMouvementStockX3Reader, MouvementsStockX3ExcelReader>();
+        services.AddScoped<ManufacturingReferencesRepository>();
+        services.AddScoped<IManufacturingReferencesRepository>(provider =>
+            provider.GetRequiredService<ManufacturingReferencesRepository>());
+        services.AddScoped<IOfContextReferencesRepository>(provider =>
+            provider.GetRequiredService<ManufacturingReferencesRepository>());
+        services.AddScoped<IGammeFabricationReader, GammeFabricationExcelReader>();
+        services.AddScoped<INomenclatureReader, NomenclatureExcelReader>();
+        services.AddScoped<ISortieMpMaterialRepository, SortieMpMaterialRepository>();
+        services.AddScoped<IBilanFonderieRepository, BilanFonderieRepository>();
+        services.AddScoped<IBilanUap2Repository, BilanUap2Repository>();
+        services.AddScoped<IDashboardReadRepository, DashboardReadRepository>();
+        services.AddScoped<IAlerteRepository, AlerteRepository>();
+        services.AddScoped<IAuditRepository, AuditRepository>();
+        services.AddScoped<IUtilisateurApplicationRepository, UtilisateurApplicationRepository>();
+        services.AddScoped<IPeriodeBilanArchiveRepository, PeriodeBilanArchiveRepository>();
+        services.AddScoped<IRapportsReadRepository, RapportsReadRepository>();
+        services.AddScoped<IReportMachineRepository, ReportMachineRepository>();
+        services.AddScoped<IReportMachineReader, RapportMachineExcelReader>();
+        services.AddScoped<IImportSourceFileRepository, ImportSourceFileRepository>();
+        services.AddScoped<IReceptionUsinage2Repository, ReceptionUsinage2Repository>();
+        services.AddScoped<IEntreeOfRepository, EntreeOfRepository>();
+        services.AddSingleton<IImportFileStorage, LocalImportFileStorage>();
+        services.AddSingleton<IImportHashCalculator, ImportHashCalculator>();
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<BilanMatiereUAP2DbContext>());
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 

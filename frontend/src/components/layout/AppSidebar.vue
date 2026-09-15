@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, type Component } from 'vue';
 import { useAuthStore } from '@/features/auth/auth.store';
 import logoUrl from '@/assets/sopal-logo-mark-hd.png?url';
+import { getGlobalMode, GLOBAL_MODE_LABELS } from '@/config/dataSources';
+import type { UserRole } from '@/types/common.types';
 import {
   LayoutDashboard,
   Scale,
@@ -15,17 +17,39 @@ import {
   Shield,
   History,
   AlertTriangle,
-  Gauge
+  Gauge,
+  FileArchive
 } from 'lucide-vue-next';
 
 const authStore = useAuthStore();
-const role = computed(() => authStore.userRole);
+const roles = computed(() => authStore.roles);
+const environmentLabel = computed(() => GLOBAL_MODE_LABELS[getGlobalMode()]);
 
-const menuItems = [
-  { group: 'Pilotage', name: 'Tableau de bord', path: '/dashboard', icon: LayoutDashboard, roles: ['Admin'] },
-  { group: 'Pilotage', name: 'Bilans matière', path: '/bilan-matiere', icon: Scale, roles: ['Admin'] },
-  { group: 'Pilotage', name: 'Alertes', path: '/alertes', icon: AlertTriangle, roles: ['Admin'] },
-  { group: 'Opérations', name: 'Inventaire Fonderie', path: '/inventaire', icon: ClipboardList, roles: ['Admin'] },
+// `roles` doit rester typé : sans cela il est inféré `string[]` et la comparaison
+// avec les rôles de la session ne compile plus.
+const menuItems: { group: string; name: string; path: string; icon: Component; roles: UserRole[] }[] = [
+  {
+    group: 'Pilotage',
+    name: 'Tableau de bord',
+    path: '/dashboard',
+    icon: LayoutDashboard,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
+  {
+    group: 'Pilotage',
+    name: 'Bilans matière',
+    path: '/bilan-matiere',
+    icon: Scale,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
+  {
+    group: 'Pilotage',
+    name: 'Alertes',
+    path: '/alertes',
+    icon: AlertTriangle,
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
+  },
+  { group: 'Opérations', name: 'Inventaire Fonderie', path: '/inventaire', icon: ClipboardList, roles: ['Admin', 'ResponsableFonderie'] },
   {
     group: 'Opérations',
     name: 'Contrôle poids',
@@ -56,14 +80,28 @@ const menuItems = [
     icon: Layers3,
     roles: ['Admin']
   },
-  { group: 'Pilotage', name: 'Rapports', path: '/rapports', icon: FileText, roles: ['Admin'] },
+  {
+    group: 'Pilotage',
+    name: 'Rapports',
+    path: '/rapports',
+    icon: FileText,
+    roles: ['Admin']
+  },
+  { group: 'Administration', name: 'Historique des périodes', path: '/historique-periodes', icon: History, roles: ['Admin'] },
+  {
+    group: 'Administration',
+    name: 'Historique des imports',
+    path: '/imports-historique',
+    icon: FileArchive,
+    roles: ['Admin']
+  },
   { group: 'Administration', name: 'Utilisateurs et paramètres', path: '/admin', icon: Shield, roles: ['Admin'] },
   { group: 'Administration', name: 'Journal d’audit', path: '/audit', icon: History, roles: ['Admin'] }
 ];
 
 const groupedMenu = computed(() => {
-  if (!role.value) return [];
-  const visible = menuItems.filter((item) => item.roles.includes(role.value!));
+  if (roles.value.length === 0) return [];
+  const visible = menuItems.filter((item) => item.roles.some((role) => roles.value.includes(role)));
   return ['Pilotage', 'Opérations', 'Données X3', 'Administration']
     .map((label) => ({ label, items: visible.filter((item) => item.group === label) }))
     .filter((group) => group.items.length > 0);
@@ -117,7 +155,7 @@ const groupedMenu = computed(() => {
     <div class="sidebar-footer border-t p-4">
       <div class="sidebar-environment flex items-center gap-2.5 rounded-lg border px-3 py-2.5">
         <span class="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
-        <span class="sidebar-footer-label text-xs font-medium text-primary-100/75">Environnement de test</span>
+        <span class="sidebar-footer-label text-xs font-medium text-primary-100/75">{{ environmentLabel }}</span>
       </div>
     </div>
   </aside>

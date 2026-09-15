@@ -1,14 +1,6 @@
 import { BUSINESS_RULES } from '@/config/businessRules';
-import type { AlertesBilanAlert, AlertesWeightAlert } from '@/features/alertes/alertes.types';
-import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
-import type {
-  DashboardAlert,
-  DashboardBilanRow,
-  DashboardDataSourceStatus,
-  DashboardDataSourceStatusValue,
-  DashboardFilterOptions,
-  DashboardStats
-} from '@/features/dashboard/dashboard.types';
+import type { AlertesBilanAlert, AlertesWeightAlert } from '@/features/alertes/alertes.legacy-mock.types';
+import type { BilanFonderieComplet, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
 import {
   type ReceptionUsinage2Test,
   type RefGammeFabrication,
@@ -289,7 +281,7 @@ export const calculateInventoryBilanSummary = (dataset: SopalTestDataset, period
 export const calculateBilanFonderie = (
   dataset: SopalTestDataset,
   periode: string = dataset.periode
-): BilanMatiereReport[] => {
+): BilanFonderieComplet[] => {
   const nonReceived = calculateNonReceivedQuantities(dataset, periode);
 
   return dataset.refTypesMatiere.map((type) => {
@@ -436,93 +428,6 @@ export const calculateBilanUap2 = (dataset: SopalTestDataset, periode: string = 
       };
     });
 
-export const calculateDashboard = (dataset: SopalTestDataset, periode: string = dataset.periode) => {
-  const bilans = calculateBilanFonderie(dataset, periode);
-  const inputTotal = bilans.reduce((sum, item) => sum + item.inputTotal, 0);
-  const outputTotal = bilans.reduce((sum, item) => sum + item.outputTotal, 0);
-  const stockDebut = bilans.reduce((sum, item) => sum + item.encoursDebut, 0);
-  const sortiesMagasinX3 = bilans.reduce((sum, item) => sum + item.sortiesX3, 0);
-  const ecart = round(inputTotal - outputTotal, 3);
-  const taux = inputTotal > 0 ? round((Math.abs(ecart) / inputTotal) * 100, 3) : 0;
-  const weightAlerts = getActiveAlerts(dataset, periode).weightAlerts;
-  const bilanAlerts = bilans.filter(
-    (bilan) => bilan.tauxEcart > dataset.parametresApplication.seuilAlerteBilanPourcentage
-  );
-  const stats: DashboardStats = {
-    inputMatiere: inputTotal,
-    outputMatiere: outputTotal,
-    stockDebut,
-    sortiesMagasinX3,
-    ecartMatiere: ecart,
-    tauxEcart: taux,
-    periodeLabel: periode,
-    dechetsFonderie: bilans.reduce((sum, item) => sum + item.dechetsFonderie, 0),
-    encoursFinUtiliseBilan: bilans.reduce((sum, item) => sum + item.encoursFinReel, 0),
-    receptionsU2: bilans.reduce((sum, item) => sum + item.receptionsUsinage2, 0),
-    alertesPoids: weightAlerts.length,
-    alertesBilan: bilanAlerts.length
-  };
-  const rows: DashboardBilanRow[] = bilans.map((bilan) => ({
-    typeMatiere: bilan.typeMatiere,
-    inputX3: bilan.inputTotal,
-    stockDebut: bilan.encoursDebut,
-    sortiesX3: bilan.sortiesX3,
-    encoursFin: bilan.encoursFinReel,
-    dechets: bilan.dechetsFonderie,
-    usinage2: bilan.receptionsUsinage2,
-    poidsNonReceptionne: bilan.poidsNonReceptionne,
-    ecartKg: bilan.ecartKg,
-    statut: bilan.statut
-  }));
-  const alerts: DashboardAlert[] = [
-    ...bilanAlerts
-      .map((bilan, index): DashboardAlert => ({
-        id: index + 1,
-        type: 'danger' as const,
-        category: 'bilan',
-        actionLabel: 'Consulter le bilan',
-        actionTo: '/bilan-matiere',
-        typeMatiere: bilan.typeMatiere,
-        ecartKg: bilan.ecartKg,
-        tauxEcart: bilan.tauxEcart,
-        seuil: dataset.parametresApplication.seuilAlerteBilanPourcentage,
-        statut: bilan.statut,
-        title: `Alerte Écart Critique : ${bilan.typeMatiere}`,
-        description: `${bilan.typeMatiere} présente un écart de ${bilan.ecartKg.toLocaleString('fr-FR')} kg (${bilan.tauxEcart.toLocaleString('fr-FR')}%).`
-      }))
-      .concat(
-        weightAlerts.map((alert) => {
-          const reception = dataset.receptionsUsinage2.find((item) => item.id === alert.id);
-          return {
-            id: 1000 + alert.id,
-            type: 'warning' as const,
-            category: 'weight',
-            actionLabel: 'Consulter',
-            actionTo: '/receptions-usinage-2',
-            numeroOF: alert.numeroOF,
-            codeArticle: alert.codeArticle,
-            typeMatiere: alert.codeTypeMatiere,
-            poidsTheoriqueUnitaireKg: reception?.poidsTheoriqueUnitaireKg,
-            poidsPhysiqueUnitaireKg: reception?.poidsPhysiqueUnitaireKg,
-            tauxEcart: reception?.tauxEcartPoids,
-            seuil: dataset.parametresApplication.seuilAlertePoidsPourcentage,
-            statut: 'Alerte',
-            title: `Alerte poids : ${alert.numeroOF}`,
-            description: `${alert.codeArticle} dépasse le seuil de ${dataset.parametresApplication.seuilAlertePoidsPourcentage} %.`
-          };
-        })
-      )
-  ];
-
-  return {
-    stats,
-    rows,
-    alerts,
-    sources: buildDashboardSources(dataset),
-    filterOptions: buildDashboardFilterOptions(dataset)
-  };
-};
-
 export const getActiveAlerts = (dataset: SopalTestDataset, periode: string = dataset.periode) => {
   const weightAlerts: AlertesWeightAlert[] = dataset.receptionsUsinage2
     .filter((rec) => isInPeriod(rec.dateReception, periode) && rec.tauxEcartPoids > rec.seuilAlertePoidsPourcentage)
@@ -560,109 +465,6 @@ export const getActiveAlerts = (dataset: SopalTestDataset, periode: string = dat
     }));
 
   return { weightAlerts, bilanAlerts };
-};
-
-const latestDate = (values: Array<string | undefined | null>): string | undefined =>
-  values
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1);
-
-const resolveSourceStatus = (updatedAt: string | undefined, rowCount: number): DashboardDataSourceStatusValue => {
-  if (!updatedAt || rowCount <= 0) return 'Non disponible';
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) return 'Non disponible';
-  const ageInDays = Math.abs(Date.now() - date.getTime()) / 86_400_000;
-  return ageInDays > 45 ? 'Ancien' : 'À jour';
-};
-
-const buildDashboardSources = (dataset: SopalTestDataset): DashboardDataSourceStatus[] => {
-  const batchByType = (typeImport: string) =>
-    dataset.importBatches.find((batch) => batch.typeImport === typeImport && batch.statut !== 'Erreur');
-
-  const makeSource = (
-    id: string,
-    group: DashboardDataSourceStatus['group'],
-    name: string,
-    updatedAt: string | undefined,
-    rowCount: number
-  ): DashboardDataSourceStatus => ({
-    id,
-    group,
-    name,
-    updatedAt,
-    rowCount,
-    status: resolveSourceStatus(updatedAt, rowCount)
-  });
-
-  const inventaireRows =
-    dataset.inventaireConteneurs.length + dataset.inventaireCategories.length + dataset.inventaireFours.length;
-
-  return [
-    makeSource(
-      'x3-consommations-of',
-      'X3',
-      'Mouvements VCR + encours production',
-      batchByType('MVTSTOCKSVCR')?.dateFin,
-      dataset.x3ComposantsOF.length
-    ),
-    makeSource(
-      'x3-gamme',
-      'X3',
-      'Gamme de fabrication',
-      batchByType('GAMMEFAB')?.dateFin,
-      dataset.refGammeFabrication.length
-    ),
-    makeSource(
-      'x3-nomenclature',
-      'X3',
-      'Nomenclature',
-      batchByType('BOMARTPARENT')?.dateFin,
-      dataset.refNomenclature.length
-    ),
-    makeSource('x3-emr', 'X3', 'Rapport EMR', batchByType('YRJMCH')?.dateFin, dataset.x3RapportsMachine.length),
-    makeSource(
-      'app-inventaire',
-      'Application',
-      'Inventaire Fonderie',
-      latestDate([
-        ...dataset.inventaireConteneurs.map((item) => item.dateInventaire),
-        ...dataset.inventaireCategories.map((item) => item.dateInventaire),
-        ...dataset.inventaireFours.map((item) => item.dateInventaire)
-      ]),
-      inventaireRows
-    ),
-    makeSource(
-      'app-dechets',
-      'Application',
-      'Déchets Fonderie',
-      latestDate(dataset.dechetsFonderie.map((item) => item.dateDeclaration)),
-      dataset.dechetsFonderie.length
-    ),
-    makeSource(
-      'app-receptions-u2',
-      'Application',
-      'Réceptions Usinage 2',
-      latestDate(dataset.receptionsUsinage2.map((item) => item.dateReception)),
-      dataset.receptionsUsinage2.length
-    )
-  ];
-};
-
-const buildDashboardFilterOptions = (dataset: SopalTestDataset): DashboardFilterOptions => {
-  const ofTypeMatieres = dataset.x3ComposantsOF.reduce<Record<string, string[]>>((acc, component) => {
-    if (!component.isActive) return acc;
-    const current = acc[component.numeroOF] ?? [];
-    if (!current.includes(component.codeComposant)) current.push(component.codeComposant);
-    acc[component.numeroOF] = current.sort();
-    return acc;
-  }, {});
-
-  return {
-    typeMatieres: dataset.refTypesMatiere.map((item) => item.codeTypeMatiere),
-    numerosOF: Array.from(new Set(dataset.x3OrdresFabrication.map((item) => item.numeroOF))).sort(),
-    ofTypeMatieres
-  };
 };
 
 export const toTypeMatiereId = (code: TypeMatiereCode | string): number => {

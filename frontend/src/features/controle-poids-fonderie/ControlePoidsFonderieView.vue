@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import { CheckCircle2, ClipboardCheck, Gauge, History, Plus, RotateCcw, Scale, Trash2 } from 'lucide-vue-next';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import FormField from '@/components/ui/FormField.vue';
+import ErrorState from '@/components/ui/ErrorState.vue';
+import LoadingState from '@/components/ui/LoadingState.vue';
 import { BUSINESS_RULES } from '@/config/businessRules';
 import { formatNumber } from '@/utils/formatters';
 import { useAppDialog } from '@/composables/useAppDialog';
@@ -11,8 +13,16 @@ import {
   writeControlesPoidsFonderie,
   type ControlePoidsFonderieRecord
 } from './controlePoidsFonderie.storage';
+import { controlePoidsFonderieApiService } from './controlePoidsFonderie.service';
+import type { StatutControlePoidsFonderie } from './controlePoidsFonderie.types';
+import { dechetsService } from '@/features/dechets-fonderie/dechets.service';
+import type { TypeMatiereResponse } from '@/features/dechets-fonderie/typesMatiere.types';
+import { isApiSource } from '@/config/dataSources';
 
 const pointKeys = ['P1', 'P2', 'P3', 'P4', 'P5'] as const;
+const controlesError = ref('');
+const typesMatiereError = ref('');
+const isLoadingControles = ref(false);
 type PointKey = (typeof pointKeys)[number];
 type PointValues = {
   poidsBrutKg: number | null;
@@ -29,11 +39,15 @@ type ControlePoids = Omit<
   totalPiecesControle: number;
   totalPoidsNetKg: number;
   poidsPhysiqueUnitaireKg: number;
+  typeMatiereId?: string;
+  statut?: StatutControlePoidsFonderie;
 };
 
+const isRealApi = isApiSource('controlePoids');
 const dialog = useAppDialog();
 const successMessage = ref('');
 const controles = ref<ControlePoids[]>([]);
+const typesMatiere = ref<TypeMatiereResponse[]>([]);
 
 const createEmptyPoints = (): Record<PointKey, PointValues> =>
   pointKeys.reduce(
@@ -58,7 +72,8 @@ const createEmptyForm = (): ControlePoids => ({
   totalPoidsNetKg: 0,
   poidsPhysiqueUnitaireKg: 0,
   controleurOperateur: '',
-  visa: ''
+  visa: '',
+  typeMatiereId: ''
 });
 
 const form = ref<ControlePoids>(createEmptyForm());
@@ -119,7 +134,49 @@ const setPoidsNetGrammes = (point: PointKey, event: Event) => {
 
 const lastControle = computed(() => controles.value[0] ?? null);
 
-const loadControles = () => {
+const toControlePoidsFromApi = (item: Awaited<ReturnType<typeof controlePoidsFonderieApiService.getAll>>[number]): ControlePoids => ({
+  id: item.id,
+  dateControle: item.dateControle,
+  code: item.codeArticle,
+  designation: '',
+  numeroOF: item.numeroOF ?? '',
+  atelier: 'FONDERIE',
+  points: createEmptyPoints(),
+  totalPiecesControle: item.nombreEchantillons ?? 0,
+  totalPoidsNetKg: 0,
+  poidsPhysiqueUnitaireKg: item.poidsPhysiqueUnitaireKg,
+  controleurOperateur: item.creePar ?? '',
+  visa: item.validePar ?? '',
+  typeMatiereId: item.typeMatiereId,
+  statut: item.statut
+});
+
+const loadTypesMatiere = async () => {
+  typesMatiereError.value = '';
+  try {
+    typesMatiere.value = await dechetsService.getTypesMatiere();
+  } catch (err) {
+    typesMatiere.value = [];
+    typesMatiereError.value = 'Impossible de charger les types matière. Veuillez réessayer.';
+    console.error(err);
+  }
+};
+
+const loadControles = async () => {
+  controlesError.value = '';
+  if (isRealApi) {
+    isLoadingControles.value = true;
+    try {
+      controles.value = (await controlePoidsFonderieApiService.getAll()).map(toControlePoidsFromApi);
+    } catch (err) {
+      controles.value = [];
+      controlesError.value = 'Impossible de charger les contrôles poids. Veuillez réessayer.';
+      console.error(err);
+    } finally {
+      isLoadingControles.value = false;
+    }
+    return;
+  }
   controles.value = readControlesPoidsFonderie() as ControlePoids[];
 };
 
@@ -145,6 +202,37 @@ const saveControle = async () => {
       title: 'Mesure manquante',
       tone: 'warning'
     });
+    return;
+  }
+
+  if (isRealApi && !form.value.typeMatiereId) {
+    await dialog.alert('Sélectionnez un type matière pour enregistrer le contrôle.', {
+      title: 'Saisie incomplète',
+      tone: 'warning'
+    });
+    return;
+  }
+
+  if (isRealApi) {
+    try {
+      await controlePoidsFonderieApiService.create({
+        dateControle: form.value.dateControle,
+        numeroOF: form.value.numeroOF.trim().toUpperCase(),
+        codeArticle: form.value.code.trim().toUpperCase(),
+        typeMatiereId: form.value.typeMatiereId!,
+        numeroLotOuSerie: null,
+        poidsPhysiqueUnitaireKg: poidsPhysiqueKg.value,
+        nombreEchantillons: validNetWeights.value.length,
+        observation: null
+      });
+      resetForm();
+      successMessage.value = 'Résultat du contrôle poids enregistré (Brouillon).';
+      await loadControles();
+      setTimeout(() => (successMessage.value = ''), 4000);
+    } catch (err) {
+      console.error(err);
+      await dialog.alert("Une erreur est survenue lors de l'enregistrement.", { title: 'Erreur', tone: 'danger' });
+    }
     return;
   }
 
@@ -177,7 +265,42 @@ const deleteControle = async (controle: ControlePoids, index: number) => {
   persistControles();
 };
 
-onMounted(loadControles);
+const validerControle = async (controle: ControlePoids) => {
+  if (!controle.id) return;
+  try {
+    await controlePoidsFonderieApiService.valider(controle.id);
+    successMessage.value = 'Contrôle poids validé.';
+    await loadControles();
+    setTimeout(() => (successMessage.value = ''), 4000);
+  } catch (err) {
+    console.error(err);
+    await dialog.alert('La validation a échoué.', { title: 'Erreur', tone: 'danger' });
+  }
+};
+
+const annulerControle = async (controle: ControlePoids) => {
+  if (!controle.id) return;
+  const confirmed = await dialog.confirm(`Annuler le contrôle ${controle.numeroOF} ?`, {
+    title: 'Annuler le contrôle',
+    tone: 'danger',
+    confirmLabel: 'Annuler le contrôle'
+  });
+  if (!confirmed) return;
+
+  try {
+    await controlePoidsFonderieApiService.annuler(controle.id);
+    successMessage.value = 'Contrôle poids annulé.';
+    await loadControles();
+    setTimeout(() => (successMessage.value = ''), 4000);
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+onMounted(() => {
+  loadControles();
+  if (isRealApi) loadTypesMatiere();
+});
 </script>
 
 <template>
@@ -199,6 +322,8 @@ onMounted(loadControles);
         <span>{{ successMessage }}</span>
       </div>
     </Transition>
+
+    <ErrorState v-if="typesMatiereError" :message="typesMatiereError" @retry="loadTypesMatiere" />
 
     <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
       <article class="surface-card p-5">
@@ -302,6 +427,13 @@ onMounted(loadControles);
 
           <FormField id="controle-poids-atelier" label="Atelier">
             <input v-model.trim="form.atelier" type="text" class="w-full rounded-lg border border-slate-200" />
+          </FormField>
+
+          <FormField v-if="isRealApi" id="controle-poids-matiere" label="Type matière" required>
+            <select v-model="form.typeMatiereId" class="w-full rounded-lg border border-slate-200 cursor-pointer" required>
+              <option value="" disabled>Sélectionner…</option>
+              <option v-for="type in typesMatiere" :key="type.id" :value="type.id">{{ type.code }}</option>
+            </select>
           </FormField>
         </div>
       </section>
@@ -438,7 +570,9 @@ onMounted(loadControles);
         </span>
       </header>
 
-      <div v-if="controles.length" class="table-wrapper">
+      <LoadingState v-if="isLoadingControles" />
+      <ErrorState v-else-if="controlesError" :message="controlesError" @retry="loadControles" />
+      <div v-else-if="controles.length" class="table-wrapper">
         <table class="w-full text-left">
           <thead>
             <tr class="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
@@ -448,6 +582,7 @@ onMounted(loadControles);
               <th class="p-3">Atelier</th>
               <th class="p-3 text-right">Mesures</th>
               <th class="p-3 text-right">Poids PHY</th>
+              <th v-if="isRealApi" class="p-3">Statut</th>
               <th class="p-3 text-right">Action</th>
             </tr>
           </thead>
@@ -466,8 +601,37 @@ onMounted(loadControles);
               <td class="p-3 text-right font-mono font-black text-blue-900">
                 {{ formatNumber(controle.poidsPhysiqueUnitaireKg, 3) }} kg
               </td>
+              <td v-if="isRealApi" class="p-3">
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                  :class="{
+                    'bg-slate-100 text-slate-600': controle.statut === 'Brouillon',
+                    'bg-emerald-50 text-emerald-700 border border-emerald-100': controle.statut === 'Valide',
+                    'bg-rose-50 text-rose-600 border border-rose-100': controle.statut === 'Annule'
+                  }"
+                >
+                  {{ controle.statut }}
+                </span>
+              </td>
               <td class="p-3 text-right">
+                <div v-if="isRealApi" class="flex justify-end gap-1">
+                  <button
+                    v-if="controle.statut === 'Brouillon'"
+                    @click="validerControle(controle)"
+                    class="px-2 py-1 rounded text-[10px] font-bold uppercase bg-emerald-50 hover:bg-emerald-100 text-emerald-700 cursor-pointer"
+                  >
+                    Valider
+                  </button>
+                  <button
+                    v-if="controle.statut !== 'Annule'"
+                    @click="annulerControle(controle)"
+                    class="px-2 py-1 rounded text-[10px] font-bold uppercase bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                </div>
                 <button
+                  v-else
                   type="button"
                   class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                   title="Supprimer"

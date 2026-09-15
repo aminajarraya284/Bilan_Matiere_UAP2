@@ -1,60 +1,97 @@
-export type InventaireStatut = 'Brouillon' | 'AValider' | 'Valide' | 'Cloture';
-export type CategorieInventaire = 'ConteneurOF' | 'CategorieBilan' | 'FourHorsBilan';
+export type InventaireStatut = 'Brouillon' | 'Valide' | 'Annule';
+
+export interface InventaireTypeMatiere {
+  id: string;
+  code: string;
+}
 
 export interface InventaireConteneur {
-  id: number;
+  id: string;
+  periode: string;
   dateInventaire: string;
-  mois: number;
-  annee: number;
   numeroConteneur: string;
-  ofDestination?: string;
-  codeArticle: string;
+  numeroOF?: string;
+  codeArticle?: string;
   designationArticle?: string;
-  typeMatiereId: number;
+  typeMatiereId: string;
   codeTypeMatiere: string;
-  quantiteReelle: number;
-  unite: 'KG';
+  quantiteKg: number;
   observation?: string;
   statut: InventaireStatut;
 }
 
 export interface InventaireCategorie {
-  id: number;
-  mois: number;
-  annee: number;
+  id: string;
+  periode: string;
   categorie: string;
-  categorieInventaire?: CategorieInventaire;
-  typeMatiereId: number;
+  typeMatiereId: string;
   codeTypeMatiere: string;
-  quantiteReelle: number;
-  unite: 'KG';
-  commentaire?: string;
+  quantiteKg: number;
+  observation?: string;
   statut: InventaireStatut;
-  inclusDansBilanFonderie?: boolean;
-  visibleDansRapportInventaire?: boolean;
+  inclusDansBilanFonderie: true;
+  visibleDansRapportInventaire: true;
 }
 
 export interface InventaireFour {
-  id: number;
+  id: string;
+  periode: string;
   dateInventaire: string;
-  mois: number;
-  annee: number;
-  four: 'Four CBP 01' | 'Four CBP 02' | 'Four CDQ' | 'Autre';
+  four: string;
+  typeMatiereId: string;
   codeTypeMatiere: string;
-  quantite: number;
-  unite: 'KG' | 'UN';
+  quantiteKg: number;
   observation?: string;
-  statut: 'Brouillon' | 'Valide' | 'Annule';
+  statut: InventaireStatut;
   inclusDansBilanFonderie: false;
   visibleDansRapportInventaire: true;
 }
 
 export interface InventaireTotalParMatiere {
+  typeMatiereId: string;
   codeTypeMatiere: string;
+  stockDebutKg: number | null;
+  stockFinKg: number;
   totalPartie1: number;
   totalPartie2: number;
   totalPartie3: number;
   totalInventaireRapport: number;
   totalUtiliseBilan: number;
-  statut: InventaireStatut;
+  anomalies: string[];
+}
+
+export interface InventaireComptagePeriode {
+  periode: string;
+  conteneurs: InventaireConteneur[];
+  categories: InventaireCategorie[];
+  fours: InventaireFour[];
+  totaux: InventaireTotalParMatiere[];
+  typesMatiere: InventaireTypeMatiere[];
+}
+
+export interface CreateInventaireConteneurInput {
+  dateInventaire: string;
+  numeroConteneur: string;
+  numeroOF?: string;
+  codeArticle?: string;
+  designationArticle?: string;
+  typeMatiereId: string;
+  quantiteKg: number;
+  observation?: string;
+}
+
+export interface CreateInventaireCategorieInput {
+  periode: string;
+  categorie: string;
+  typeMatiereId: string;
+  quantiteKg: number;
+  observation?: string;
+}
+
+export interface CreateInventaireFourInput {
+  dateInventaire: string;
+  four: string;
+  typeMatiereId: string;
+  quantiteKg: number;
+  observation?: string;
 }

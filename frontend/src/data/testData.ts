@@ -1,9 +1,5 @@
-import type { AlertesBilanAlert } from '@/features/alertes/alertes.types';
+import type { AlertesBilanAlert } from '@/features/alertes/alertes.legacy-mock.types';
 import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from '@/features/bilan-matiere/bilan.types';
-import type { DashboardAlert, DashboardBilanRow, DashboardStats } from '@/features/dashboard/dashboard.types';
-import type { DechetMouvement } from '@/features/dechets-fonderie/dechets.types';
-import type { InventaireCategorie, InventaireConteneur, InventaireFour } from '@/features/inventaire/inventaire.types';
-import type { RapportsListType } from '@/features/rapports/rapports.types';
 import type { ReceptionUsinage2Mouvement } from '@/features/receptions-usinage2/receptions.types';
 import type { SortieX3Mouvement } from '@/features/sorties-x3/sortiesX3.types';
 import { sopalTestDataset, type TypeMatiereCode } from '@/mocks/sopalTestDataset';
@@ -11,9 +7,7 @@ import {
   calculateBilanFonderie,
   calculateBilanUap2,
   calculateBilanUsinage2,
-  calculateDashboard,
-  getActiveAlerts,
-  toTypeMatiereId
+  getActiveAlerts
 } from '@/services/bilanCalculation.service';
 
 export type TypeMatiere = TypeMatiereCode;
@@ -115,71 +109,6 @@ export const testReceptionsUsinage2: ReceptionUsinage2Mouvement[] = sopalTestDat
   creeLe: rec.creeLe
 }));
 
-export const testDechetsFonderie: DechetMouvement[] = sopalTestDataset.dechetsFonderie.map((dechet) => ({
-  id: dechet.id,
-  dateDeclaration: dechet.dateDeclaration,
-  semaine: dechet.semaine,
-  codeTypeMatiere: dechet.codeTypeMatiere,
-  quantiteKg: dechet.poidsDechetKg,
-  unite: 'KG',
-  typeDechet: dechet.typeDechet,
-  commentaire: dechet.observation,
-  statut: dechet.statut,
-  utilisateur: dechet.declarantNom
-}));
-
-export const testInventaire = {
-  conteneurs: sopalTestDataset.inventaireConteneurs.map((item) => {
-    const of = sopalTestDataset.x3OrdresFabrication.find((ordre) => ordre.numeroOF === item.numeroOF);
-    return {
-      id: item.id,
-      dateInventaire: item.dateInventaire,
-      mois: 6,
-      annee: 2026,
-      numeroConteneur: item.numeroConteneur,
-      ofDestination: item.numeroOF,
-      codeArticle: of?.codeArticleParent ?? '',
-      designationArticle: of?.designationArticle ?? '',
-      typeMatiereId: toTypeMatiereId(item.codeTypeMatiere),
-      codeTypeMatiere: item.codeTypeMatiere,
-      quantiteReelle: item.poidsReelKg,
-      unite: 'KG',
-      observation: item.observation,
-      statut: item.statut
-    } satisfies InventaireConteneur;
-  }),
-  categories: sopalTestDataset.inventaireCategories.map((item) => ({
-    id: item.id,
-    mois: 6,
-    annee: 2026,
-    categorie: item.categorie,
-    categorieInventaire: 'CategorieBilan',
-    typeMatiereId: toTypeMatiereId(item.codeTypeMatiere),
-    codeTypeMatiere: item.codeTypeMatiere,
-    quantiteReelle: item.poidsReelKg,
-    unite: 'KG',
-    commentaire: item.commentaire,
-    statut: item.statut,
-    inclusDansBilanFonderie: item.inclusBilanFonderie,
-    visibleDansRapportInventaire: true
-  })) satisfies InventaireCategorie[],
-  fours: sopalTestDataset.inventaireFours.map((item) => ({
-    id: item.id,
-    dateInventaire: item.dateInventaire,
-    mois: item.mois,
-    annee: item.annee,
-    four: item.codeFour,
-    codeTypeMatiere: item.codeTypeMatiere,
-    quantite: item.quantite,
-    unite: item.unite,
-    observation: item.observation,
-    statut: item.statut,
-    inclusDansBilanFonderie: false,
-    visibleDansRapportInventaire: true
-  })) satisfies InventaireFour[]
-};
-
-const dashboard = calculateDashboard(sopalTestDataset);
 const activeAlerts = getActiveAlerts(sopalTestDataset);
 
 export const testBilans: {
@@ -193,52 +122,3 @@ export const testBilans: {
 };
 
 export const testAlertes: AlertesBilanAlert[] = activeAlerts.bilanAlerts;
-
-export const testDashboard: {
-  stats: DashboardStats;
-  alerts: DashboardAlert[];
-  rows: DashboardBilanRow[];
-} = dashboard;
-
-export const testRapports: RapportsListType[] = [
-  {
-    id: 1,
-    titre: 'Rapport Bilan Fonderie',
-    description: 'Entrées, sorties et écarts par type matière.',
-    module: 'Bilan',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 2,
-    titre: 'Rapport Bilan Usinage 2',
-    description: 'Contrôle EMR et réceptions U2 par OF.',
-    module: 'Bilan',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 3,
-    titre: 'Rapport Bilan UAP2',
-    description: 'Bilan par OF avec entrées semi-finies.',
-    module: 'Bilan',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 4,
-    titre: 'Rapport Inventaire ESR',
-    description: 'Conteneurs, catégories et fours hors bilan.',
-    module: 'Inventaire',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF', 'Excel']
-  },
-  {
-    id: 5,
-    titre: 'Rapport Alertes',
-    description: 'Alertes poids et alertes bilan.',
-    module: 'Alertes',
-    dateGeneration: '2026-06-30',
-    formatDisponible: ['PDF']
-  }
-];

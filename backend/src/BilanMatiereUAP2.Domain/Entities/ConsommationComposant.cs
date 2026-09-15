@@ -1,5 +1,6 @@
 using BilanMatiereUAP2.Domain.Common;
 using BilanMatiereUAP2.Domain.Enums;
+using BilanMatiereUAP2.Domain.Services;
 
 namespace BilanMatiereUAP2.Domain.Entities;
 
@@ -14,7 +15,8 @@ public sealed class ConsommationComposant
         Guid importBatchId,
         DateOnly dateImputation,
         X3OrdreFabrication ordre,
-        Composant composant,
+        string codeTypeMatiere,
+        string? designationComposant,
         string unite,
         decimal sommeQuantiteX3Signee,
         DateTime dateCreationUtc)
@@ -32,13 +34,14 @@ public sealed class ConsommationComposant
         ArticlePrincipal = ordre.ArticlePrincipal
             ?? throw new DomainValidationException("L'article principal de l'OF est obligatoire.");
         DesignationPrincipale = ordre.DesignationPrincipale;
-        ComposantId = composant.Id;
-        CodeComposant = composant.Code;
-        DesignationComposant = composant.Designation;
+        CodeTypeMatiere = ImportX3Batch.NormaliserTexte(codeTypeMatiere, 80)
+            ?? throw new DomainValidationException("Le code type matiere est obligatoire.");
+        DesignationComposant = ImportX3Batch.NormaliserTexte(designationComposant, 250);
         Unite = ImportX3Batch.NormaliserTexte(unite, 20)
             ?? throw new DomainValidationException("L'unite du mouvement est obligatoire.");
+        CleMetier = GenererCleMetier(NumeroOF, CodeTypeMatiere, Unite, DateImputation);
         SommeQuantiteX3Signee = sommeQuantiteX3Signee;
-        Consommation = -sommeQuantiteX3Signee;
+        Consommation = BilanMetierRules.ToQuantiteMetier(sommeQuantiteX3Signee);
         Statut = StatutRapprochementX3.Rapproche;
         DateCreationUtc = dateCreationUtc;
     }
@@ -52,25 +55,48 @@ public sealed class ConsommationComposant
     public string NumeroOF { get; private set; } = string.Empty;
     public string ArticlePrincipal { get; private set; } = string.Empty;
     public string? DesignationPrincipale { get; private set; }
-    public Guid ComposantId { get; private set; }
-    public Composant Composant { get; private set; } = null!;
-    public string CodeComposant { get; private set; } = string.Empty;
-    public string CodeTypeMatiere => CodeComposant;
+    public string CodeTypeMatiere { get; private set; } = string.Empty;
     public string? DesignationComposant { get; private set; }
     public string Unite { get; private set; } = string.Empty;
+    public string CleMetier { get; private set; } = string.Empty;
     public decimal SommeQuantiteX3Signee { get; private set; }
     public decimal Consommation { get; private set; }
     public StatutRapprochementX3 Statut { get; private set; }
     public DateTime DateCreationUtc { get; private set; }
+    public DateTime? DateMiseAJourUtc { get; private set; }
 
     public static ConsommationComposant Creer(
         Guid importBatchId,
         DateOnly dateImputation,
         X3OrdreFabrication ordre,
-        Composant composant,
+        string codeTypeMatiere,
+        string? designationComposant,
         string unite,
         decimal sommeQuantiteX3Signee,
         DateTime dateCreationUtc,
         Guid? id = null)
-        => new(id ?? Guid.NewGuid(), importBatchId, dateImputation, ordre, composant, unite, sommeQuantiteX3Signee, dateCreationUtc);
+        => new(id ?? Guid.NewGuid(), importBatchId, dateImputation, ordre, codeTypeMatiere, designationComposant, unite, sommeQuantiteX3Signee, dateCreationUtc);
+
+    public void MettreAJour(
+        X3OrdreFabrication ordre,
+        string? designationComposant,
+        decimal sommeQuantiteX3Signee,
+        Guid importBatchId,
+        DateTime dateMiseAJourUtc)
+    {
+        OrdreFabricationId = ordre.Id;
+        ArticlePrincipal = ordre.ArticlePrincipal ?? ArticlePrincipal;
+        DesignationPrincipale = ordre.DesignationPrincipale;
+        DesignationComposant = ImportX3Batch.NormaliserTexte(designationComposant, 250);
+        SommeQuantiteX3Signee = sommeQuantiteX3Signee;
+        Consommation = BilanMetierRules.ToQuantiteMetier(sommeQuantiteX3Signee);
+        ImportBatchId = importBatchId;
+        DateMiseAJourUtc = dateMiseAJourUtc;
+    }
+
+    public static string GenererCleMetier(
+        string numeroOF, string codeTypeMatiere, string unite, DateOnly dateImputation)
+    {
+        return $"{numeroOF.ToUpperInvariant()}|{codeTypeMatiere.ToUpperInvariant()}|{unite.ToUpperInvariant()}|{dateImputation:yyyy-MM-dd}";
+    }
 }

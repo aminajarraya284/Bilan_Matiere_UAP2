@@ -1,6 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import router from '@/router';
-import { AUTH_TOKEN_STORAGE_KEY, expireAuthSession } from '@/features/auth/auth.session';
+import { expireAuthSession } from '@/features/auth/auth.session';
+import { acquireApiAccessToken } from '@/features/auth/token.service';
+import { rememberAuthReturnPath } from '@/features/auth/auth.navigation';
 
 // Keep the fallback aligned with .env.example and the documented ASP.NET Core URL.
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -16,13 +18,15 @@ let sessionExpirationPromise: Promise<void> | null = null;
 
 export const expireSessionAndRedirectToLogin = (): Promise<void> => {
   if (!sessionExpirationPromise) {
+    const requestedPath = router.currentRoute.value.fullPath;
+    if (requestedPath) rememberAuthReturnPath(requestedPath);
     // Keep Pinia and localStorage in sync before navigation guards run.
     expireAuthSession();
     sessionExpirationPromise = (async () => {
       if (router.currentRoute.value.name !== 'Login') {
         await router.replace({
           name: 'Login',
-          query: { error: 'session_expired' }
+          query: { error: 'session_expired', redirect: requestedPath }
         });
       }
     })().finally(() => {
@@ -35,8 +39,8 @@ export const expireSessionAndRedirectToLogin = (): Promise<void> => {
 
 // Request Interceptor: Attach JWT Token if present
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  async (config: InternalAxiosRequestConfig) => {
+    const token = await acquireApiAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -47,14 +51,31 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Handle 401 Unauthorized errors
+// Response Interceptor: 401 et 403 sont traites separement.
+//  - 401 : le token est absent, invalide ou expire -> la session n'est plus exploitable,
+//          on la purge et on renvoie vers /login.
+//  - 403 : le token est valide mais le role est insuffisant -> la session reste valide.
+//          On ne deconnecte pas l'utilisateur ; l'appelant decide de l'affichage.
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    const status = error.response?.status;
     const isLoginRequest = error.config?.url?.includes('/auth/login') === true;
-    if (error.response?.status === 401 && !isLoginRequest) {
+
+    if (status === 401 && !isLoginRequest) {
       await expireSessionAndRedirectToLogin();
+    } else if (status === 403) {
+      if (import.meta.env.DEV) {
+        console.warn(`Accès refusé (403) sur ${error.config?.url ?? 'une ressource'} : permissions insuffisantes.`);
+      }
+      if (router.currentRoute.value.name !== 'Forbidden') {
+        await router.replace({
+          name: 'Forbidden',
+          query: { from: router.currentRoute.value.fullPath }
+        });
+      }
     }
+
     return Promise.reject(error);
   }
 );

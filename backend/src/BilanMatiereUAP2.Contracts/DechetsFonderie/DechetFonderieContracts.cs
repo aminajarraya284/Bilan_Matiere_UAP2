@@ -5,14 +5,16 @@ public sealed record CreateDechetFonderieRequest(
     Guid TypeMatiereId,
     string TypeDechet,
     decimal PoidsKg,
-    string? Observation);
+    string? Observation,
+    string Origine = "Fonderie");
 
 public sealed record UpdateDechetFonderieRequest(
     DateOnly DateDeclaration,
     Guid TypeMatiereId,
     string TypeDechet,
     decimal PoidsKg,
-    string? Observation);
+    string? Observation,
+    string Origine = "Fonderie");
 
 public sealed record DechetFonderieResponse(
     Guid Id,
@@ -27,7 +29,12 @@ public sealed record DechetFonderieResponse(
     string Statut,
     string? Declarant,
     DateTime DateCreationUtc,
-    DateTime? DateModificationUtc);
+    DateTime? DateModificationUtc,
+    string Origine,
+    string? ValidePar,
+    DateTime? ValideLeUtc,
+    string? AnnulePar,
+    DateTime? AnnuleLeUtc);
 
 public sealed record PagedDechetsFonderieResponse(
     IReadOnlyList<DechetFonderieResponse> Items,

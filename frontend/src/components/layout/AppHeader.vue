@@ -23,9 +23,10 @@ const formatRoleLabel = (role: string | undefined): string => {
   return mapping[role] || role;
 };
 
-const handleLogout = () => {
-  authStore.logout();
-  router.push('/login');
+const handleLogout = async () => {
+  const mode = authStore.mode;
+  await authStore.logout();
+  if (mode === 'development') await router.push('/login');
 };
 </script>
 

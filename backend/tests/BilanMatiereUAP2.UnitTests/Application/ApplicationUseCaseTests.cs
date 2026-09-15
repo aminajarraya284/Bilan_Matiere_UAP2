@@ -152,6 +152,9 @@ public sealed class ApplicationUseCaseTests
     private static DechetFonderie CreateWaste(TypeMatiere type, DateOnly date, TypeDechet kind, decimal weight)
     {
         var entity = DechetFonderie.Creer(date, type.Id, kind, weight, null, null, "Test", Now);
+        // Depuis l'introduction du cycle de vie, Creer produit un BROUILLON, exclu des totaux.
+        // Le resume ne porte que sur les dechets VALIDES : on valide donc la donnee de test.
+        entity.Valider(null, "Test", Now);
         typeof(DechetFonderie)
             .GetProperty(nameof(DechetFonderie.TypeMatiere), BindingFlags.Instance | BindingFlags.Public)!
             .SetValue(entity, type);
@@ -228,8 +231,13 @@ public sealed class ApplicationUseCaseTests
             DateOnly dateFinExclusive,
             CancellationToken cancellationToken)
         {
+            // Meme filtre que DechetFonderieRepository : seuls les dechets VALIDES comptent.
+            // Un dechet annule reste dans l'historique mais sort des totaux.
             var result = Items
-                .Where(item => !item.EstSupprime && item.DateDeclaration >= dateDebutIncluse && item.DateDeclaration < dateFinExclusive)
+                .Where(item => !item.EstSupprime
+                    && item.Statut == StatutDechet.Valide
+                    && item.DateDeclaration >= dateDebutIncluse
+                    && item.DateDeclaration < dateFinExclusive)
                 .GroupBy(item => new { item.TypeMatiereId, item.TypeMatiere.Code })
                 .Select(group => new ResumeDechetsFonderieData(
                     group.Key.TypeMatiereId,

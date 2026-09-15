@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/config/dataSources', () => ({
-  dataSources: { dechetsFonderie: 'api', typesMatiere: 'api' }
+  dataSources: { dechetsFonderie: 'api', typesMatiere: 'api' },
+  // Le service garde ses appels derrière assertApiSource : en mode API, la garde passe.
+  assertApiSource: vi.fn(),
+  isApiSource: () => true
 }));
 
 vi.mock('@/services/api', () => ({ default: mocks }));
@@ -20,7 +23,9 @@ const payload = {
   typeMatiereId: '30000000-0000-0000-0000-000000000001',
   typeDechet: 'Bavure' as const,
   poidsKg: 125.5,
-  observation: 'Bavures triées'
+  observation: 'Bavures triées',
+  // L'origine fait partie du référentiel « Déchets et rebuts UAP2 » et est obligatoire.
+  origine: 'Fonderie' as const
 };
 
 describe('real waste API service', () => {
@@ -55,11 +60,14 @@ describe('real waste API service', () => {
     expect(mocks.post.mock.calls[0][1]).not.toHaveProperty('statut');
   });
 
-  it('uses logical deletion through the API endpoint', async () => {
-    mocks.delete.mockResolvedValueOnce({});
+  // Aucune suppression physique : la « suppression » passe par le cycle de vie Annulé,
+  // qui conserve le déchet dans l'historique et le sort des totaux.
+  it('routes deletion to the cancellation endpoint, never to DELETE', async () => {
+    mocks.post.mockResolvedValueOnce({ data: { id: 'waste-id', statut: 'Annule' } });
 
     await dechetsService.deleteDechetFonderie('waste-id');
 
-    expect(mocks.delete).toHaveBeenCalledWith('/v1/dechets-fonderie/waste-id');
+    expect(mocks.post).toHaveBeenCalledWith('/v1/dechets-fonderie/waste-id/annuler');
+    expect(mocks.delete).not.toHaveBeenCalled();
   });
 });

@@ -6,28 +6,97 @@ import {
   calculateBilanUsinage2
 } from '@/services/bilanCalculation.service';
 import { testDataRepository } from '@/services/testDataRepository.service';
-import type { CalculateBilanRequest, VerifyBilanRequest } from '@/types/api.types';
-import type { BilanType } from '@/types/domain.types';
+import type {
+  BilanFonderieApiLigne,
+  BilanFonderieApiResponse,
+  BilanUap2ApiResponse
+} from '@/types/api.types';
 import type { RebutUap2Saisie, RebutUsinage2 } from '@/mocks/sopalTestDataset';
-import type { BilanMatiereReport, BilanUap2ParOF, BilanUsinage2ParPiece } from './bilan.types';
+import type {
+  BilanMatiereReport,
+  BilanUap2ParOF,
+  BilanUsinage2Api,
+  BilanUsinage2Ligne,
+  BilanUsinage2ParPiece
+} from './bilan.types';
+import { assertApiSource, isMockSource } from '@/config/dataSources';
 
-type BilanResult = BilanMatiereReport | BilanUsinage2ParPiece | BilanUap2ParOF;
-type ViewBilanType = 'fonderie' | 'usinage' | 'uap2';
+// Chaque bilan dispose d'une API de calcul en lecture et d'une source configurable.
+const isMockFonderie = (): boolean => isMockSource('bilanFonderie');
+const isMockUap2 = (): boolean => isMockSource('bilanUap2');
 
-const isMock = (): boolean => import.meta.env.VITE_USE_REAL_API !== 'true';
+/**
+ * L'ancien contrat de demonstration du Bilan UAP2 exprime tout en kilogrammes et porte
+ * un terme « entrees semi-finies » absent de la regle reelle (RM-UAP2-002). L'API, elle,
+ * calcule l'ecart EN PIECES. Les deux ne sont pas convertibles l'un dans l'autre sans
+ * fabriquer des valeurs : en mode `api`, les ecrans doivent appeler `getBilanUap2Reel`.
+ */
+const BILAN_UAP2_ANCIEN_CONTRAT =
+  "L'ancien contrat du Bilan UAP2 (tout en kg) n'est pas alimenté par l'API, qui calcule " +
+  "l'écart en pièces. Utilisez getBilanUap2Reel(). Voir docs/ReglesMetier.md, RM-UAP2-002.";
 
-const toApiBilanType = (type: ViewBilanType): BilanType => (type === 'usinage' ? 'usinage2' : type);
+// Adaptation du jeu de demonstration vers le contrat reel du Bilan Usinage 2.
+// Les champs absents du mock restent null : aucune valeur n'est fabriquee.
+const toRealBilanShape = (item: BilanUsinage2ParPiece, periode: string): BilanUsinage2Ligne => ({
+  numeroOF: item.numeroOF,
+  codeArticle: item.codeArticle,
+  designationArticle: item.designationArticle ?? null,
+  atelierOrigine: null,
+  typeMatiere: item.codeTypeMatiere,
+  periode,
 
-const findMockBilan = (bilanKey: string, type: ViewBilanType): BilanResult | undefined => {
-  const dataset = testDataRepository.getDataset();
-  if (type === 'fonderie') {
-    return calculateBilanFonderie(dataset).find((item) => item.bilanKey === bilanKey);
-  }
-  if (type === 'usinage') {
-    return calculateBilanUsinage2(dataset).find((item) => item.bilanKey === bilanKey);
-  }
-  return calculateBilanUap2(dataset).find((item) => item.bilanKey === bilanKey);
-};
+  quantiteCtrlEmrPieces: item.quantiteEmrPieces,
+  rebutEmrPieces: item.quantiteRebutEmrX3Pieces,
+  nombreDePieces: item.quantiteEmrNetteX3Pieces,
+  quantiteReceptionneePieces: item.quantiteReceptionneeU2Pieces,
+  quantiteNonReceptionneePieces: item.quantiteNonReceptionneePieces,
+  rebutUsinage2Pieces: item.rebutUsinage2Pieces ?? 0,
+  entreeOfPieces: item.entreeOfPieces ?? null,
+  bilanUsinage2Pieces:
+    item.entreeOfPieces === undefined || item.entreeOfPieces === null
+      ? null
+      : item.quantiteReceptionneeU2Pieces - (item.rebutUsinage2Pieces ?? 0) - item.entreeOfPieces,
+
+  tauxReceptionPourcent: null,
+  tauxNonReceptionPourcent: null,
+
+  poidsReceptionneTotalKg: null,
+  poidsPhysiqueUnitaireKg: null,
+  poidsTheoriqueUnitaireKg: null,
+  ecartPoidsUnitaireKg: null,
+  tauxEcartPoidsPourcent: null,
+
+  statutReception: item.statutControle === 'OK' ? 'OK' : 'AVerifier',
+  statutPoids: 'DonneesManquantes',
+  anomalies: []
+});
+
+/**
+ * Adapte une ligne de `GET /v1/bilans/fonderie/{periode}` au contrat d'ecran.
+ * Les `null` sont conserves tels quels : une composante inconnue ne devient pas zero
+ * (RM-COM-003), sans quoi l'ecart affiche serait faux sans que rien ne le signale.
+ */
+const toBilanFonderieReport = (ligne: BilanFonderieApiLigne): BilanMatiereReport => ({
+  bilanKey: `${ligne.periode}|${ligne.codeTypeMatiere}`,
+  periode: ligne.periode,
+  typeMatiere: ligne.codeTypeMatiere,
+  encoursDebut: ligne.stockDebutKg,
+  sortiesX3: ligne.sortiesMagasinX3Kg,
+  inputTotal: ligne.inputKg,
+  encoursFinReel: ligne.stockFinKg,
+  dechetsFonderie: ligne.dechetsFonderieKg,
+  receptionsUsinage2: ligne.receptionsUsinage2Kg,
+  // Sans endpoint dedie, ces deux mesures ne sont pas calculees cote serveur.
+  poidsNonReceptionne: 0,
+  nombrePiecesNonReceptionnees: 0,
+  outputTotal: ligne.outputKg,
+  ecartKg: ligne.ecartKg,
+  tauxEcart: ligne.tauxEcartPourcent,
+  // La complétude des données ne constitue pas une validation métier.
+  statut: ligne.statut,
+  dateCalcul: new Date().toISOString(),
+  anomalies: ligne.anomalies
+});
 
 export const bilanService = {
   async getBilans(
@@ -52,35 +121,82 @@ export const bilanService = {
     dateDebut?: string,
     dateFin?: string
   ): Promise<BilanMatiereReport[]> {
-    if (isMock()) return calculateBilanFonderie(testDataRepository.getDataset(), periode);
-    const response = await api.get<BilanMatiereReport[]>('/bilans/fonderie', {
-      params: { periode, dateDebut, dateFin }
-    });
-    return response.data;
+    if (dateDebut !== undefined || dateFin !== undefined) {
+      assertApiSource('bilanFonderie');
+      const response = await api.get<{ dateDebut: string; dateFin: string; bilan: BilanFonderieApiResponse }>(
+        '/v1/bilans/fonderie', { params: { dateDebut, dateFin } }
+      );
+      return response.data.bilan.lignes.map(toBilanFonderieReport);
+    }
+    if (isMockFonderie()) return calculateBilanFonderie(testDataRepository.getDataset(), periode);
+    const response = await api.get<BilanFonderieApiResponse>(
+      `/v1/bilans/fonderie/${encodeURIComponent(periode)}`
+    );
+    return response.data.lignes.map(toBilanFonderieReport);
   },
 
   async getBilansUsinage(
     periode: string = BUSINESS_RULES.periodeParDefaut,
-    dateDebut?: string,
-    dateFin?: string
-  ): Promise<BilanUsinage2ParPiece[]> {
-    if (isMock()) return calculateBilanUsinage2(testDataRepository.getDataset(), periode);
-    const response = await api.get<BilanUsinage2ParPiece[]>('/bilans/usinage-2/par-piece', {
-      params: { periode, dateDebut, dateFin }
-    });
+    _dateDebut?: string,
+    _dateFin?: string
+  ): Promise<BilanUsinage2Api> {
+    if (isMockSource('bilanU2')) {
+      const lignes = calculateBilanUsinage2(testDataRepository.getDataset(), periode).map((item) =>
+        toRealBilanShape(item, periode)
+      );
+      return {
+        periode,
+        lignes,
+        quantiteTotaleReceptionneePieces: lignes.reduce((total, ligne) => total + ligne.quantiteReceptionneePieces, 0),
+        nombreLignes: lignes.length,
+        nombreLignesDonneesManquantes: lignes.filter(
+          (ligne) => ligne.statutReception === 'DonneesManquantes' || ligne.statutPoids === 'DonneesManquantes'
+        ).length,
+        // En mode mock, `lignes` contient toute la periode : les agregats se calculent ici,
+        // la ou l'API reelle les fournit deja calcules sur l'ensemble des lignes.
+        totalRebutUsinage2Pieces: lignes.reduce((total, ligne) => total + ligne.rebutUsinage2Pieces, 0),
+        totalEntreeOfPieces: lignes.reduce((total, ligne) => total + (ligne.entreeOfPieces ?? 0), 0),
+        // Une seule ligne non calculable rend le total indisponible : jamais un faux zero.
+        totalBilanUsinage2Pieces: lignes.some((ligne) => ligne.bilanUsinage2Pieces === null)
+          ? null
+          : lignes.reduce((total, ligne) => total + (ligne.bilanUsinage2Pieces ?? 0), 0),
+        nombreAnomalies: lignes.reduce((total, ligne) => total + ligne.anomalies.length, 0),
+        total: lignes.length,
+        page: 1,
+        pageSize: lignes.length
+      };
+    }
+    const response = await api.get<BilanUsinage2Api>(`/v1/bilans/usinage2/${encodeURIComponent(periode)}`);
     return response.data;
   },
 
   async getBilansUap2(
     periode: string = BUSINESS_RULES.periodeParDefaut,
-    dateDebut?: string,
-    dateFin?: string
+    _dateDebut?: string,
+    _dateFin?: string
   ): Promise<BilanUap2ParOF[]> {
-    if (isMock()) return calculateBilanUap2(testDataRepository.getDataset(), periode);
-    const response = await api.get<BilanUap2ParOF[]>('/bilans/uap2/par-of', {
-      params: { periode, dateDebut, dateFin }
-    });
-    return response.data;
+    if (isMockUap2()) return calculateBilanUap2(testDataRepository.getDataset(), periode);
+    throw new Error(BILAN_UAP2_ANCIEN_CONTRAT);
+  },
+
+  /**
+   * Bilan UAP2 reel (RM-UAP2-001 et RM-UAP2-002). Renvoie le contrat de l'API tel quel :
+   * l'ecart y est EN PIECES, ce que l'ancien contrat de demonstration ne sait pas
+   * representer. Les ecrans qui l'affichent doivent lire `BilanUap2ApiResponse`.
+   */
+  async getBilanUap2Reel(periode: string = BUSINESS_RULES.periodeParDefaut): Promise<BilanUap2ApiResponse> {
+    // Le routage des sources reste pilote par dataSources, jamais contourne.
+    assertApiSource('bilanUap2');
+    return (await api.get<BilanUap2ApiResponse>(`/v1/bilans/uap2/${encodeURIComponent(periode)}`)).data;
+  },
+
+  /**
+   * Le bilan est recalcule a chaque lecture cote serveur : il n'existe pas d'endpoint
+   * de calcul separe. Le filtre par type matiere est applique ici, sur le resultat.
+   */
+  async getPeriodesUap2Disponibles(): Promise<string[]> {
+    assertApiSource('bilanUap2');
+    return (await api.get<string[]>('/v1/bilans/uap2/periodes')).data;
   },
 
   async calculerBilanFonderie(
@@ -89,143 +205,51 @@ export const bilanService = {
     dateDebut?: string,
     dateFin?: string
   ): Promise<BilanMatiereReport[]> {
-    if (isMock()) {
-      const bilans = calculateBilanFonderie(testDataRepository.getDataset(), periode);
-      return codeTypeMatiere === 'TOUS' ? bilans : bilans.filter((item) => item.typeMatiere === codeTypeMatiere);
-    }
-    const request: CalculateBilanRequest = {
-      periode,
-      codeTypeMatiere: codeTypeMatiere === 'TOUS' ? undefined : codeTypeMatiere,
-      dateDebut,
-      dateFin
-    };
-    return (await api.post<BilanMatiereReport[]>('/bilans/fonderie/calculer', request)).data;
+    const bilans = await this.getBilansFonderie(periode, dateDebut, dateFin);
+    return codeTypeMatiere === 'TOUS' ? bilans : bilans.filter((item) => item.typeMatiere === codeTypeMatiere);
   },
 
-  async calculerBilanUsinage(periode: string, dateDebut?: string, dateFin?: string): Promise<BilanUsinage2ParPiece[]> {
-    if (isMock()) return this.getBilansUsinage(periode, dateDebut, dateFin);
-    const request: CalculateBilanRequest = { periode, dateDebut, dateFin };
-    return (await api.post<BilanUsinage2ParPiece[]>('/bilans/usinage-2/calculer', request)).data;
+  async calculerBilanUsinage(periode: string, dateDebut?: string, dateFin?: string): Promise<BilanUsinage2Api> {
+    return this.getBilansUsinage(periode, dateDebut, dateFin);
   },
 
   async calculerBilanUap2(periode: string, dateDebut?: string, dateFin?: string): Promise<BilanUap2ParOF[]> {
-    if (isMock()) return this.getBilansUap2(periode, dateDebut, dateFin);
-    const request: CalculateBilanRequest = { periode, dateDebut, dateFin };
-    return (await api.post<BilanUap2ParOF[]>('/bilans/uap2/calculer', request)).data;
+    if (isMockUap2()) return this.getBilansUap2(periode, dateDebut, dateFin);
+    throw new Error(BILAN_UAP2_ANCIEN_CONTRAT);
   },
 
+  // Anciennes saisies du jeu de démonstration uniquement. Les saisies U2 réelles
+  // passent par rebutsUsinage2.service.ts et son API dédiée.
+
   async createRebutUsinage2(data: Omit<RebutUsinage2, 'id' | 'statut' | 'creePar'>): Promise<RebutUsinage2> {
-    if (isMock()) {
-      const current = testDataRepository.getRebutsUsinage2();
-      const id = current.length ? Math.max(...current.map((item) => item.id)) + 1 : 1;
-      const created: RebutUsinage2 = {
-        ...data,
-        id,
-        statut: 'Valide',
-        creePar: 'Responsable Usinage 2'
-      };
-      testDataRepository.saveRebutsUsinage2([created, ...current]);
-      return created;
-    }
-    return (await api.post<RebutUsinage2>('/rebuts-usinage-2', data)).data;
+    const current = testDataRepository.getRebutsUsinage2();
+    const id = current.length ? Math.max(...current.map((item) => item.id)) + 1 : 1;
+    const created: RebutUsinage2 = {
+      ...data,
+      id,
+      statut: 'Valide',
+      creePar: 'Responsable Usinage 2'
+    };
+    testDataRepository.saveRebutsUsinage2([created, ...current]);
+    return created;
   },
 
   async saveRebutsUap2(data: Omit<RebutUap2Saisie, 'id' | 'statut' | 'creePar'>): Promise<RebutUap2Saisie> {
-    if (isMock()) {
-      const current = testDataRepository.getRebutsUap2();
-      const periode = data.dateDeclaration.slice(0, 7);
-      const previous = current.find(
-        (item) => item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode)
-      );
-      const created: RebutUap2Saisie = {
-        ...data,
-        id: previous?.id ?? (current.length ? Math.max(...current.map((item) => item.id)) + 1 : 1),
-        statut: 'Valide',
-        creePar: 'Administrateur SOPAL'
-      };
-      testDataRepository.saveRebutsUap2([
-        created,
-        ...current.filter((item) => !(item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode)))
-      ]);
-      return created;
-    }
-    return (await api.post<RebutUap2Saisie>('/rebuts-uap2', data)).data;
-  },
-
-  async verifierBilan(
-    bilanKey: string,
-    type: ViewBilanType,
-    payload: Omit<VerifyBilanRequest, 'bilanType'>
-  ): Promise<BilanResult> {
-    if (isMock()) {
-      const current = findMockBilan(bilanKey, type);
-      if (!current) throw new Error('Bilan non trouvé');
-      if (type === 'fonderie') {
-        return {
-          ...(current as BilanMatiereReport),
-          statut: payload.statutControle as BilanMatiereReport['statut'],
-          justification: payload.justification ?? (current as BilanMatiereReport).justification
-        };
-      }
-      if (type === 'usinage') {
-        const currentUsinage = current as BilanUsinage2ParPiece;
-        return {
-          ...currentUsinage,
-          statutControle: payload.statutControle as BilanUsinage2ParPiece['statutControle'],
-          observation: payload.observation ?? currentUsinage.observation
-        };
-      }
-      const currentUap2 = current as BilanUap2ParOF;
-      return {
-        ...currentUap2,
-        statut: payload.statutControle as BilanUap2ParOF['statut'],
-        observation: payload.observation ?? currentUap2.observation
-      };
-    }
-    const request: VerifyBilanRequest = { bilanType: toApiBilanType(type), ...payload };
-    return (await api.post<BilanResult>(`/bilans/${encodeURIComponent(bilanKey)}/verifier`, request)).data;
-  },
-
-  async justifierBilan(bilanKey: string, type: ViewBilanType, justification: string): Promise<BilanResult> {
-    if (isMock()) {
-      const current = findMockBilan(bilanKey, type);
-      if (!current) throw new Error('Bilan non trouvé');
-      return type === 'fonderie'
-        ? { ...(current as BilanMatiereReport), justification }
-        : { ...current, observation: justification };
-    }
-    return (
-      await api.post<BilanResult>(`/bilans/${encodeURIComponent(bilanKey)}/justifier`, {
-        bilanType: toApiBilanType(type),
-        justification
-      })
-    ).data;
-  },
-
-  async cloturerBilan(bilanKey: string, type: ViewBilanType): Promise<BilanResult> {
-    if (isMock()) {
-      const current = findMockBilan(bilanKey, type);
-      if (!current) throw new Error('Bilan non trouvé');
-      if (type === 'fonderie') return { ...(current as BilanMatiereReport), statut: 'Cloture' };
-      if (type === 'usinage') {
-        return { ...(current as BilanUsinage2ParPiece), statutControle: 'Regularise' };
-      }
-      return { ...(current as BilanUap2ParOF), statut: 'Cloture' };
-    }
-    return (
-      await api.post<BilanResult>(`/bilans/${encodeURIComponent(bilanKey)}/cloturer`, {
-        bilanType: toApiBilanType(type)
-      })
-    ).data;
-  },
-
-  async validerBilan(bilanKey: string): Promise<BilanMatiereReport> {
-    return this.verifierBilan(bilanKey, 'fonderie', {
-      statutControle: 'Valide'
-    }) as Promise<BilanMatiereReport>;
-  },
-
-  async justifierEcart(bilanKey: string, justification: string): Promise<BilanMatiereReport> {
-    return this.justifierBilan(bilanKey, 'fonderie', justification) as Promise<BilanMatiereReport>;
+    const current = testDataRepository.getRebutsUap2();
+    const periode = data.dateDeclaration.slice(0, 7);
+    const previous = current.find(
+      (item) => item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode)
+    );
+    const created: RebutUap2Saisie = {
+      ...data,
+      id: previous?.id ?? (current.length ? Math.max(...current.map((item) => item.id)) + 1 : 1),
+      statut: 'Valide',
+      creePar: 'Administrateur SOPAL'
+    };
+    testDataRepository.saveRebutsUap2([
+      created,
+      ...current.filter((item) => !(item.numeroOF === data.numeroOF && item.dateDeclaration.startsWith(periode)))
+    ]);
+    return created;
   }
 };

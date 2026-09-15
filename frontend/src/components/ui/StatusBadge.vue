@@ -19,6 +19,7 @@ const tone = computed(() => {
     [
       'normal',
       'conforme',
+      'complet',
       'actif',
       'ok',
       'regularise',
@@ -40,6 +41,7 @@ const tone = computed(() => {
       'saisiemanuelle',
       'synchronisationpartielle',
       'partiel',
+      'incomplet',
       'acompleter',
       'avalider',
       'asynchroniser',
