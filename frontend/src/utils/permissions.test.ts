@@ -24,7 +24,7 @@ describe('route permissions', () => {
   it('autorise Responsable Fonderie sur ses operations', () => {
     expect(hasPermission('ResponsableFonderie', 'ControlePoidsFonderie')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'DechetsFonderie')).toBe(true);
-    expect(hasPermission('ResponsableFonderie', 'ReceptionsUsinage2')).toBe(false);
+    expect(hasPermission('ResponsableFonderie', 'ReceptionsUsinage2')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'Inventaire')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'Dashboard')).toBe(true);
     expect(hasPermission('ResponsableFonderie', 'BilanMatiere')).toBe(true);
@@ -43,7 +43,7 @@ describe('route permissions', () => {
 
   it.each<[UserRole, boolean, boolean]>([
     ['Admin', true, true],
-    ['ResponsableFonderie', true, false],
+    ['ResponsableFonderie', true, true],
     ['ResponsableUsinage2', false, true]
   ])('aligne inventaire et réceptions pour %s', (role, inventaire, receptions) => {
     expect(hasPermission(role, 'Inventaire')).toBe(inventaire);

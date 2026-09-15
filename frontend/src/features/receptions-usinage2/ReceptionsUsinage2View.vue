@@ -23,6 +23,16 @@ const isLoading = ref(true);
 const receptionsError = ref('');
 const successMessage = ref('');
 const highlightedReceptionId = ref<number | null>(null);
+const filtreOF = ref('');
+const filtreArticle = ref('');
+const receptionsFiltrees = computed(() => {
+  const of = filtreOF.value.trim().toLocaleLowerCase();
+  const article = filtreArticle.value.trim().toLocaleLowerCase();
+  return receptions.value.filter((row) =>
+    (!of || row.numeroOF.toLocaleLowerCase().includes(of)) &&
+    (!article || `${row.codeArticle} ${row.designationArticle}`.toLocaleLowerCase().includes(article))
+  );
+});
 
 // Bilan Usinage 2 (en pieces, calcule server-side) : remplace l'ancien panneau de controle
 // non-reception qui reposait sur des quantites en kg incompatibles avec la formule confirmee.
@@ -824,7 +834,7 @@ onMounted(() => {
     <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
       <div class="px-6 py-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider">Mouvements de Réception Déclarés</h3>
-        <span class="text-[10px] font-bold text-slate-400 font-mono">Total : {{ receptions.length }} bons</span>
+        <span class="text-[10px] font-bold text-slate-400 font-mono">Total : {{ receptionsFiltrees.length }} / {{ receptions.length }} bons</span>
       </div>
 
       <div v-if="isLoading">
@@ -834,6 +844,19 @@ onMounted(() => {
       <ErrorState v-else-if="receptionsError" :message="receptionsError" @retry="loadReceptions" />
 
       <div v-else class="overflow-x-auto">
+        <div class="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-white px-6 py-4">
+          <label class="min-w-[220px] flex-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Filtrer par OF
+            <input v-model="filtreOF" type="search" placeholder="Ex. OF18100564" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs font-semibold" />
+          </label>
+          <label class="min-w-[220px] flex-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            Filtrer par article
+            <input v-model="filtreArticle" type="search" placeholder="Code ou désignation article" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs font-semibold" />
+          </label>
+          <button v-if="filtreOF || filtreArticle" type="button" class="rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100" @click="filtreOF = ''; filtreArticle = ''">
+            Réinitialiser
+          </button>
+        </div>
         <table class="w-full text-left border-collapse">
           <thead>
             <tr
@@ -854,7 +877,7 @@ onMounted(() => {
           </thead>
           <tbody class="divide-y divide-slate-100 text-xs font-medium">
             <tr
-              v-for="row in receptions"
+              v-for="row in receptionsFiltrees"
               :key="row.id"
               class="hover:bg-slate-50/30 transition-colors"
               :class="{
@@ -930,7 +953,7 @@ onMounted(() => {
                 </button>
               </td>
             </tr>
-            <tr v-if="!receptions.length">
+            <tr v-if="!receptionsFiltrees.length">
               <td colspan="11" class="p-6 text-center text-slate-400 font-bold uppercase tracking-wider">
                 Aucune réception enregistrée
               </td>

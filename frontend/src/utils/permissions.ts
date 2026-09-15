@@ -10,7 +10,7 @@ export const routePermissions: Record<string, UserRole[]> = {
   EtatsX3: ['Admin'],
   ReferencesFabrication: ['Admin'],
   DechetsFonderie: ['Admin', 'ResponsableFonderie'],
-  ReceptionsUsinage2: ['Admin', 'ResponsableUsinage2'],
+  ReceptionsUsinage2: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],
   Rapports: ['Admin'],
   ImportsHistorique: ['Admin'],
   Alertes: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2'],

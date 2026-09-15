@@ -69,7 +69,7 @@ const menuItems: { group: string; name: string; path: string; icon: Component; r
     name: 'Réceptions Usinage 2',
     path: '/receptions-usinage-2',
     icon: CornerDownRight,
-    roles: ['Admin', 'ResponsableUsinage2']
+    roles: ['Admin', 'ResponsableFonderie', 'ResponsableUsinage2']
   },
   { group: 'Données X3', name: 'Sorties magasin', path: '/sorties-x3', icon: RefreshCw, roles: ['Admin'] },
   { group: 'Données X3', name: 'États X3', path: '/etats-x3', icon: FileSpreadsheet, roles: ['Admin'] },

@@ -48,7 +48,7 @@ describe('authentication router guard', () => {
     ['ResponsableFonderie', '/inventaire', true],
     ['ResponsableUsinage2', '/inventaire', false],
     ['Admin', '/receptions-usinage-2', true],
-    ['ResponsableFonderie', '/receptions-usinage-2', false],
+    ['ResponsableFonderie', '/receptions-usinage-2', true],
     ['ResponsableUsinage2', '/receptions-usinage-2', true]
   ])('protège la route réelle %s / %s', async (role, path, autorise) => {
     setUser([role]);

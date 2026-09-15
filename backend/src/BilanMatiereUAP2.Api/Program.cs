@@ -144,7 +144,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.ReadReferences, policy =>
         policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
     options.AddPolicy(AuthorizationPolicies.ReadReceptionsUsinage2, policy =>
-        policy.RequireRole("Admin", "ResponsableUsinage2"));
+        policy.RequireRole("Admin", "ResponsableFonderie", "ResponsableUsinage2"));
     options.AddPolicy(AuthorizationPolicies.ManageReceptionsUsinage2, policy =>
         policy.RequireRole("Admin", "ResponsableUsinage2"));
     options.AddPolicy(AuthorizationPolicies.ValidateReceptionsUsinage2, policy =>

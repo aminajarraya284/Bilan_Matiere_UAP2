@@ -12,7 +12,7 @@ const routerLinkStub = { props: ['to'], template: '<a><slot /></a>' };
 describe('AppSidebar', () => {
   it.each<[UserRole, boolean, boolean]>([
     ['Admin', true, true],
-    ['ResponsableFonderie', true, false],
+    ['ResponsableFonderie', true, true],
     ['ResponsableUsinage2', false, true]
   ])('affiche uniquement les accès autorisés pour %s', (role, inventaire, receptions) => {
     const pinia = createPinia();
