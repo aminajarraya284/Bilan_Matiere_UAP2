@@ -1002,3 +1002,10 @@ Toute règle ajoutée ou modifiée doit l'être simultanément dans :
 Une règle marquée **À valider** ne doit pas être « corrigée » par supposition : elle doit
 être arbitrée par le métier, puis reclassée **Confirmée** avec la date et l'interlocuteur
 de validation.
+# État de l'analyse au 14/09/2026
+
+Les règles UAP2 confirmées sur le signe du rebut, la moyenne des contrôles poids et les
+valeurs nulles en cas de données absentes sont implémentées et testées. Le mapping réel de
+la colonne H de `BOMARTPARENT` reste à confirmer avec un export réel : les tests historiques
+du dépôt la décrivent comme `Qté lien`. Aucune conversion en kg n'est donc effectuée sans
+unité explicitement vérifiée. Voir [`AnalyseProblemesRestants.md`](AnalyseProblemesRestants.md).

@@ -22,6 +22,8 @@ public static class CodesAlertes
     public const string U2PoidsPhysiqueManquant = "U2_POIDS_PHYSIQUE_MANQUANT";
     public const string U2PoidsTheoriqueManquant = "U2_POIDS_THEORIQUE_MANQUANT";
     public const string Uap2CtrlManquant = "UAP2_CTRL_MANQUANT";
+    public const string Uap2EntreeOfIntrouvable = "UAP2_ENTREE_OF_INTROUVABLE";
+    public const string Uap2EntreeOfUniteIncompatible = "UAP2_ENTREE_OF_UNITE_INCOMPATIBLE";
     public const string Uap2PoidsPhysiqueManquant = "UAP2_POIDS_PHYSIQUE_MANQUANT";
     public const string Uap2BilanAVerifier = "UAP2_BILAN_A_VERIFIER";
     public const string Uap2ParametreSeuilManquant = "UAP2_PARAMETRE_SEUIL_MANQUANT";
@@ -253,6 +255,30 @@ public sealed class AlerteDetectionService(
                     bilan.Periode,
                     ligne,
                     Donnees(("uniteSortie", "kg"), ("uniteEcart", "pieces"))));
+            }
+
+            if (Contient(ligne.Anomalies, BilanUap2Service.AnomalieEntreeOfIntrouvable))
+            {
+                cible.Add(CreerUap2(
+                    CodesAlertes.Uap2EntreeOfIntrouvable,
+                    TypeAlerte.DonneeManquante,
+                    "Entrée OF UAP2 introuvable",
+                    "Le calcul UAP2 est suspendu car aucune Entrée OF exploitable n’est disponible.",
+                    bilan.Periode,
+                    ligne,
+                    Donnees(("unite", "UN"))));
+            }
+
+            if (Contient(ligne.Anomalies, BilanUap2Service.AnomalieEntreeOfUniteIncompatible))
+            {
+                cible.Add(CreerUap2(
+                    CodesAlertes.Uap2EntreeOfUniteIncompatible,
+                    TypeAlerte.AnomalieTechnique,
+                    "Unité Entrée OF UAP2 incompatible",
+                    "L’Entrée OF est ignorée car son unité n’est pas UN (pièces).",
+                    bilan.Periode,
+                    ligne,
+                    Donnees(("uniteAttendue", "UN"))));
             }
 
             if (Contient(ligne.Anomalies, BilanUap2Service.AnomalieHorsSeuil))

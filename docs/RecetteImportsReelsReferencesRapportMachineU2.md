@@ -124,6 +124,6 @@ Comportement provisoire :
 - aucun candidat : `PoidsPhysiqueManquant` ;
 - candidats sans controle valide : `ControleNonValide` ;
 - un seul controle valide : `Trouve` ;
-- plusieurs controles valides : `Ambigu`.
+- plusieurs controles valides : `Trouve`, avec la moyenne arithmetique des poids valides exploitables.
 
-`TODO_METIER` restant : choisir la regle SOPAL entre meme OF, meme lot ou serie, dernier controle valide avant date reception, controle valide article + matiere, ou moyenne de controles.
+Les contrôles `Brouillon` et `Annulé` sont exclus ; un poids nul ou négatif invalide la résolution. Pour plusieurs contrôles valides applicables, aucun contrôle individuel n'est désigné comme source : la moyenne et la liste des candidats sont conservées.

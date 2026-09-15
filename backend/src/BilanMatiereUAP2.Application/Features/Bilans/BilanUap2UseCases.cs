@@ -44,6 +44,8 @@ public sealed class BilanUap2Service(
 
     public const string AnomaliePoidsPhysique = "POIDS_PHYSIQUE_NON_RESOLU";
     public const string AnomalieCtrlAbsent = "QUANTITE_CTRL_ABSENTE";
+    public const string AnomalieEntreeOfIntrouvable = "ENTREE_OF_INTROUVABLE";
+    public const string AnomalieEntreeOfUniteIncompatible = "ENTREE_OF_UNITE_INCOMPATIBLE";
     public const string AnomalieHorsSeuil = "ECART_HORS_SEUIL";
     public const string AnomalieParametreSeuil = "PARAMETRE_APPLICATION_MANQUANT:SEUIL_ECART_UAP2";
 
@@ -96,7 +98,7 @@ public sealed class BilanUap2Service(
             periode,
             lignes,
             lignes.Sum(ligne => ligne.QuantiteCtrlPieces),
-            lignes.Sum(ligne => ligne.EcartUap2Pieces),
+            SommeNullable(lignes.Select(ligne => ligne.EcartUap2Pieces)),
             // Une seule ligne sans poids physique rend le total en kg non exhaustif.
             lignes.Any(ligne => ligne.SortieMpKg is null)
                 ? null
@@ -128,7 +130,8 @@ public sealed class BilanUap2Service(
         var quantiteCtrl = rapports
             .Where(rapport => Classifier(rapport) == OrigineProcessus.Ctrl)
             .Sum(rapport => rapport.QuantiteTotale);
-        if (quantiteCtrl == 0m) anomalies.Add(AnomalieCtrlAbsent);
+        var ctrlAbsent = quantiteCtrl == 0m;
+        if (ctrlAbsent) anomalies.Add(AnomalieCtrlAbsent);
 
         // Colonne I des processus : « rebuts » en partie 1, « resultats » en partie 2,
         // c'est la meme grandeur dans la source.
@@ -150,18 +153,28 @@ public sealed class BilanUap2Service(
             ? (decimal?)null
             : quantiteSortieMpPieces * poidsPhysiqueUnitaireKg.Value;
 
-        var entreeOfPieces = entrees.Sum(entree => entree.QuantiteNetteSignee);
+        decimal? entreeOfPieces = null;
+        if (entrees.Count == 0)
+        {
+            anomalies.Add(AnomalieEntreeOfIntrouvable);
+        }
+        else if (entrees.Any(entree => !string.Equals(entree.Unite.Trim(), "UN", StringComparison.OrdinalIgnoreCase)))
+        {
+            anomalies.Add(AnomalieEntreeOfUniteIncompatible);
+        }
+        else
+        {
+            entreeOfPieces = entrees.Sum(entree => entree.QuantiteNetteSignee);
+        }
         var rebutUsinage2Pieces = rebuts.Sum(rebut => rebut.QuantiteRebutPieces);
 
-        // [A CONFIRMER] Le signe du Rebut U2 suit la lecture litterale de la note SOPAL :
-        // il figure DANS la parenthese soustraite, au meme titre que l'Entree OF. Voir
-        // docs/ReglesMetier.md, RM-UAP2-002, point ouvert.
-        var ecartUap2Pieces = quantiteCtrl
-            - (totalRebutsProcessus + entreeOfPieces + rebutUsinage2Pieces);
-
-        var tauxEcartPourcent = quantiteCtrl == 0m
+        var ecartUap2Pieces = ctrlAbsent || entreeOfPieces is null
             ? (decimal?)null
-            : Math.Round(ecartUap2Pieces / quantiteCtrl * 100m, 2, MidpointRounding.AwayFromZero);
+            : quantiteCtrl - (totalRebutsProcessus + entreeOfPieces.Value + rebutUsinage2Pieces);
+
+        var tauxEcartPourcent = ecartUap2Pieces is null || quantiteCtrl == 0m
+            ? (decimal?)null
+            : Math.Round(ecartUap2Pieces.Value / quantiteCtrl * 100m, 2, MidpointRounding.AwayFromZero);
 
         if (tauxEcartPourcent is not null && Math.Abs(tauxEcartPourcent.Value) > seuil)
         {
@@ -206,6 +219,12 @@ public sealed class BilanUap2Service(
 
     private static decimal SommeRebuts(IReadOnlyList<X3RapportMachine> rapports, OrigineProcessus origine)
         => rapports.Where(rapport => Classifier(rapport) == origine).Sum(rapport => rapport.QuantiteRebut);
+
+    private static decimal? SommeNullable(IEnumerable<decimal?> valeurs)
+    {
+        var items = valeurs.ToArray();
+        return items.Any(value => value is null) ? null : items.Sum(value => value!.Value);
+    }
 
     private static OrigineProcessus Classifier(X3RapportMachine rapport)
         => OrigineProcessusRules.DeterminerOrigineProcessus(rapport.CodePoste);

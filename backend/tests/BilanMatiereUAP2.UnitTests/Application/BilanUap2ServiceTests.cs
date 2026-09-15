@@ -156,8 +156,44 @@ public sealed class BilanUap2ServiceTests
         var ligne = Assert.Single((await service.GetAsync("2026-07")).Lignes);
 
         Assert.Equal(0m, ligne.QuantiteCtrlPieces);
+        Assert.Null(ligne.EcartUap2Pieces);
         Assert.Null(ligne.TauxEcartPourcent);
         Assert.Contains(BilanUap2Service.AnomalieCtrlAbsent, ligne.Anomalies);
+    }
+
+    [Fact]
+    public async Task Get_SansEntreeOf_RetourneEcartNullEtSignaleLAbsence()
+    {
+        var service = CreateService(new FakeSources
+        {
+            Rapports = { Rapport("CTRL", 100m, 0m) },
+            Receptions = { Reception(0.25m) }
+        });
+
+        var ligne = Assert.Single((await service.GetAsync("2026-07")).Lignes);
+
+        Assert.Null(ligne.EntreeOfPieces);
+        Assert.Null(ligne.EcartUap2Pieces);
+        Assert.Null(ligne.TauxEcartPourcent);
+        Assert.Contains(BilanUap2Service.AnomalieEntreeOfIntrouvable, ligne.Anomalies);
+        Assert.Equal("DonneesManquantes", ligne.Statut);
+    }
+
+    [Fact]
+    public async Task Get_AvecEntreeOfNonUN_RetourneEcartNullEtSignaleLUnite()
+    {
+        var service = CreateService(new FakeSources
+        {
+            Rapports = { Rapport("CTRL", 100m, 0m) },
+            Entrees = { EntreeAvecUnite(100m, "KG") },
+            Receptions = { Reception(0.25m) }
+        });
+
+        var ligne = Assert.Single((await service.GetAsync("2026-07")).Lignes);
+
+        Assert.Null(ligne.EntreeOfPieces);
+        Assert.Null(ligne.EcartUap2Pieces);
+        Assert.Contains(BilanUap2Service.AnomalieEntreeOfUniteIncompatible, ligne.Anomalies);
     }
 
     [Fact]
@@ -211,8 +247,11 @@ public sealed class BilanUap2ServiceTests
             Now);
 
     private static EntreeOfComposant Entree(decimal quantiteNetteSignee)
+        => EntreeAvecUnite(quantiteNetteSignee, "UN");
+
+    private static EntreeOfComposant EntreeAvecUnite(decimal quantiteNetteSignee, string unite)
         => EntreeOfComposant.Creer(
-            Guid.NewGuid(), new DateOnly(2026, 7, 20), Of, Article, "Piece test", "UN",
+            Guid.NewGuid(), new DateOnly(2026, 7, 20), Of, Article, "Piece test", unite,
             quantiteNetteSignee, Now);
 
     private static RebutUsinage2 Rebut(decimal quantitePieces)

@@ -364,9 +364,9 @@ export interface BilanUap2ApiLigne {
   quantiteSortieMpPieces: number;
   poidsPhysiqueUnitaireKg: number | null;
   sortieMpKg: number | null;
-  entreeOfPieces: number;
+  entreeOfPieces: number | null;
   rebutUsinage2Pieces: number;
-  ecartUap2Pieces: number;
+  ecartUap2Pieces: number | null;
   tauxEcartPourcent: number | null;
   anomalies: string[];
   statut: string;
@@ -376,7 +376,7 @@ export interface BilanUap2ApiResponse {
   periode: string;
   lignes: BilanUap2ApiLigne[];
   totalQuantiteCtrlPieces: number;
-  totalEcartUap2Pieces: number;
+  totalEcartUap2Pieces: number | null;
   totalSortieMpKg: number | null;
   seuilEcartPourcent: number;
   nombreLignes: number;

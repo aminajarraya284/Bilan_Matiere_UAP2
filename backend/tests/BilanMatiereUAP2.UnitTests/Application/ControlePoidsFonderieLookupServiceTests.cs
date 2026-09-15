@@ -53,7 +53,7 @@ public sealed class ControlePoidsFonderieLookupServiceTests
     }
 
     [Fact]
-    public async Task ResolvePoidsPhysiqueAsync_ReturnsAmbigu_WhenMultipleValidCandidates()
+    public async Task ResolvePoidsPhysiqueAsync_ReturnsAverage_WhenMultipleValidCandidates()
     {
         var type = TypeMatiere.Creer("M3000L0", "Matière", Now);
         var first = ControlePoidsFonderie.Creer(
@@ -90,7 +90,10 @@ public sealed class ControlePoidsFonderieLookupServiceTests
 
         var result = await service.ResolvePoidsPhysiqueAsync("OF001", "ART001", "M3000L0", ReceptionDate, CancellationToken.None);
 
-        Assert.Equal("Ambigu", result.Statut);
+        Assert.Equal("Trouve", result.Statut);
+        Assert.Equal(10.5m, result.PoidsPhysiqueUnitaireKg);
+        Assert.Null(result.ControlePoidsFonderieId);
+        Assert.Contains("Moyenne", result.Message!);
         Assert.Equal(2, result.Candidats.Count);
     }
 

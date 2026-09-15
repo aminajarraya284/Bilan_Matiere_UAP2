@@ -7,8 +7,6 @@ public sealed class ControlePoidsFonderieLookupService(
     IControlePoidsFonderieRepository repository,
     ITypeMatiereRepository typeMatiereRepository) : IControlePoidsFonderieLookupService
 {
-    public const string TODO_METIER = "TODO_METIER: choisir la règle SOPAL entre même OF, même lot ou série, dernier contrôle validé avant DateReception, contrôle validé article + matière, ou moyenne de contrôles.";
-
     public async Task<ControlePoidsFonderieLookupResult> ResolvePoidsPhysiqueAsync(
         string numeroOF,
         string codeArticle,
@@ -57,19 +55,17 @@ public sealed class ControlePoidsFonderieLookupService(
             return Empty("ValeurInvalide", "Un contrôle validé contient un poids invalide.", responseCandidates);
         }
 
-        if (validCandidates.Length > 1)
-        {
-            return Empty("Ambigu", TODO_METIER, responseCandidates);
-        }
-
-        var selected = validCandidates[0];
+        var poidsMoyen = validCandidates.Average(candidate => candidate.PoidsPhysiqueUnitaireKg);
+        Guid? controleId = validCandidates.Length == 1 ? validCandidates[0].Id : null;
         return new ControlePoidsFonderieLookupResult(
             "Trouve",
-            selected.PoidsPhysiqueUnitaireKg,
-            selected.Id,
+            poidsMoyen,
+            controleId,
             "ControlePoidsFonderie",
             responseCandidates,
-            null);
+            validCandidates.Length == 1
+                ? null
+                : $"Moyenne arithmétique de {validCandidates.Length} contrôles validés applicables.");
     }
 
     private static ControlePoidsFonderieLookupResult Empty(

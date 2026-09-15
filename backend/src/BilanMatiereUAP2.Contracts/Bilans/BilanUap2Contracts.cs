@@ -34,14 +34,14 @@ public sealed record BilanUap2LigneResponse(
 
     // --- Partie 2 : ecart UAP2, EN PIECES (RM-UAP2-002) --------------------
     /// <summary>Quantite nette signee des entrees OF de la periode, en pieces.</summary>
-    decimal EntreeOfPieces,
+    decimal? EntreeOfPieces,
     /// <summary>Rebuts Usinage 2 VALIDES de la periode, en pieces.</summary>
     decimal RebutUsinage2Pieces,
     /// <summary>
     /// QuantiteCtrl - (RebutSci + RebutEmr + RebutTrn + EntreeOf + RebutU2).
     /// Jamais de Math.Abs : le signe distingue un manquant d'un excedent.
     /// </summary>
-    decimal EcartUap2Pieces,
+    decimal? EcartUap2Pieces,
     /// <summary>EcartUap2Pieces / QuantiteCtrlPieces x 100. Null si la reference est nulle.</summary>
     decimal? TauxEcartPourcent,
 
@@ -53,7 +53,7 @@ public sealed record BilanUap2Response(
     string Periode,
     IReadOnlyList<BilanUap2LigneResponse> Lignes,
     decimal TotalQuantiteCtrlPieces,
-    decimal TotalEcartUap2Pieces,
+    decimal? TotalEcartUap2Pieces,
     /// <summary>Null des qu'une ligne n'a pas de poids physique : un total partiel tromperait.</summary>
     decimal? TotalSortieMpKg,
     /// <summary>Seuil applique, issu du parametre <c>SEUIL_ECART_UAP2</c>.</summary>
